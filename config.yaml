@@ -1,0 +1,106 @@
+# ─────────────────────────────────────────────────────────────
+#  SIGNAL DESK SETTINGS
+#  Change a value, save, and the tool uses it from its next run.
+#  Lines starting with # are notes for you. The tool ignores them.
+# ─────────────────────────────────────────────────────────────
+
+general:
+  lots: 1                    # lots per options trade. With 1 lot the whole trade exits at the target.
+                             # With 2 or more, half is booked at the target and the rest is trailed.
+  strike: ATM                # ATM = at-the-money, ITM1 = one strike in-the-money
+  max_trades_per_day: 2      # per market
+  stop_after_losses: 1       # stop a market for the day after this many losing trades
+  max_range_pct: 0.6         # skip the day if the opening range is wider than this % of price
+
+# Days on which the tool should not take new trades (RBI policy, Budget, etc).
+# Format: "YYYY-MM-DD". You can also just send the word  skip  to your Telegram bot on the day.
+skip_dates: []
+# skip_dates: ["2027-02-01", "2027-02-05"]
+
+markets:
+  - id: NIFTY
+    name: Nifty 50
+    enabled: true
+    kind: index
+    spot: "NSE:NIFTY50-INDEX"
+    root: NIFTY
+    master: NSE_FO
+    range: ["09:15", "09:45"]
+    entry: ["09:45", "11:30"]
+    exit_by: "14:45"
+    premium_stop_pct: 25
+    min_days_to_expiry: 1    # on expiry day, use next week's contract
+    near_expiry: roll
+
+  - id: SENSEX
+    name: Sensex
+    enabled: true
+    kind: index
+    spot: "BSE:SENSEX-INDEX"
+    root: SENSEX
+    master: BSE_FO
+    range: ["09:15", "09:45"]
+    entry: ["09:45", "11:30"]
+    exit_by: "14:45"
+    premium_stop_pct: 25
+    min_days_to_expiry: 1
+    near_expiry: roll
+
+  - id: BANKNIFTY
+    name: Bank Nifty
+    enabled: true
+    kind: index
+    spot: "NSE:NIFTYBANK-INDEX"
+    root: BANKNIFTY
+    master: NSE_FO
+    range: ["09:15", "09:45"]
+    entry: ["09:45", "11:30"]
+    exit_by: "14:45"
+    premium_stop_pct: 30
+    min_days_to_expiry: 3    # no trades on expiry day or the two days before it
+    near_expiry: skip
+
+  - id: CRUDE
+    name: Crude oil
+    enabled: true
+    kind: commodity
+    root: CRUDEOILM          # CRUDEOILM = mini (10 barrels). Use CRUDEOIL for the big contract.
+    multiplier: 10           # rupees gained or lost per 1 rupee move, per lot (CRUDEOIL = 100)
+    master: MCX_COM
+    session_start: "09:00"
+    range: ["18:00", "18:30"]
+    entry: ["18:30", "20:30"]
+    exit_by: "22:30"
+    premium_stop_pct: 30
+    min_days_to_expiry: 3
+    near_expiry: roll
+    skip_weekdays: [WED]     # weekly US oil inventory report evening
+
+  - id: GOLD
+    name: Gold
+    enabled: true
+    kind: commodity
+    root: GOLDM              # GOLDM = gold mini (100 grams)
+    multiplier: 10           # GOLDM price is per 10 grams and a lot is 100 grams
+    master: MCX_COM
+    session_start: "09:00"
+    range: ["18:00", "18:30"]
+    entry: ["18:30", "20:30"]
+    exit_by: "22:30"
+    premium_stop_pct: 25
+    min_days_to_expiry: 3
+    near_expiry: roll
+
+stocks:
+  enabled: true
+  range: ["09:15", "09:30"]
+  entry: ["09:30", "11:30"]
+  exit_by: "15:00"
+  min_move_pct: 1.0          # stock must be up or down at least this much from yesterday's close
+  volume_multiple: 2.0       # first 15 minutes' volume must be at least this many times its usual
+  watchlist_size: 3
+  trade_as: cash             # cash = buy or sell the share itself, option = buy the stock's option
+  risk_per_trade: 500        # rupees you are willing to lose on one stock trade (sets the quantity)
+  max_position_value: 40000  # never suggest a stock position bigger than this many rupees
+  premium_stop_pct: 30       # used only when trade_as is option
+  min_days_to_expiry: 5      # used only when trade_as is option (avoids expiry week)
