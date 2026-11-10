@@ -49,14 +49,19 @@ If **Trade engine** is missing, the `.github` folder did not upload. Fix: click 
 
 ## Part 4: Let the tool read prices from Fyers (5 minutes)
 
-1. Go to **myapi.fyers.in** and log in with your Fyers account.
-2. Open the **Dashboard** and click **Create App**.
-3. Fill in:
+Fyers asks for a "static IP" only on its **trading app**, which is the one that places orders. This tool never places orders, so it needs a different kind of app: a **data-only app**. Fyers lets you create as many of those as you like, and they need no static IP.
+
+1. Log in at **fyers.in/web/api-dashboard/user-apps** (or myapi.fyers.in, which redirects there).
+2. Do **not** click Activate on the "Algo trading app" shown at the top. That is the trading app and it is what asks for the IP.
+3. Click **Create App** instead.
+4. Fill in:
    - **App name:** `signaldesk`
    - **Redirect URL:** your dashboard address from Part 3, exactly, including `https://` and the final `/`
-   - **Description:** anything
-   - **Permissions:** the tool only reads prices. If you can leave order placement unticked, leave it unticked.
-4. Create the app. Fyers shows an **App ID** (looks like `AB12CD34EF-100`) and a **Secret ID**. Copy both.
+   - **Permissions:** choose **Market Data**. If the form offers no choice, leave it at its default.
+   - **Webhook:** leave empty
+5. Create the app. Fyers shows an **App ID** and a **Secret ID**. Copy both.
+
+If the Create App form also asks for a static IP, stop and tell me exactly what the screen says. Do not type in an IP.
 
 ---
 

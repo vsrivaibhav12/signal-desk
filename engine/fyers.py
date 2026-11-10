@@ -89,7 +89,7 @@ class Fyers:
         if not self.token:
             return False
         try:
-            self._get(f"{API}/profile")
+            self._get(f"{DATA}/quotes", {"symbols": "NSE:NIFTY50-INDEX"})
             return True
         except FyersError:
             return False
