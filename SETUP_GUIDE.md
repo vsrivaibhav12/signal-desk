@@ -174,6 +174,7 @@ All ten look at the same Nifty 200 shares and five indices (as index futures, on
 
 **What you see**
 - **All strategies** tab: a scoreboard with every strategy's backtest result before and after costs, a plain-language reading of it, and everything open right now.
+- **All trades** tab: one log of every trade, from the options desk and all ten strategies together, newest first. Filter by source, by open, won or lost, by period, or search a stock. It has a combined record, a per-source table, and a spreadsheet download. Strategy results are after estimated costs; options desk results are before costs, so the totals mix the two.
 - One tab per strategy: the rules in plain words, when it should work and what can go wrong, the trades it is triggering today with the stop, target and reasons for each, its **live record**, and its **backtest** (win rate, profit before and after costs, first half against second half of the period, by market, by how trades ended, by month).
 - A strategy is only called **Promising** if it is profitable after costs in both halves of the test period and its result is too large to be luck. Otherwise it is **Unproven** or **No edge so far**. Treat the live record as the fair test: nothing in it was known in advance.
 
