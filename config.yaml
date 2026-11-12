@@ -45,7 +45,7 @@ broker:
     #   "NSE:NIFTY50-INDEX": "nse_cm|Nifty 50"
     #   "NSE:NIFTYBANK-INDEX": "nse_cm|Nifty Bank"
     #   "NSE:FINNIFTY-INDEX": "nse_cm|Nifty Fin Service"
-    #   "NSE:MIDCPNIFTY-INDEX": "nse_cm|NIFTY MIDCAP SELECT"
+    #   "NSE:MIDCPNIFTY-INDEX": "nse_cm|NIFTY MID SELECT"
     #   "BSE:SENSEX-INDEX": "bse_cm|SENSEX"
 
 # News: the legacy stock-headline scan plus the separate 24/7 News Impact service.

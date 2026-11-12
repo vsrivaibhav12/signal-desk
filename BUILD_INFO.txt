@@ -1,8 +1,8 @@
-Signal Desk 4.1.0
+Signal Desk 4.1.1
 Release date: 2026-11-12
-Release type: dual-broker MCX routing + 24/7 news intelligence + persistent trading supervisor + coordinated shared-data publishing + dashboard service health
-Verification: 88 offline pytest tests passed; Python compilation, config/workflow parsing, dashboard JavaScript syntax and ZIP integrity checks passed.
-Live broker verification: not performed in this build environment. Run Kotak and Fyers MCX preflight in your own account.
-Deployment verification: not installed on the user's VPS/office PC from this build environment; follow deploy/README.md and verify both systemd services.
+Release type: Kotak Midcap exact index-symbol fix + adaptive history rate-limit handling + Fyers MCX per-symbol diagnostics and permission-aware authentication handling
+Verification: 95 offline pytest tests passed; Python compilation, YAML configuration, dashboard JavaScript syntax and ZIP integrity checks passed.
+Live broker verification: not performed in this build environment. Fyers MCX access and Kotak rate-limit behaviour must be verified in the user's own account.
+Deployment verification: not installed on the user's VPS/office PC from this build environment.
 Trading mode: read-only market data + paper trading. No broker order placement.
 Visual browser QA: not performed in this environment; dashboard inline JavaScript syntax was checked with Node.js.

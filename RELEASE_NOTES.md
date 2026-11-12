@@ -1,3 +1,18 @@
+# Signal Desk 4.1.1: Kotak and Fyers workflow hotfix
+
+Released 12 November 2026.
+
+- **Kotak Midcap index fix:** changes the default Kotak quote symbol for `NSE:MIDCPNIFTY-INDEX` to the exact case-sensitive `nse_cm|NIFTY MID SELECT`. The previous `NIFTY MIDCAP SELECT` value caused HTTP 400 invalid-neosymbol responses and repeated failures in each market cycle. The Kotak check now treats configured index probes as essential.
+- **Kotak history throttling:** lowers the initial history request rate, applies per-request-class adaptive pacing and escalating 30/60/120/180-second cooldowns after HTTP 429, honours `Retry-After` up to the configured cap, and no longer resets rate-limit history after one successful unrelated call. This reduces repeated 429 pressure but cannot override Kotak's account-level/server-side limits.
+- **Fyers per-symbol diagnostics:** reads each quote row's status and retains provider error details instead of silently reporting only “no usable quote”. A row marked `s=error` is never accepted as a live quote even if the provider includes partial price fields.
+- **Fyers permission/auth distinction:** HTTP 401 remains an authentication failure; HTTP 403 is surfaced as a permission/request error even when its body contains a token-like numeric code. Fyers MCX diagnostics now direct the user to verify the API app's Market Data permission and MCX segment access rather than repeatedly requesting a new login when authentication already succeeded.
+- **Preflight evidence:** MCX markets continue to be independently enabled only after quote and valid recent five-minute history checks. A successful OAuth exchange alone does not enable the market.
+- **Tests:** adds regressions for exact Kotak Midcap mapping, 403 permission classification, per-symbol error rows carrying partial LTP, and escalating Kotak cooldowns.
+
+**Operational boundary:** these are offline-tested source fixes. They do not prove that the user's Fyers app has Market Data permission or that Kotak's live rate limits will permit the configured scan frequency. Complete the account-specific checks after deploying this patch.
+
+---
+
 # Signal Desk 4.1.0 — continuous news intelligence and dual-broker routing
 
 Released 12 November 2026.

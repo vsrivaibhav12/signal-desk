@@ -15,6 +15,12 @@ class FakeFyers:
         self.probed.append(symbol)
         return self.quote
 
+    def probe_detail(self, symbol):
+        self.probed.append(symbol)
+        if self.quote:
+            return True, {"symbol": symbol, "ltp": 100.0}
+        return False, f"Permission denied for {symbol}; check Market Data permission."
+
     def history(self, symbol, resolution, start, end):
         self.history_calls.append((symbol, resolution, start, end))
         return self.candles
@@ -67,3 +73,12 @@ def test_mcx_preflight_rejects_invalid_ohlc(monkeypatch):
     ready, reason = make_session(FakeFyers(candles=candles))._verify_secondary_fyers("MCX:CRUDEOILM26NOVFUT")
     assert ready is False
     assert "fewer than two" in reason
+
+
+def test_mcx_preflight_surfaces_fyers_quote_permission_detail(monkeypatch):
+    now = datetime(2026, 11, 12, 19, 0, tzinfo=IST)
+    monkeypatch.setattr(run.clock, "now", lambda: now)
+    ready, reason = make_session(FakeFyers(quote=False))._verify_secondary_fyers("MCX:CRUDEOILM26NOVFUT")
+    assert ready is False
+    assert "Permission denied" in reason
+    assert "Market Data permission" in reason

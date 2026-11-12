@@ -94,17 +94,28 @@ class Fyers:
                     j = r.json()
                 except ValueError:
                     j = {}
-                if r.status_code == 401 or j.get("code") in AUTH_CODES:
+                if not isinstance(j, dict):
+                    j = {}
+                api_code = j.get("code")
+                try:
+                    api_code = int(api_code) if api_code is not None else None
+                except (TypeError, ValueError):
+                    pass
+                detail = self._error_detail(j)
+                if r.status_code == 401 or (r.status_code < 400 and api_code in AUTH_CODES):
                     self._record(kind, "error", time.monotonic() - started)
-                    raise AuthError(j.get("message", "login expired"))
+                    raise AuthError(detail or "Fyers login expired")
                 if r.status_code == 429 or r.status_code >= 500:
                     self._record(kind, "refused", time.monotonic() - started)
-                    last = FyersError(f"Fyers busy ({r.status_code})")
+                    last = FyersError(f"Fyers {kind} endpoint HTTP {r.status_code}: {detail or 'provider temporarily unavailable'}")
                     time.sleep(2 + 3 * attempt)
                     continue
+                if r.status_code >= 400:
+                    self._record(kind, "error", time.monotonic() - started)
+                    raise FyersError(f"Fyers {kind} endpoint HTTP {r.status_code}: {detail or 'request rejected'}")
                 if j.get("s") not in ("ok", "no_data"):
                     self._record(kind, "error", time.monotonic() - started)
-                    raise FyersError(j.get("message") or f"Fyers error {r.status_code}")
+                    raise FyersError(f"Fyers {kind} endpoint rejected request: {detail or 'no provider detail returned'}")
                 self._record(kind, "ok", time.monotonic() - started)
                 return j
             except requests.RequestException as e:
@@ -113,21 +124,76 @@ class Fyers:
                 time.sleep(2 + 3 * attempt)
         raise last
 
-    def probe(self, symbol="NSE:NIFTY50-INDEX"):
-        """Check a known symbol on the account's permitted market-data segment."""
+    @staticmethod
+    def _error_detail(payload):
+        """Return useful provider diagnostics without exposing request headers or tokens."""
+        if not isinstance(payload, dict):
+            return ""
+        parts = []
+        for key in ("message", "error", "code"):
+            value = payload.get(key)
+            if value not in (None, "", "ok"):
+                parts.append(f"{key}={str(value)[:160]}")
+        return "; ".join(parts)
+
+    @staticmethod
+    def _row_error(row):
+        if not isinstance(row, dict):
+            return "invalid quote row"
+        value = row.get("v") or {}
+        if not isinstance(value, dict):
+            value = {}
+        status = row.get("s") or "unknown status"
+        details = []
+        for source in (row, value):
+            for key in ("message", "errmsg", "error", "code"):
+                item = source.get(key)
+                if item not in (None, "", "ok"):
+                    details.append(f"{key}={str(item)[:120]}")
+        suffix = "; ".join(details)
+        return f"symbol status={status}" + (f" ({suffix})" if suffix else "")
+
+    def probe_detail(self, symbol="NSE:NIFTY50-INDEX"):
+        """Return (usable, explanation); preserve auth errors and per-symbol API messages."""
         if not self.token:
-            return False
+            return False, "No Fyers access token is loaded; complete the Fyers login first."
         try:
             j = self._get(f"{DATA}/quotes", {"symbols": symbol})
-            rows = j.get("d") or []
-            for row in rows:
-                value = row.get("v") or {}
-                try:
-                    if value.get("lp") is not None and float(value["lp"]) > 0:
-                        return True
-                except (TypeError, ValueError):
-                    continue
-            return False
+        except AuthError:
+            raise
+        except BrokerError as exc:
+            return False, f"Fyers quotes API: {exc}"
+        rows = j.get("d") or []
+        if not rows:
+            return False, f"Fyers quotes API returned no symbol rows for {symbol}. {self._error_detail(j)}".strip()
+        matching = [row for row in rows if isinstance(row, dict) and row.get("n") == symbol]
+        candidates = matching or [row for row in rows if isinstance(row, dict)]
+        for row in candidates:
+            # Fyers returns a per-symbol status inside an otherwise successful
+            # HTTP response. A stale/partial `v.lp` must not override `s=error`.
+            if str(row.get("s", "")).lower() != "ok":
+                continue
+            value = row.get("v") or {}
+            if not isinstance(value, dict):
+                value = {}
+            try:
+                lp = float(value.get("lp"))
+                if lp > 0:
+                    return True, {"symbol": symbol, "ltp": lp, "row_status": "ok"}
+            except (TypeError, ValueError, OverflowError):
+                pass
+        first = candidates[0] if candidates else {}
+        reported = self._row_error(first) if first else "no matching symbol row"
+        top = self._error_detail(j)
+        if top:
+            reported += f"; response {top}"
+        return False, f"Fyers has no usable LTP for {symbol}: {reported}. Check that the Fyers app has Market Data permission and that MCX data is enabled for the account."
+
+    def probe(self, symbol="NSE:NIFTY50-INDEX"):
+        """Boolean compatibility wrapper; diagnostics are available from probe_detail()."""
+        try:
+            ok, _ = self.probe_detail(symbol)
+            return bool(ok)
         except BrokerError:
             return False
 
@@ -144,32 +210,37 @@ class Fyers:
             j = self._get(f"{DATA}/quotes", {"symbols": ",".join(symbols[i:i + 50])})
             received_at = int(time.time())
             for d in j.get("d") or []:
+                # Respect Fyers' per-symbol status. An error row may still carry
+                # diagnostic/partial fields; never turn those into a market quote.
+                if not isinstance(d, dict) or str(d.get("s", "")).lower() != "ok":
+                    continue
                 v = d.get("v") or {}
-                if d.get("s") == "ok" or v.get("lp"):
-                    # Fyers quote responses expose exchange feed/trade timestamps on
-                    # supported feeds. Keep both the exchange clock and receipt time;
-                    # the latter is only a fallback, never mislabelled as exchange time.
-                    raw_stamp = v.get("exch_feed_time") or v.get("exch_trade_time") or v.get("tt") or v.get("last_traded_time")
-                    stamp_invalid = False
-                    try:
-                        stamp = int(float(raw_stamp)) if raw_stamp not in (None, "") else None
-                        if raw_stamp not in (None, "") and stamp is None:
-                            stamp_invalid = True
-                        # Some Fyers fields are formatted as milliseconds.
-                        if stamp and stamp > 10_000_000_000:
-                            stamp //= 1000
-                    except (TypeError, ValueError, OverflowError):
-                        stamp, stamp_invalid = None, raw_stamp not in (None, "")
-                    depth = v.get("depth") or {}
-                    buys = depth.get("buy") or []
-                    sells = depth.get("sell") or []
-                    bid = buys[0] if buys else {}
-                    ask = sells[0] if sells else {}
-                    out[d.get("n")] = {"lp": v.get("lp"), "prev_close": v.get("prev_close_price"),
-                                       "volume": v.get("volume"), "ts": stamp, "ts_invalid": stamp_invalid,
-                                       "received_ts": received_at, "ts_source": "invalid" if stamp_invalid else "exchange" if stamp else "response",
-                                       "bid": bid.get("price"), "ask": ask.get("price"),
-                                       "bid_qty": bid.get("volume") or bid.get("qty"),
-                                       "ask_qty": ask.get("volume") or ask.get("qty"),
-                                       "oi": v.get("oi") or v.get("open_interest")}
+                if not isinstance(v, dict):
+                    continue
+                # Fyers quote responses expose exchange feed/trade timestamps on
+                # supported feeds. Keep both the exchange clock and receipt time;
+                # the latter is only a fallback, never mislabelled as exchange time.
+                raw_stamp = v.get("exch_feed_time") or v.get("exch_trade_time") or v.get("tt") or v.get("last_traded_time")
+                stamp_invalid = False
+                try:
+                    stamp = int(float(raw_stamp)) if raw_stamp not in (None, "") else None
+                    if raw_stamp not in (None, "") and stamp is None:
+                        stamp_invalid = True
+                    # Some Fyers fields are formatted as milliseconds.
+                    if stamp and stamp > 10_000_000_000:
+                        stamp //= 1000
+                except (TypeError, ValueError, OverflowError):
+                    stamp, stamp_invalid = None, raw_stamp not in (None, "")
+                depth = v.get("depth") or {}
+                buys = depth.get("buy") or []
+                sells = depth.get("sell") or []
+                bid = buys[0] if buys else {}
+                ask = sells[0] if sells else {}
+                out[d.get("n")] = {"lp": v.get("lp"), "prev_close": v.get("prev_close_price"),
+                                   "volume": v.get("volume"), "ts": stamp, "ts_invalid": stamp_invalid,
+                                   "received_ts": received_at, "ts_source": "invalid" if stamp_invalid else "exchange" if stamp else "response",
+                                   "bid": bid.get("price"), "ask": ask.get("price"),
+                                   "bid_qty": bid.get("volume") or bid.get("qty"),
+                                   "ask_qty": ask.get("volume") or ask.get("qty"),
+                                   "oi": v.get("oi") or v.get("open_interest")}
         return out

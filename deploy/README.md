@@ -1,4 +1,4 @@
-# Signal Desk always-on deployment (4.1.0)
+# Signal Desk always-on deployment (4.1.1)
 
 For a genuinely continuously running installation, deploy **two services** on one always-on Linux VPS or office PC:
 

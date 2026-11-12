@@ -1,6 +1,6 @@
-# Signal Desk 4.1.0 — multi-broker paper-trading and market-intelligence platform
+# Signal Desk 4.1.1 — multi-broker paper-trading and market-intelligence platform
 
-**4.1.0 adds two persistent 24/7 services, dual-broker market-data routing and an event-driven Impact Radar.** Kotak Neo remains the primary NSE/BSE provider; Fyers can be configured as the dedicated MCX feed. The News Impact Radar runs independently of exchange sessions, maps macro and company headlines to conditional instrument pathways, and can promote relevant Nifty 200 equities into the ordinary strategy watchlist. See [4.1.0 release notes](RELEASE_NOTES.md), [upgrade guide](UPGRADE_4.1.0.md) and [news-intelligence guide](docs/NEWS_INTELLIGENCE.md).
+**4.1.1 is a live-workflow hotfix for Kotak index mapping/rate limits and clearer Fyers MCX permissions diagnostics. It retains the 4.1.0 persistent services, dual-broker routing and event-driven Impact Radar.** Kotak Neo remains the primary NSE/BSE provider; Fyers can be configured as the dedicated MCX feed. The News Impact Radar runs independently of exchange sessions, maps macro and company headlines to conditional instrument pathways, and can promote relevant Nifty 200 equities into the ordinary strategy watchlist. See [4.1.1 release notes](RELEASE_NOTES.md), [4.1.1 upgrade guide](UPGRADE_4.1.1.md) and [news-intelligence guide](docs/NEWS_INTELLIGENCE.md).
 
 Signal Desk combines two persistent services, session-aware market engines and its research workflows:
 
@@ -17,7 +17,7 @@ The default broker routing is Kotak Neo for NSE/BSE and Fyers as an optional MCX
 
 - Read **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for the existing GitHub Actions setup, Kotak/Fyers configuration and dashboard.
 - Read **[docs/NEWS_INTELLIGENCE.md](docs/NEWS_INTELLIGENCE.md)** and **[deploy/README.md](deploy/README.md)** to deploy both persistent workers on a Linux VPS or always-on office PC.
-- Review **[RELEASE_NOTES.md](RELEASE_NOTES.md)** and **[UPGRADE_4.1.0.md](UPGRADE_4.1.0.md)** before replacing source files.
+- Review **[RELEASE_NOTES.md](RELEASE_NOTES.md)** and **[UPGRADE_4.1.1.md](UPGRADE_4.1.1.md)** before replacing source files.
 - Runtime settings are in **`config.yaml`**.
 
 ## Main capabilities

@@ -116,6 +116,7 @@ def test_csv_and_symbols():
     assert k.resolve("NSE:RELIANCE-EQ") == ("nse_cm", "2885")
     assert k.resolve("NSE:HDFCBANK-EQ") == ("nse_cm", "1333"), "the EQ row must win over the BL row"
     assert k.resolve("NSE:NIFTY50-INDEX") == ("nse_cm", "Nifty 50")
+    assert k.resolve("NSE:MIDCPNIFTY-INDEX") == ("nse_cm", "NIFTY MID SELECT")
     assert k.resolve("BSE:SENSEX-INDEX") == ("bse_cm", "SENSEX")
     assert k.resolve("nse_fo|35001") == ("nse_fo", "35001")
     try:
@@ -321,7 +322,7 @@ def test_rate_limit_and_healing():
     assert all(w <= kmod.MAX_PAUSE for w in waited), waited
     # a refused index name is looked up in Kotak's own list and retried
     k5, f5 = make()
-    f5.invalid = {"nse_cm|NIFTY MIDCAP SELECT"}
+    f5.invalid = {"nse_cm|NIFTY MID SELECT"}
     got = k5.history("NSE:MIDCPNIFTY-INDEX", "5", day, day)
     assert got and k5.resolve("NSE:MIDCPNIFTY-INDEX") == ("nse_cm", "99001"), k5.resolve("NSE:MIDCPNIFTY-INDEX")
     # an index that cannot be matched fails clearly, naming what Kotak does list
@@ -393,3 +394,18 @@ def test_fyers_quote_timestamp_quality(monkeypatch):
     got = fy.quotes(["NSE:BAD-EQ", "NSE:GOOD-EQ"])
     assert got["NSE:BAD-EQ"]["ts_invalid"] is True and got["NSE:BAD-EQ"]["ts_source"] == "invalid", got
     assert got["NSE:GOOD-EQ"]["ts"] is None and got["NSE:GOOD-EQ"]["ts_source"] == "response", got
+
+
+def test_rate_limit_backoff_escalates_and_respects_retry_after():
+    from engine import kotak as kmod
+    logged = []
+    k, _ = make()
+    k.log = logged.append
+    for expected in kmod.RATE_BACKOFF:
+        k._refused("history", None)
+        assert f"cooldown {expected:.0f}s" in logged[-1], logged[-1]
+    # Provider Retry-After is honoured, but never beyond the configured safety cap.
+    k2, _ = make()
+    k2.log = logged.append
+    k2._refused("history", 999)
+    assert f"cooldown {kmod.MAX_PAUSE:.0f}s" in logged[-1], logged[-1]

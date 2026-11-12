@@ -234,13 +234,25 @@ class Session:
         client = self.secondary_fyers
         if not client or not symbol:
             return False, "No current MCX futures contract could be resolved from Fyers' master."
-        if not client.probe(symbol):
-            return False, f"Fyers did not return a usable quote for {symbol}."
+        detail_probe = getattr(client, "probe_detail", None)
+        if callable(detail_probe):
+            try:
+                quote_ok, quote_detail = detail_probe(symbol)
+            except AuthError:
+                raise
+            except (BrokerError, requests.RequestException) as exc:
+                return False, f"Fyers MCX quote request failed for {symbol}: {exc}"
+        else:
+            quote_ok, quote_detail = bool(client.probe(symbol)), None
+        if not quote_ok:
+            return False, str(quote_detail or f"Fyers did not return a usable quote for {symbol}.")
         today = clock.now().date()
         try:
             candles = client.history(symbol, "5", today - timedelta(days=10), today)
+        except AuthError:
+            raise
         except (BrokerError, requests.RequestException) as exc:
-            return False, f"Fyers MCX history request failed for {symbol}: {type(exc).__name__}."
+            return False, f"Fyers MCX history request failed for {symbol}: {exc}"
         valid = []
         for row in candles or []:
             if not isinstance(row, (list, tuple)) or len(row) < 6:
@@ -276,7 +288,14 @@ class Session:
             if not symbol:
                 results[market_id] = {"ok": False, "detail": "No current futures contract in Fyers master."}
                 continue
-            ready, evidence = self._verify_secondary_fyers(symbol)
+            try:
+                ready, evidence = self._verify_secondary_fyers(symbol)
+            except AuthError:
+                # An expired token is a login problem; a quote permission/symbol
+                # failure is a market-data problem and must retain its own detail.
+                raise
+            except Exception as exc:
+                ready, evidence = False, f"{type(exc).__name__}: {str(exc)[:180]}"
             results[market_id] = {"ok": ready, "detail": evidence if not ready else None,
                                   "history_check": evidence if ready else None, "symbol": symbol}
         return results
@@ -320,6 +339,29 @@ class Session:
                          "then restart the Trade engine to connect Crude Oil, Gold, Silver and Natural Gas.")
         self.beat(force=True)
 
+    def _secondary_data_unavailable(self, results, source="saved Fyers session"):
+        """Keep the authenticated session, but don't ask for another login when data permission failed."""
+        enabled = self._enable_verified_secondary_markets(results)
+        details = "; ".join(f"{key}: {value.get('detail')}" for key, value in results.items() if not value.get("ok"))
+        self.secondary_fyers_pending = False
+        self.feed["status"]["phase"] = "watching"  # NSE/BSE remains operational
+        self.feed["status"]["brokers"]["commodity"].update({
+            "status": "partial" if enabled else "data_unavailable",
+            "detail": f"Fyers authenticated via {source}; MCX market-data preflight failed.",
+        })
+        message = (
+            "⚠️ <b>Fyers is authenticated, but MCX market data is unavailable</b>\n"
+            "Kotak NSE/BSE scanning continues. This is not a login-code failure. Check the Fyers API app's "
+            "Market Data permission (Quotes, Market Depth and Historical Data) and confirm that the MCX "
+            "segment is available to the account.\n" + details[:850]
+        )
+        last_notice = float(self.feed["status"].get("mcx_data_unavailable_notice_ts") or 0)
+        if time.time() - last_notice >= 3600:
+            self.tg.send(message)
+            self.feed["status"]["mcx_data_unavailable_notice_ts"] = time.time()
+        self.beat(force=True)
+        return bool(enabled)
+
     def _prepare_secondary_fyers(self):
         """Authenticate the optional MCX feed without stopping Kotak equity/index scanning."""
         if not self.secondary_fyers or not self.commodity_markets:
@@ -331,22 +373,33 @@ class Session:
         today = clock.now().date().isoformat()
         client.token = self.secure.get("access_token")
         if client.token:
-            results = self._verify_secondary_fyers_markets()
-            enabled = self._enable_verified_secondary_markets(results)
-            if enabled:
-                return True
+            try:
+                results = self._verify_secondary_fyers_markets()
+            except AuthError as exc:
+                print("Saved Fyers access token expired or rejected:", str(exc)[:160])
+                client.token = None
+            else:
+                enabled = self._enable_verified_secondary_markets(results)
+                if enabled:
+                    return True
+                self._secondary_data_unavailable(results, "saved access token")
+                return False
         refresh = self.secure.get("refresh_token")
         if refresh and self.pin:
             try:
                 client.token = client.refresh(refresh, self.pin)
                 results = self._verify_secondary_fyers_markets()
                 enabled = self._enable_verified_secondary_markets(results)
+                self.secure.update({"access_token": client.token, "access_date": today})
+                self.store.save_secure(self.secure)
                 if enabled:
-                    self.secure.update({"access_token": client.token, "access_date": today})
-                    self.store.save_secure(self.secure)
                     return True
-            except (AuthError, BrokerError, requests.RequestException) as exc:
-                print("Fyers secondary refresh/preflight failed:", type(exc).__name__)
+                self._secondary_data_unavailable(results, "refreshed access token")
+                return False
+            except AuthError as exc:
+                print("Fyers secondary refresh rejected:", str(exc)[:160])
+            except (BrokerError, requests.RequestException) as exc:
+                print("Fyers secondary preflight failed:", str(exc)[:200])
         self._disable_secondary_markets("Fyers login or MCX quote/history permission has not been verified.")
         return False
 
@@ -363,7 +416,13 @@ class Session:
             enabled = self._enable_verified_secondary_markets(results)
             if not enabled:
                 details = "; ".join(f"{k}: {v.get('detail')}" for k, v in results.items())
-                raise AuthError("Fyers login succeeded, but no MCX market passed quote/history preflight. " + details)
+                raise BrokerError(
+                    "Fyers login was accepted, but the MCX market-data checks failed. "
+                    "This is not a login-code problem. Check that the Fyers API app has the "
+                    "Market Data permission (Quotes, Market Depth and Historical Data), that "
+                    "MCX market data is available to the account, and that the returned symbol "
+                    "details below are resolved. " + details
+                )
             self.secure.update({"access_token": access, "access_date": clock.now().date().isoformat()})
             if refresh:
                 self.secure.update({"refresh_token": refresh, "refresh_date": clock.now().date().isoformat()})
@@ -379,7 +438,19 @@ class Session:
             self.tg.send(note)
             return True
         except (AuthError, BrokerError, requests.RequestException) as exc:
-            self.tg.send(f"Fyers MCX login was not accepted or the MCX data check failed: {str(exc)[:220]}\nPlease try a fresh login link.")
+            message = str(exc)
+            if "login was accepted" in message.lower():
+                self.tg.send(
+                    "⚠️ <b>Fyers login accepted; MCX data access failed</b>\n" +
+                    message[:850] +
+                    "\n\nOpen your Fyers API app settings and confirm its permission template includes "
+                    "Market Data (Quotes, Market Depth and Historical Data). If the app was created without "
+                    "Market Data permission, create a new app with that permission, update FYERS_APP_ID "
+                    "and FYERS_SECRET_KEY in GitHub secrets, then run the Trade engine again. A fresh "
+                    "login code alone will not fix a missing API permission."
+                )
+            else:
+                self.tg.send(f"Fyers did not accept the login code: {message[:220]}\nPlease open a fresh login link and try again.")
             return True
 
     def login(self, until):

@@ -42,7 +42,7 @@ DEFAULT_INDEX = {
     "NSE:NIFTY50-INDEX": "nse_cm|Nifty 50",
     "NSE:NIFTYBANK-INDEX": "nse_cm|Nifty Bank",
     "NSE:FINNIFTY-INDEX": "nse_cm|Nifty Fin Service",
-    "NSE:MIDCPNIFTY-INDEX": "nse_cm|NIFTY MIDCAP SELECT",
+    "NSE:MIDCPNIFTY-INDEX": "nse_cm|NIFTY MID SELECT",
     "BSE:SENSEX-INDEX": "bse_cm|SENSEX",
 }
 
@@ -54,8 +54,11 @@ MASTER_SEGMENT = {"NSE_FO": "nse_fo", "BSE_FO": "bse_fo", "MCX_COM": "mcx_fo"}
 NO_HISTORY = {"mcx_fo", "nse_com"}     # Kotak does not serve price history for these
 # Calls per second: where to start, the slowest we will go, the fastest we will go. History is limited far more
 # tightly than quotes (the first live run was refused at about 8 a second), so it starts gentle and adapts.
-RATE = {"history": (2.5, 0.4, 6.0), "other": (8.0, 1.0, 15.0)}
-MAX_PAUSE = 30                         # never stop the engine longer than this for one rate-limit pause
+RATE = {"history": (0.8, 0.25, 1.5), "other": (4.0, 0.5, 8.0)}
+# Kotak's 429 bucket can remain closed longer than a short request retry. Honour
+# Retry-After when supplied; otherwise use escalating 30/60/120/180 second waits.
+MAX_PAUSE = 180
+RATE_BACKOFF = (30, 60, 120, 180)
 # Words that identify each index in Kotak's cash-market list, used if the built-in name is turned down.
 INDEX_ALIASES = {
     "NSE:NIFTY50-INDEX": ["nifty50"],
@@ -175,7 +178,7 @@ class Kotak:
         self._slot = {k: 0.0 for k in RATE}          # when each kind of call may next go out
         self._calm = {k: 0 for k in RATE}            # successful calls since the last refusal
         self._pause_until = 0.0
-        self._refusals = 0
+        self._refusals = {k: 0 for k in RATE}
         self._healed = set()
         self.stats = {}                                # method -> counts, so the request load is measured, not guessed
         self.since = time.time()
@@ -211,22 +214,29 @@ class Kotak:
         start = max(now, self._slot[kind], self._pause_until)
         self._slot[kind] = start + 1.0 / self._rate[kind]
         if start > now:
-            self._sleep(min(start - now, MAX_PAUSE))
+            # The pause is always capped by MAX_PAUSE in _refused. Do not truncate
+            # it here: sending again before Retry-After simply creates another 429.
+            self._sleep(start - now)
 
     def _refused(self, kind, retry_after):
-        """Kotak said 'too many requests': slow down and stop for a while. One pause covers every caller."""
-        self._refusals += 1
+        """Kotak said 'too many requests': slow this request class and back off."""
+        self._refusals[kind] += 1
         low = RATE[kind][1]
         self._rate[kind] = max(low, self._rate[kind] * 0.6)
         self._calm[kind] = 0
-        wait = min(MAX_PAUSE, retry_after or 6 * self._refusals)
+        index = min(self._refusals[kind] - 1, len(RATE_BACKOFF) - 1)
+        fallback = RATE_BACKOFF[index]
+        requested = float(retry_after) if retry_after not in (None, "") else 0.0
+        wait = min(MAX_PAUSE, max(fallback, requested if requested > 0 else 0.0))
         self._pause_until = max(self._pause_until, time.monotonic() + wait)
-        self.log(f"  Kotak is limiting {kind} requests: slowing to {self._rate[kind]:.1f} a second and pausing {wait:.0f}s")
+        self.log(f"  Kotak rate limit on {kind}: slowing to {self._rate[kind]:.2f}/s; cooldown {wait:.0f}s")
 
     def _accepted(self, kind):
-        self._refusals = 0
+        # A single successful quote must not erase a history endpoint's recent
+        # 429 history. Reset only after a sustained quiet stretch for that kind.
         self._calm[kind] += 1
-        if self._calm[kind] >= 25:                   # a quiet stretch: speed up a little, never past the ceiling
+        if self._calm[kind] >= 25:
+            self._refusals[kind] = 0
             self._rate[kind] = min(RATE[kind][2], self._rate[kind] * 1.2)
             self._calm[kind] = 0
 
@@ -650,14 +660,14 @@ def check(log=print):
                 raise KotakError("no price returned")
             age = "unknown" if not q.get("ts") else f"{time.time() - q['ts']:.0f}s old"
             return f"last {q['lp']}, previous close {q['prev_close']}, quote {age}, bid {q.get('bid')} ask {q.get('ask')}"
-        step(f"price for {sym}", quote, essential=sym in ("NSE:NIFTY50-INDEX", "NSE:RELIANCE-EQ"))
+        step(f"price for {sym}", quote, essential=sym in set(DEFAULT_INDEX) | {"NSE:RELIANCE-EQ"})
 
         def hist(sym=sym):
             c = k.history(sym, "5", today - timedelta(days=6), today)
             if not c:
                 raise KotakError("no 5-minute candles in the last week")
             return f"{len(c)} candles, last at {clock.from_ts(c[-1][0]).strftime('%d %b %H:%M')}"
-        step(f"5-minute history for {sym}", hist, essential=sym in ("NSE:NIFTY50-INDEX", "NSE:RELIANCE-EQ"))
+        step(f"5-minute history for {sym}", hist, essential=sym in set(DEFAULT_INDEX) | {"NSE:RELIANCE-EQ"})
 
     def daily():
         c = k.history("NSE:RELIANCE-EQ", "D", today - timedelta(days=25), today - timedelta(days=1))

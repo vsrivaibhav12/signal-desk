@@ -259,3 +259,7 @@ When you get a new `signal-desk.zip`:
 Your trade history and Telegram link are stored separately and are not touched. If you had changed `config.yaml` yourself, make those changes again after uploading.
 
 Also delete the old file `engine/nifty100.txt` if it is still there (open it, click the bin icon, commit). It is no longer used.
+
+## 4.1.1 hotfix for Kotak/Fyers workflow errors
+
+For users upgrading from 4.1.0, follow [UPGRADE_4.1.1.md](UPGRADE_4.1.1.md). This patch corrects the exact Kotak Midcap index symbol, adds longer adaptive cooldowns for Kotak HTTP 429 responses, and records Fyers per-symbol quote errors so Market Data permission problems are not mistaken for failed OAuth login. It does not require deleting the `data` branch or resetting saved trades.
