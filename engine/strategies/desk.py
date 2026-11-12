@@ -12,6 +12,7 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
+from .. import charts as charts_mod
 from .. import clock, journal, migrations, optscan
 from ..errors import BrokerError
 from ..schema import SCHEMA
@@ -438,6 +439,12 @@ class StrategyDesk:
                     read["idea"] = {"error": f"contract lookup failed ({type(e).__name__})"}
             read["grade"], read["why_not"] = optscan.grade(read, m, now, self.oscfg, heavy)
             items.append(read)
+            if (read.get("side") and (read.get("idea") or {}).get("contract") and not (read.get("idea") or {}).get("error")
+                    and (read["grade"] == "take" or (read["grade"] == "watch" and read["score"] >= self.oscfg["min_score"]))):
+                ch = charts_mod.scan_chart(self.series.get(m["spot"]), read, m, today)      # the same ideas live.json lists
+                if ch:
+                    self.charts.setdefault("options", {})[f"scan:{iso}:{m['id']}:{read['side']}"] = ch
+                    self._charts_changed.add("options")
             key = f"{m['id']}:{read.get('side')}"
             if read["grade"] == "take" and key not in seen["keys"]:
                 seen["keys"].append(key)
@@ -639,39 +646,23 @@ class StrategyDesk:
 
     # ── charts ───────────────────────────────────────────────
     def _option_charts(self, today):
-        """Charts for the options desk's trades, drawn from the same candles (indices and shares only)."""
+        """Charts for the options desk's trades, drawn on the same candles (indices and shares only)."""
         iso = today.isoformat()
         for t in self.options_trades():
-            if t.get("date") != iso or not t.get("entry_min"):
+            if t.get("date") != iso:
                 continue
-            S = self.series.get(self.by_name.get(t["name"]))
-            if S is None or not S.n:
-                continue
-            sig = [j for j in range(S.n) if S.t[j] + 300 <= t["entry_min"] + 59]
-            if not sig:
-                continue
-            i_sig = sig[-1]
-            closed = t["status"] == "CLOSED"
-            i_end = S.n - 1
-            if closed and t.get("exit_time"):
-                x_ts = int(datetime.fromisoformat(t["exit_time"]).timestamp())
-                ends = [j for j in range(S.n) if S.t[j] + 300 <= x_ts + 59]
-                i_end = ends[-1] if ends else i_end
-            a = S.starts[S.day[i_sig]]
-            n_range = 3 if t.get("book") == "Stocks" else 6
-            lines = [("Range high", t["range_high"]), ("Range low", t["range_low"]), ("Range middle (stop)", t["range_mid"])]
-            box = {"i0": a, "i1": a + n_range - 1, "lo": t["range_low"], "hi": t["range_high"], "label": "Opening range"}
-            xp = t.get("underlying_last") if closed else None
-            self.charts.setdefault("options", {})[t["id"]] = sim.build_chart(
-                S, i_sig, max(i_end, i_sig), ["vwap"], lines, box, t["underlying_entry"], xp)
-            self._charts_changed.add("options")
+            ch = charts_mod.option_trade_chart(self.series.get(self.by_name.get(t["name"])), t)
+            if ch:
+                self.charts.setdefault("options", {})[t["id"]] = ch
+                self._charts_changed.add("options")
 
     def _prune_charts(self, today):
         cut = (today - timedelta(days=CHART_DAYS)).isoformat()
         dates = {t["id"]: t["date"] for t in self.state["trades"]}
         dates.update({t["id"]: t["date"] for t in self.options_trades()})
         for sid, d in self.charts.items():
-            gone = [k for k in d if dates.get(k, "") < cut]
+            # a scanner idea's chart is named scan:<date>:<index>:<side>, so its date is in its name
+            gone = [k for k in d if (dates.get(k) or (k.split(":")[1] if k.startswith("scan:") else "")) < cut]
             for k in gone:
                 del d[k]
             if gone:

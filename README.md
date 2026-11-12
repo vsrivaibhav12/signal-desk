@@ -33,6 +33,7 @@ The default broker routing is Kotak Neo for NSE/BSE and Fyers as an optional MCX
 | Data integrity | Exchange/receipt timestamps are separated; stale, malformed and materially future-dated prices/candles are rejected; mandatory unknown data fails closed |
 | Options research capture | Prospective bid/ask, depth, OI and quote-time observations saved for future option-premium research |
 | Cockpit (`web/`) | Today (ranked ideas across every desk), Positions, Market, Swing, Journal and System screens; sample data at `?demo`, stale-data behaviour at `?demo&stale`; light/dark; works on a phone |
+| Charts and plan | Every idea shows a chart with the entry, stop, target and trailing line, and the plan in words: where to enter, the stop loss, the target, the trail / exit and the time limit |
 | Swing desk | Each weekday evening: relative-strength leaders breaking out of tight bases while Nifty is above its 200-day average, followed in a paper book. Setups only, never TAKE: the rule is unproven |
 | Journal | *Took it / Skip* buttons under Telegram alerts, your real fill beside the paper price (real slippage), stored encrypted on the public data branch and decrypted in your browser |
 | Permanent record | Every settled paper trade in `ledger-YYYY-MM.jsonl`, with estimated costs; schema upgrades migrate or archive, never wipe |

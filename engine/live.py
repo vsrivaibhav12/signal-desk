@@ -109,6 +109,81 @@ def _check_blockers(checks: list) -> list:
     return out
 
 
+# ── what to do, in words, and where the chart is ────────────────────────────
+def _px(n) -> str:
+    number = _f(n)
+    return "–" if number is None else f"{number:,.2f}".rstrip("0").rstrip(".")
+
+
+def strategy_chart_ref(t: dict) -> dict:
+    return {"file": f"chartlive_{t['strategy']}.json", "key": str(t["id"])}
+
+
+def rulebook_chart_ref(t: dict) -> dict:
+    return {"file": "chartlive_options.json", "key": str(t["id"])}
+
+
+def strategy_plan(t: dict) -> dict:
+    """Where to enter, the stop, the target, the trail and when to leave, for a strategy-desk signal."""
+    d = int(t["dir"])
+    long = d == 1
+    rule, n = t.get("rule_exit"), t.get("trail", 3)
+    if rule == "drive_trail":
+        trail = (f"Trail: leave when a 5-minute candle closes {'below the low' if long else 'above the high'} of the previous {n} candles. "
+                 "The line on the chart moves with price.")
+    elif rule == "trend_fail":
+        trail = "Exit line: leave early if a 5-minute candle closes through the 50-period average (the dotted line on the chart)."
+    else:
+        trail = "No trailing: the stop and the target stay where they are."
+    return {
+        "enter": f"{'Buy' if long else 'Sell'} near {_px(t.get('entry'))}, at the open of the candle after the signal.",
+        "stop": f"Stop {_px(t.get('stop'))}. If price touches it, leave.",
+        "target": f"Target {_px(t.get('target'))}." if t.get("target") is not None else "No fixed target: the trail decides when to leave.",
+        "trail": trail,
+        "exit_by": f"Leave by {t['exit_by']} whatever happens." if t.get("exit_by") else None,
+    }
+
+
+def rulebook_plan(t: dict, cfg: Optional[dict] = None) -> dict:
+    """The same, for an opening-range breakout of the rulebook engine. Its levels are on the index (or share), not on the option."""
+    long = int(t["dir"]) == 1
+    name = t["name"]
+    ee = (cfg or {}).get("early_exit") or {}
+    early = []
+    if ee.get("enabled") and ee.get("closes_back_inside_range"):
+        early.append(f"{int(ee['closes_back_inside_range'])} closes back inside the opening range")
+    if ee.get("enabled") and ee.get("vwap_break"):
+        early.append("a close on the wrong side of VWAP")
+    option = t.get("kind") == "option"
+    back = "below" if long else "above"
+    if option:
+        enter = f"Buy {t.get('contract') or name} near ₹{_px(t.get('entry_price'))}."
+        stop = (f"Leave if the option falls to ₹{_px(t.get('stop_price'))}, or if {name} closes a 5-minute candle {back} "
+                f"{_px(t.get('stop_underlying'))}.")
+    else:
+        enter = f"{t.get('action') or ('Buy' if long else 'Sell')} {name} near ₹{_px(t.get('entry_price'))}."
+        stop = f"Leave if {name} closes a 5-minute candle {back} {_px(t.get('stop_underlying'))}."
+    return {
+        "enter": enter, "stop": stop,
+        "target": f"Target: {name} reaching {_px(t.get('target_underlying'))}. At the target book half and move your stop to your entry price.",
+        "trail": ("After the target, trail the rest along VWAP (the line on the chart) and leave when a candle closes back across it."
+                  + (f" Leave early after {' or '.join(early)}." if early else "")),
+        "exit_by": f"Leave by {t['exit_by']} if nothing else has ended it." if t.get("exit_by") else None,
+    }
+
+
+def scan_plan(read: dict, idea: dict) -> dict:
+    watch = read.get("grade") != "take"
+    first = (read.get("why_not") or [""])[0]
+    return {
+        "enter": (f"Buy {idea.get('contract')} near ₹{_px(idea.get('premium'))}, the ask price." + (f" Not yet: {first}." if watch and first else "")),
+        "stop": f"Stop ₹{_px(idea.get('stop'))} on the option's price.",
+        "target": f"Target ₹{_px(idea.get('target'))} on the option's price.",
+        "trail": "No trailing rule for this idea. The rulebook desk trails the rest along VWAP after its target; decide your own before you enter.",
+        "exit_by": None,
+    }
+
+
 # ── ideas ────────────────────────────────────────────────────────────────────
 def strategy_idea(t: dict, now: datetime) -> Optional[Idea]:
     """An open signal from the strategy desk, or None if it should not be shown (too old to act on, or ungraded)."""
@@ -137,10 +212,11 @@ def strategy_idea(t: dict, now: datetime) -> Optional[Idea]:
         context={"in_play": in_play, "rs": rs, "volume_x": dec.get("cv"), "regime": t.get("regime"), "exit_by": t.get("exit_by"),
                  "risk_approved": approved},
         evidence=evidence.for_source("strategy:" + str(t["strategy"])), paper_position=approved,
-        quality=quality(grade, _f(dec.get("cr")), unknown, failed, bool(in_play), _f(rs), direction))
+        quality=quality(grade, _f(dec.get("cr")), unknown, failed, bool(in_play), _f(rs), direction),
+        plan=strategy_plan(t), chart=strategy_chart_ref(t))
 
 
-def rulebook_idea(t: dict, cost_table: Optional[dict] = None) -> Optional[Idea]:
+def rulebook_idea(t: dict, cost_table: Optional[dict] = None, cfg: Optional[dict] = None) -> Optional[Idea]:
     """An open entry of the rulebook engine. Its filters are all-or-nothing, so an open trade has passed every one of them."""
     if t.get("status") != "OPEN":
         return None
@@ -162,7 +238,7 @@ def rulebook_idea(t: dict, cost_table: Optional[dict] = None) -> Optional[Idea]:
         context={"underlying_entry": t.get("underlying_entry"), "underlying_stop": t.get("stop_underlying"),
                  "underlying_target": t.get("target_underlying"), "exit_by": t.get("exit_by"), "phase": t.get("phase")},
         evidence=evidence.for_source("rulebook"), contract=t.get("contract"), paper_position=True,
-        quality=quality("take", ratio, 0, 0, False, None, direction))
+        quality=quality("take", ratio, 0, 0, False, None, direction), plan=rulebook_plan(t, cfg), chart=rulebook_chart_ref(t))
 
 
 def scan_ideas(scan: dict, min_score: int, date_iso: str) -> list:
@@ -194,7 +270,8 @@ def scan_ideas(scan: dict, min_score: int, date_iso: str) -> list:
             context={"spot": r.get("spot"), "score": r.get("score"), "spread_pct": idea.get("spread_pct"), "oi": idea.get("oi"),
                      "quote_age_s": idea.get("quote_age_s"), "expiry": idea.get("expiry"), "warnings": r.get("warnings") or []},
             evidence=evidence.for_source("options_scan"), contract=idea.get("contract"), paper_position=False,
-            quality=quality(r["grade"], ratio, unknown, failed, False, None, direction)))
+            quality=quality(r["grade"], ratio, unknown, failed, False, None, direction), plan=scan_plan(r, idea),
+            chart={"file": "chartlive_options.json", "key": f"scan:{date_iso}:{r.get('id')}:{r['side']}"}))
     return out
 
 
@@ -211,7 +288,8 @@ def rulebook_position(t: dict, now: datetime) -> Position:
         entry_price=float(t["entry_price"]), entry_time=str(t["entry_time"]), stop=_round(t.get("stop_price")),
         target=None if t.get("kind") == "option" else _round(t.get("target_underlying")), last_price=_round(t.get("last_price")),
         last_update=t.get("last_update"), open_pnl=_round(pnl), risk=risk,
-        open_r=round(pnl / risk, 2) if pnl is not None and risk else None, quote_status=status, contract=t.get("contract"))
+        open_r=round(pnl / risk, 2) if pnl is not None and risk else None, quote_status=status, contract=t.get("contract"),
+        chart=rulebook_chart_ref(t))
 
 
 def strategy_position(t: dict, now: datetime, desk_updated: Optional[str]) -> Position:
@@ -224,7 +302,7 @@ def strategy_position(t: dict, now: datetime, desk_updated: Optional[str]) -> Po
         symbol=str(t["symbol"]), direction=direction, action="BUY" if direction == 1 else "SELL", qty=float(t["qty"]),
         entry_price=float(t["entry"]), entry_time=str(t["entry_t"]), stop=_round(t.get("stop")), target=_round(t.get("target")),
         last_price=_round(t.get("last")), last_update=desk_updated, open_pnl=_round(pnl), risk=risk,
-        open_r=round(pnl / risk, 2) if pnl is not None and risk else None, quote_status=status)
+        open_r=round(pnl / risk, 2) if pnl is not None and risk else None, quote_status=status, chart=strategy_chart_ref(t))
 
 
 def _ended(t: dict, kind: str) -> Optional[dict]:
@@ -261,7 +339,7 @@ def build(now: datetime, cfg: dict, feed: Optional[dict], desk_state: Optional[d
     for t in rb_open:
         try:
             positions.append(rulebook_position(t, now))
-            idea = rulebook_idea(t, cost_table)
+            idea = rulebook_idea(t, cost_table, cfg)
             if idea:
                 ideas.append(idea)
         except (KeyError, TypeError, ValueError):

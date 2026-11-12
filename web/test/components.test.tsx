@@ -8,7 +8,7 @@ import { IdeaSheet } from "../src/components/IdeaSheet";
 import { Banner } from "../src/components/ui";
 import { effectiveIdea } from "../src/lib/ideas";
 import { assessTrust } from "../src/lib/trust";
-import { iso, makeIdea, makeLive, NOW } from "./helpers";
+import { iso, makeApp, makeChart, makeIdea, makeLive, NOW } from "./helpers";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState({}, "", "/"); window.location.hash = ""; });
 
@@ -21,7 +21,7 @@ const ranked = (over = {}, liveOver = {}) => {
 describe("an idea card", () => {
   it("shows a fresh TAKE with its checks and the research line", () => {
     const { live, r } = ranked();
-    render(<IdeaCard r={r} live={live} nowMs={NOW} onOpen={() => {}} />);
+    render(<IdeaCard r={r} app={makeApp(live)} onOpen={() => {}} />);
     expect(screen.getByText("TAKE")).toBeTruthy();
     expect(screen.getByText("4 of 4 checks passed")).toBeTruthy();
     expect(screen.getByText(/Replay, after costs/)).toBeTruthy();
@@ -30,7 +30,7 @@ describe("an idea card", () => {
 
   it("an old TAKE is shown as EXPIRED with the reason, never as TAKE", () => {
     const { live, r } = ranked({ signaled_at: iso(3000) });
-    render(<IdeaCard r={r} live={live} nowMs={NOW} onOpen={() => {}} />);
+    render(<IdeaCard r={r} app={makeApp(live)} onOpen={() => {}} />);
     expect(screen.queryByText("TAKE")).toBeNull();
     expect(screen.getByText("EXPIRED")).toBeTruthy();
     expect(screen.getByText(/moved on/)).toBeTruthy();
@@ -39,14 +39,14 @@ describe("an idea card", () => {
   it("opens its details when pressed", () => {
     const { live, r } = ranked();
     const open = vi.fn();
-    render(<IdeaCard r={r} live={live} nowMs={NOW} onOpen={open} />);
+    render(<IdeaCard r={r} app={makeApp(live)} onOpen={open} />);
     fireEvent.click(screen.getByRole("button"));
     expect(open).toHaveBeenCalledWith(r.idea.id);
   });
 
   it("shows a check that could not be verified as such", () => {
     const { live, r } = ranked({ grade: "watch", checks: [{ id: "vol", label: "Heavy volume", state: "unknown" }, { id: "cost", label: "Costs", state: "pass" }], blockers: ["Heavy volume: could not be verified"] });
-    render(<IdeaCard r={r} live={live} nowMs={NOW} onOpen={() => {}} />);
+    render(<IdeaCard r={r} app={makeApp(live)} onOpen={() => {}} />);
     expect(screen.getByText("1 of 2 checks passed, 1 not verified")).toBeTruthy();
     expect(screen.getByText("Heavy volume: could not be verified")).toBeTruthy();
   });
@@ -67,7 +67,7 @@ describe("the idea sheet", () => {
   it("lists the checks, explains an unverified one, and closes on Escape", () => {
     const { live, r } = ranked({ grade: "watch", checks: [{ id: "vol", label: "Heavy volume", state: "unknown" }, { id: "mkt", label: "Nifty agrees", state: "fail" }] });
     const close = vi.fn();
-    render(<IdeaSheet r={r} live={live} nowMs={NOW} onClose={close} />);
+    render(<IdeaSheet r={r} app={makeApp(live)} onClose={close} />);
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getByText(/could not be verified, which counts as not passing/)).toBeTruthy();
     expect(screen.getByText(/\(failed\)/)).toBeTruthy();
@@ -79,7 +79,7 @@ describe("the idea sheet", () => {
     const { live, r } = ranked();
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    render(<IdeaSheet r={r} live={live} nowMs={NOW} onClose={() => {}} />);
+    render(<IdeaSheet r={r} app={makeApp(live)} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Copy notes"));
     await waitFor(() => expect(screen.getByText("Copied.")).toBeTruthy());
     expect(writeText.mock.calls[0]![0]).toContain("BUY HAL (NSE:HAL-EQ)");
@@ -90,7 +90,7 @@ describe("the idea sheet", () => {
 
   it("states what the research says and that a TAKE is not a promise", () => {
     const { live, r } = ranked();
-    render(<IdeaSheet r={r} live={live} nowMs={NOW} onClose={() => {}} />);
+    render(<IdeaSheet r={r} app={makeApp(live)} onClose={() => {}} />);
     expect(screen.getByText(/does not mean it is expected to make money/)).toBeTruthy();
   });
 });

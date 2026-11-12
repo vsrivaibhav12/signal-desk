@@ -10,7 +10,7 @@ const schemas = join(here, "..", "..", "contract", "schemas");
 const out = join(here, "..", "src", "generated");
 mkdirSync(out, { recursive: true });
 
-for (const name of ["live", "manifest", "ledger-trade", "swing"]) {
+for (const name of ["live", "manifest", "ledger-trade", "swing", "chart"]) {
   const schema = JSON.parse(readFileSync(join(schemas, `${name}.schema.json`), "utf8"));
   const ts = await compile(schema, schema.title, {
     bannerComment: `/* Generated from contract/schemas/${name}.schema.json by scripts/gen-types.mjs. Do not edit. */`,

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { Live } from "../generated/live";
 import { clockTime, dash, inr, price } from "../lib/format";
 import { checkSummary, orderTicket, type Ranked } from "../lib/ideas";
 import { ageSeconds, humanAge } from "../lib/time";
+import type { AppState } from "../state";
+import { ChartBlock } from "./ChartBlock";
+import { PlanList } from "./PlanList";
 import { deskName, GradeBadge, markOf } from "./ui";
 
 const FACTS: Array<[string, string, (v: unknown) => string]> = [
@@ -18,8 +20,10 @@ const FACTS: Array<[string, string, (v: unknown) => string]> = [
   ["exit_by", "Exit by", String],
 ];
 
-export function IdeaSheet({ r, live, nowMs, onClose }: { r: Ranked; live: Live | undefined; nowMs: number; onClose: () => void }) {
+export function IdeaSheet({ r, app, onClose }: { r: Ranked; app: AppState; onClose: () => void }) {
   const { idea, eff } = r;
+  const live = app.snap.live;
+  const nowMs = app.nowMs;
   const ref = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState<"idle" | "ok" | "failed">("idle");
   const ticket = orderTicket(idea, eff, nowMs);
@@ -72,6 +76,12 @@ export function IdeaSheet({ r, live, nowMs, onClose }: { r: Ranked; live: Live |
           <div><span class="l">Target</span><span class="v">{idea.target != null ? price(idea.target) : dash}</span></div>
           <div><span class="l">{idea.desk === "swing" ? "Initial risk" : "Risk"}</span><span class="v">{idea.risk != null ? inr(idea.risk) : idea.desk === "swing" ? "8% of entry" : dash}</span></div>
         </div>
+
+        <h4>Chart</h4>
+        <ChartBlock app={app} chartRef={idea.chart} name={idea.name} />
+
+        <h4>The plan</h4>
+        <PlanList plan={idea.plan} />
 
         <h4>Checks behind the grade{summary.text ? ` · ${summary.text}` : ""}</h4>
         {idea.checks.length ? (

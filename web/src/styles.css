@@ -1,7 +1,7 @@
 /* Signal Desk. System fonts only (nothing is requested from another site). Light and dark follow the device unless the user picks one. */
 :root {
   --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f0f2f5; --text: #14181f; --muted: #596273; --border: #dfe3ea;
-  --accent: #2457d6; --accent-ink: #ffffff;
+  --accent: #2457d6; --accent-ink: #ffffff; --trail: #c2570c;
   --good: #0c7a53; --good-bg: #e3f5ec; --warn: #9a6200; --warn-bg: #fdf1d9; --bad: #b42323; --bad-bg: #fde8e8; --info-bg: #e8eefc;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .06);
   --radius: 12px; --gutter: 16px;
@@ -11,14 +11,14 @@
 }
 :root[data-theme="dark"] {
   --bg: #0d1015; --surface: #151a21; --surface-2: #1c222b; --text: #e7eaf0; --muted: #98a2b3; --border: #272e39;
-  --accent: #6c9bff; --accent-ink: #0b1220;
+  --accent: #6c9bff; --accent-ink: #0b1220; --trail: #fb923c;
   --good: #3fcf8e; --good-bg: #11301f; --warn: #e6b34a; --warn-bg: #33270d; --bad: #ff7b7b; --bad-bg: #3a1717; --info-bg: #17233f;
   --shadow: none; color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0d1015; --surface: #151a21; --surface-2: #1c222b; --text: #e7eaf0; --muted: #98a2b3; --border: #272e39;
-    --accent: #6c9bff; --accent-ink: #0b1220;
+    --accent: #6c9bff; --accent-ink: #0b1220; --trail: #fb923c;
     --good: #3fcf8e; --good-bg: #11301f; --warn: #e6b34a; --warn-bg: #33270d; --bad: #ff7b7b; --bad-bg: #3a1717; --info-bg: #17233f;
     --shadow: none; color-scheme: dark;
   }
@@ -176,3 +176,24 @@ tr:last-child td { border-bottom: 0; }
 }
 @media (prefers-reduced-motion: no-preference) { .meter > i { transition: width .3s ease; } }
 @media (max-width: 979px) { .rail-risk { display: none; } }
+
+/* ── charts and the plan ─────────────────────────────── */
+.chart { margin: 8px 0 0; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: .75rem; color: var(--muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend i, .plan dt i, .trailline i { display: inline-block; width: 18px; height: 0; border-top: 2px solid currentColor; vertical-align: middle; }
+.k-entry { color: var(--text); border-top-style: dotted !important; }
+.k-stop { color: var(--bad); border-top-style: dashed !important; }
+.k-target { color: var(--good); border-top-style: dashed !important; }
+.k-trail { color: var(--trail); border-top-style: dashed !important; border-top-width: 3px !important; }
+.k-time { color: var(--muted); }
+.chart-note { margin-top: 4px; }
+.chart-empty { padding: 14px; text-align: center; color: var(--muted); font-size: .82rem; border: 1px dashed var(--border); border-radius: 8px; }
+.trailline { margin-top: 6px; display: flex; gap: 8px; align-items: baseline; font-size: .8rem; color: var(--text); }
+.trailline b { flex: none; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.plan { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; margin: 6px 0 0; font-size: .9rem; }
+.plan dt { font-weight: 700; white-space: nowrap; display: flex; align-items: baseline; gap: 6px; }
+.plan dd { margin: 0; }
+.chartrow td { background: var(--surface-2); }
+@media (max-width: 480px) { .plan { grid-template-columns: minmax(0, 1fr); gap: 2px; } .plan dd { margin-bottom: 8px; } }

@@ -96,6 +96,15 @@ def night(days, by_day, length, nifty_obj, book=None, ledger=None, results=None)
     return swing.run({d: by_day[d] for d in days[:length]}, nifty_obj, results, book, ledger)
 
 
+def swing_sma20(days, by_day):
+    """The 20-day average of the share BRK on the last day, worked out independently of the desk."""
+    closes = []
+    for d in days:
+        row = next(r for r in by_day[d] if r[1] == "BRK")
+        closes.append(row[6])
+    return sum(closes[-20:]) / 20
+
+
 # ── tonight's signal ─────────────────────────────────────────────────────────────────────────────
 def test_a_leader_breaking_out_of_a_tight_base_in_an_up_market_is_a_setup_not_a_take():
     days, by_day = make_days(brk_rows())
@@ -112,6 +121,15 @@ def test_a_leader_breaking_out_of_a_tight_base_in_an_up_market_is_a_setup_not_a_
     assert [p["status"] for p in doc["positions"]] == ["PENDING"] and book["asof"] == days[-1].isoformat()
     assert "indistinguishable from zero" in doc["note"]
     contract.assert_valid("swing", doc)
+    ref = idea["chart"]                                           # the idea says where its chart is, and it is there
+    assert ref == {"file": "swing.json", "in": "charts", "key": "BRK:" + days[-1].isoformat()}
+    ch = doc["charts"][ref["key"]]
+    contract.assert_valid("chart", ch)
+    assert ch["unit"] == "day" and ch["dir"] == 1 and ch["tg"] is None and ch["el"] == "Signal" and ch["e"] == len(ch["k"]) - 1
+    assert ch["st"] == pytest.approx(ch["ep"] * 0.92, abs=0.02) and ch["ln"][0][0].startswith("Break level") and ch["ln"][0][1] == doc["triggered"][0]["pivot"]
+    assert ch["tr"]["label"].startswith("Trail") and ch["tr"]["v"][-1] == pytest.approx(swing_sma20(days, by_day), abs=0.05)
+    assert len(ch["t"]) == len(ch["k"]) == len(ch["tr"]["v"])
+    assert set(idea["plan"]) == {"enter", "stop", "target", "trail", "exit_by"} and "tomorrow's open" in idea["plan"]["enter"] and "20-day average" in idea["plan"]["trail"]
     wrap = {"$defs": contract.schema("live")["$defs"], "$ref": "#/$defs/idea"}
     from jsonschema import Draft202012Validator
     Draft202012Validator(wrap).validate(idea)
@@ -223,6 +241,10 @@ def test_an_open_position_reports_its_progress_in_r(tmp_path):
     assert pos["status"] == "OPEN" and pos["entry"] is not None and pos["open_r"] is not None and pos["open_r"] > 0
     assert pos["stop"] < pos["entry"] and pos["breakeven"] is False
     contract.assert_valid("swing", doc)
+    ch = doc["charts"][pos["id"]]                                  # an open position is drawn with its real entry and its current stop
+    contract.assert_valid("chart", ch)
+    assert ch["el"] == "Entry" and ch["ep"] == pos["entry"] and ch["st"] == pos["stop"] and ch["k"][ch["e"]][0] == pytest.approx(pos["entry"], abs=0.02)
+    assert "8 percent below the entry" in ch["tn"]
 
 
 def test_a_new_book_starts_tonight_and_never_back_fills_history():
@@ -242,6 +264,9 @@ def test_a_leader_just_below_its_pivot_is_listed_as_a_setup_to_watch():
     s = next(s for s in doc["setups"] if s["symbol"] == "BRK")
     assert 0 <= s["pct_to_pivot"] <= 5 and s["rs"] >= 80 and s["base_depth_pct"] <= 25
     assert doc["ideas"] == []                                                # watching is not an idea
+    ch = doc["charts"]["BRK:setup"]
+    contract.assert_valid("chart", ch)
+    assert ch["el"] == "Now" and ch["st"] is None and "Not a setup yet" in ch["tn"]
     contract.assert_valid("swing", doc)
 
 

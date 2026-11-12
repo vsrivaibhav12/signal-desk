@@ -58,7 +58,7 @@ export function App() {
       <main>
         <Banner trust={app.trust} demo={demo} simulatedStale={app.simulatedStale} />
         {tab === "home" && <Home app={app} ranked={ranked} onOpen={setOpenId} />}
-        {tab === "positions" && <Positions app={app} />}
+        {tab === "positions" && <Positions app={app} openable={new Set(ranked.map((r) => r.idea.id))} onOpen={setOpenId} />}
         {tab === "market" && <Market app={app} />}
         {tab === "swing" && <SwingScreen app={app} />}
         {tab === "journal" && <JournalScreen app={app} />}
@@ -71,7 +71,7 @@ export function App() {
         {TABS.map((t) => <a key={t.id} href={`#/${t.id}`} aria-current={tab === t.id ? "page" : undefined}><span class="ic" aria-hidden="true">{t.icon}</span>{t.label}</a>)}
       </nav>
 
-      {selected && <IdeaSheet r={selected} live={app.snap.live} nowMs={app.nowMs} onClose={() => setOpenId(null)} />}
+      {selected && <IdeaSheet r={selected} app={app} onClose={() => setOpenId(null)} />}
     </>
   );
 }

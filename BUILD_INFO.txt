@@ -1,7 +1,7 @@
 Signal Desk 5.0.0
 Release date: 2026-11-12
-Release type: decision cockpit. Published data contract, manifest and permanent ledger, shared portfolio module with an index-correlation cap, isolated desks, nightly swing desk, encrypted trade journal with Telegram buttons, new typed dashboard (web/) with stale-data handling, CI.
-Verification: 210 offline Python tests and 65 dashboard tests passed; Python parses as 3.10; dashboard type-check, build and clean npm ci passed; JSON Schemas and all workflow YAML parse.
+Release type: decision cockpit. Published data contract, manifest and permanent ledger, shared portfolio module with an index-correlation cap, isolated desks, nightly swing desk, encrypted trade journal with Telegram buttons, new typed dashboard (web/) with stale-data handling and a chart plus written plan for every idea, CI.
+Verification: 221 offline Python tests and 90 dashboard tests passed; Python parses as 3.10; dashboard type-check, build and clean npm ci passed; JSON Schemas and all workflow YAML parse.
 Live broker verification: not performed in this build environment. Fyers MCX access and Kotak rate-limit behaviour must be verified in the user's own account.
 Deployment verification: not installed on the user's VPS/office PC, and no GitHub Actions run or Pages deployment was made from this build environment.
 Trading mode: read-only market data + paper trading. No broker order placement.

@@ -1,4 +1,8 @@
+import { vi } from "vitest";
 import type { Idea, Live } from "../src/generated/live";
+import type { ChartFile } from "../src/lib/data";
+import { assessTrust } from "../src/lib/trust";
+import type { AppState } from "../src/state";
 
 export const NOW = Date.parse("2026-11-11T10:00:00+05:30");
 export const iso = (secondsAgo: number) => new Date(NOW - secondsAgo * 1000).toISOString();
@@ -32,5 +36,25 @@ export function makeLive(over: Partial<Live> = {}): Live {
     ideas: [makeIdea()], positions: [], ended: [],
     market: { tiles: [], regime: null, movers: [], results: null, leaders: null, watchlist_count: 12 },
     evidence: {}, ...over,
+  };
+}
+
+/** A stand-in for the page's state, for rendering one component. */
+export function makeApp(live: Live | undefined = makeLive(), over: Partial<AppState> = {}, files: Record<string, ChartFile | null> = {}): AppState {
+  return {
+    source: { kind: "demo", base: "demo/", label: "Sample data" },
+    snap: { live, ledger: {}, hashes: {}, errors: {}, loadedAt: 0 },
+    nowMs: NOW, trust: assessTrust(live, NOW), busy: false, simulatedStale: false,
+    refreshNow: () => {}, ensureLedger: async () => {}, chartFiles: files, ensureChartFile: vi.fn(), ...over,
+  };
+}
+
+/** A small stored chart: twelve five-minute candles with a trigger, a stop, a target and a trail. */
+export function makeChart(over: Record<string, unknown> = {}) {
+  const k = Array.from({ length: 12 }, (_, i) => [100 + i * 0.2, 100.6 + i * 0.2, 99.7 + i * 0.2, 100.3 + i * 0.2]);
+  return {
+    t0: 1794368700, d: k.map((_, i) => i), k, e: 5, x: null, ep: 101.3, xp: null, ln: [["Opening range high", 100.8]], ov: { vwap: k.map((_, i) => 100 + i * 0.15) },
+    st: 99.5, tg: 103, dir: 1, tr: { label: "Trail: a close below this line ends the trade", v: k.map((_, i) => (i < 3 ? null : 99.8 + i * 0.2)) },
+    tn: "A note about the chart.", bx: [0, 2, 99.7, 100.8, "Opening range"], ...over,
   };
 }

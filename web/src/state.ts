@@ -1,6 +1,6 @@
 // The page's state: the latest data, the current time, and whether the numbers can be trusted.
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { emptySnapshot, loadLedger, refresh, resolveSource, type Snapshot, type Source } from "./lib/data";
+import { emptySnapshot, fetchChartFile, loadLedger, refresh, resolveSource, type ChartFile, type Snapshot, type Source } from "./lib/data";
 import { assessTrust, type Trust } from "./lib/trust";
 
 export const REFRESH_MS = 60_000;
@@ -17,6 +17,10 @@ export interface AppState {
   simulatedStale: boolean;
   refreshNow: () => void;
   ensureLedger: () => Promise<void>;
+  /** Chart files loaded so far (null means the file could not be read). */
+  chartFiles: Record<string, ChartFile | null | undefined>;
+  /** Asks for a chart file to be loaded, or reloaded when the engine has published a newer copy. Safe to call often. */
+  ensureChartFile: (file: string) => void;
 }
 
 export function useAppState(): AppState {
@@ -28,6 +32,9 @@ export function useAppState(): AppState {
   const latest = useRef(snap);
   latest.current = snap;
   const inflight = useRef(false);
+  const [chartFiles, setChartFiles] = useState<Record<string, ChartFile | null | undefined>>({});
+  const chartHashes = useRef<Record<string, string>>({});
+  const chartBusy = useRef(new Set<string>());
 
   const refreshNow = useCallback(() => {
     if (inflight.current) return;
@@ -38,6 +45,16 @@ export function useAppState(): AppState {
       .then((next) => setSnap(next))
       .catch(() => { /* refresh() reports its own failures in snap.errors; anything else leaves the last data in place */ })
       .finally(() => { inflight.current = false; setBusy(false); setClock(Date.now()); });
+  }, [source]);
+
+  const ensureChartFile = useCallback((file: string) => {
+    const sha = latest.current.manifest?.files.find((f) => f.path === file)?.sha256 ?? "";
+    if (chartBusy.current.has(file) || (chartHashes.current[file] !== undefined && chartHashes.current[file] === sha && sha !== "")) return;
+    chartBusy.current.add(file);
+    fetchChartFile(source, file, Date.now())
+      .then((doc) => { chartHashes.current[file] = sha; setChartFiles((c) => ({ ...c, [file]: doc })); })
+      .catch(() => setChartFiles((c) => (c[file] ? c : { ...c, [file]: null })))          // keep the last good copy if there is one
+      .finally(() => chartBusy.current.delete(file));
   }, [source]);
 
   const ensureLedger = useCallback(async () => {
@@ -56,7 +73,7 @@ export function useAppState(): AppState {
 
   const nowMs = source.kind === "demo" && snap.live ? Date.parse(snap.live.generated_at) + (simulatedStale ? 1_500_000 : 90_000) : clock;
   const trust = useMemo(() => assessTrust(snap.live, nowMs), [snap.live, nowMs]);
-  return { source, snap, nowMs, trust, busy, simulatedStale, refreshNow, ensureLedger };
+  return { source, snap, nowMs, trust, busy, simulatedStale, refreshNow, ensureLedger, chartFiles, ensureChartFile };
 }
 
 export function useHash(): [string, (h: string) => void] {

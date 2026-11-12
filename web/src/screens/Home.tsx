@@ -44,7 +44,7 @@ export function Home({ app, onOpen, ranked }: { app: AppState; onOpen: (id: stri
             <>
               {main.length > 0 && (
                 <div class="ideas">
-                  {main.map((r) => <IdeaCard key={r.idea.id} r={r} live={live} nowMs={nowMs} onOpen={onOpen} />)}
+                  {main.map((r) => <IdeaCard key={r.idea.id} r={r} app={app} onOpen={onOpen} />)}
                 </div>
               )}
               {main.length === 0 && <div class="empty">Nothing has passed every check. The signals below are only being watched.</div>}
@@ -55,7 +55,7 @@ export function Home({ app, onOpen, ranked }: { app: AppState; onOpen: (id: stri
                     <span class="muted small">{watching.length} signals that did not pass every check. Not ideas.</span>
                   </div>
                   <div class="ideas">
-                    {(allWatch ? watching : watching.slice(0, WATCH_SHOWN)).map((r) => <IdeaCard key={r.idea.id} r={r} live={live} nowMs={nowMs} onOpen={onOpen} />)}
+                    {(allWatch ? watching : watching.slice(0, WATCH_SHOWN)).map((r) => <IdeaCard key={r.idea.id} r={r} app={app} onOpen={onOpen} />)}
                   </div>
                   {watching.length > WATCH_SHOWN && (
                     <p style="margin-top:10px"><button type="button" class="iconbtn" onClick={() => setAllWatch(!allWatch)}>{allWatch ? "Show fewer" : `Show all ${watching.length}`}</button></p>

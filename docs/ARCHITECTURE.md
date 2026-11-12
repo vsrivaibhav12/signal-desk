@@ -17,6 +17,7 @@ The engine publishes to the `data` branch. The dashboard reads from `raw.githubu
 | `manifest.json` | every publisher | Each published file with size, SHA-256 and when its content last changed. The dashboard reads this first and fetches only what changed. |
 | `live.json` | the trade engine, every cycle | The present moment: ideas with the checks behind their grades, open positions, risk used, market read, data health, freshness thresholds. |
 | `ledger-YYYY-MM.jsonl` | the trade engine | Every settled paper trade. Append only; written once; never edited. |
+| `chartlive_<strategy>.json`, `chartlive_options.json` | the trade engine | One chart per idea, by trade id: candles, entry, stop, target, trailing line (`chart.schema.json`). An idea's `chart` field in `live.json` says which file and key. Swing charts travel inside `swing.json`. |
 | `swing.json`, `swing_state.json`, `ledger_swing-YYYY-MM.jsonl` | the Leaders workflow, each weekday evening | Swing setups, the paper book, and its settled trades. |
 | `journal.bin` | the trade engine | Your Took it / Skip record, AES-GCM encrypted. |
 | `feed.json`, `strategies.json`, … | the engines | Their working state. Kept for the old dashboard and for recovery; the new dashboard does not depend on them. |
@@ -40,7 +41,8 @@ feeds (Kotak, Fyers, NSE, news) → desks → grading → portfolio → ledger /
 | `engine/portfolio.py` | The portfolio rules both engines share: position, risk and loss limits, and the index-correlation cap |
 | `engine/costs.py` | One cost model |
 | `engine/domain.py` | The shared types: `Idea`, `Position`, `LedgerTrade`, `Check` |
-| `engine/live.py` | Builds `live.json`: ranks ideas, attaches checks and research evidence |
+| `engine/live.py` | Builds `live.json`: ranks ideas, attaches checks, research evidence, the plan in words and the chart reference |
+| `engine/charts.py` | Charts for rulebook option trades and scanner ideas (strategy and swing charts are made where their trades are) |
 | `engine/ledger.py`, `engine/migrations.py` | The permanent trade record, and schema upgrades that never discard it |
 | `engine/manifest.py`, `engine/store.py` | The index, and conflict-safe publishing |
 | `engine/journal.py` | Telegram buttons and the encrypted journal |

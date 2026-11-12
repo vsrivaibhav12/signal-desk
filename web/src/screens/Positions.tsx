@@ -5,7 +5,7 @@ import { deskName, Meter, pnlClass, Pill } from "../components/ui";
 import { RiskCard } from "../components/Rails";
 import type { AppState } from "../state";
 
-export function Positions({ app }: { app: AppState }) {
+export function Positions({ app, openable, onOpen }: { app: AppState; openable: Set<string>; onOpen: (id: string) => void }) {
   const live = app.snap.live;
   if (!live) return <div class="empty">Loading…</div>;
   const th = live.thresholds ?? DEFAULT_THRESHOLDS;
@@ -17,7 +17,7 @@ export function Positions({ app }: { app: AppState }) {
           {live.positions.length ? (
             <div class="tablewrap">
               <table>
-                <thead><tr><th>Position</th><th>Desk</th><th class="r">Qty</th><th class="r">Entry</th><th class="r">Last</th><th class="r">Stop</th><th class="r">Open P&amp;L</th><th class="r">R</th><th>Price</th></tr></thead>
+                <thead><tr><th>Position</th><th>Desk</th><th class="r">Qty</th><th class="r">Entry</th><th class="r">Last</th><th class="r">Stop</th><th class="r">Open P&amp;L</th><th class="r">R</th><th>Price</th><th>Chart</th></tr></thead>
                 <tbody>
                   {live.positions.map((p) => {
                     const age = ageSeconds(app.nowMs, p.last_update);
@@ -38,6 +38,10 @@ export function Positions({ app }: { app: AppState }) {
                             {unmonitored ? "Unmonitored" : humanAge(age)}
                           </Pill>
                           {unmonitored && <div class="reason small">The stop cannot be verified: no fresh quote.</div>}
+                        </td>
+                        <td>
+                          <button type="button" class="iconbtn" disabled={!openable.has(p.id)} onClick={() => onOpen(p.id)}
+                            aria-label={`Chart and plan for ${p.name}`}>Chart</button>
                         </td>
                       </tr>
                     );

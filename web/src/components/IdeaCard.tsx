@@ -1,11 +1,14 @@
-import type { Live } from "../generated/live";
 import { dash, price, inr } from "../lib/format";
 import { checkSummary, evidenceLine, type Ranked } from "../lib/ideas";
 import { ageSeconds, humanAge } from "../lib/time";
+import type { AppState } from "../state";
+import { ChartBlock } from "./ChartBlock";
 import { CheckDots, deskName, GradeBadge } from "./ui";
 
-export function IdeaCard({ r, live, nowMs, onOpen }: { r: Ranked; live: Live | undefined; nowMs: number; onOpen: (id: string) => void }) {
+export function IdeaCard({ r, app, onOpen }: { r: Ranked; app: AppState; onOpen: (id: string) => void }) {
   const { idea, eff } = r;
+  const live = app.snap.live;
+  const nowMs = app.nowMs;
   const sw = idea.desk === "swing";
   const summary = checkSummary(idea.checks);
   const age = ageSeconds(nowMs, idea.signaled_at);
@@ -25,6 +28,8 @@ export function IdeaCard({ r, live, nowMs, onOpen }: { r: Ranked; live: Live | u
         <div><span class="l">Target</span><span class="v">{idea.target != null ? price(idea.target) : sw ? "Trail" : dash}</span></div>
         <div><span class="l">{sw ? "Size" : "Risk"}</span><span class="v">{sw ? "Yours" : idea.risk != null ? inr(idea.risk) : dash}</span></div>
       </div>
+      {(eff.grade === "take" || eff.grade === "setup") && <ChartBlock app={app} chartRef={idea.chart} name={idea.name} compact showNote={false} />}
+      {(eff.grade === "take" || eff.grade === "setup") && idea.plan?.trail && <div class="trailline"><b>Trail / exit</b><span>{idea.plan.trail}</span></div>}
       <div class="idea-meta">
         <CheckDots checks={idea.checks} />
         {summary.text && <span>{summary.text}</span>}

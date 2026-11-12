@@ -185,6 +185,39 @@ def open_r(p: dict) -> Optional[float]:
     return round((p["last_close"] - p["entry"]) / risk, 2) if risk > 0 else None
 
 
+# ── charts and the plan in words ─────────────────────────────────────────────────────────────────
+TRAIL_LABEL = "Trail: leave at the next open after a close below this 20-day average"
+CHART_BARS = 60
+
+
+def daily_chart(D, e: int, *, ep: float, st: Optional[float], lines, el: str, tn: str) -> dict:
+    """A daily-candle chart in the same shape as the intraday ones (contract/schemas/chart.schema.json), with the 20-day average as the trail.
+
+    `e` is the index in D of the candle the chart is about (the signal, or the entry). The window ends at the latest candle.
+    """
+    last = D.n - 1
+    j0 = max(0, min(e, last) - (CHART_BARS - 1 if e >= last else 40))
+    rng = range(j0, last + 1)
+    return {
+        "t": [int(clock.ts(clock.at(D.d[j], "09:15"))) for j in rng], "unit": "day",
+        "k": [[round(D.o[j], 2), round(D.h[j], 2), round(D.l[j], 2), round(D.c[j], 2)] for j in rng],
+        "e": e - j0, "x": None, "ep": round(ep, 2), "xp": None, "ln": [[lab, round(px, 2)] for lab, px in lines], "ov": {},
+        "tr": {"label": TRAIL_LABEL, "v": [None if D.sma20[j] is None else round(D.sma20[j], 2) for j in rng]},
+        "st": None if st is None else round(st, 2), "tg": None, "dir": 1, "el": el, "tn": tn,
+    }
+
+
+def swing_plan(close: float, pivot: float) -> dict:
+    return {
+        "enter": f"Buy at tomorrow's open (about {close:,.2f}). Skip it if it opens more than 8 percent above {pivot:,.2f}.",
+        "stop": f"Stop 8 percent below your actual entry price (about {close * (1 - dl.RULES['stop']):,.2f} if you pay {close:,.2f}).",
+        "target": "No fixed target: let it run while the trend holds.",
+        "trail": ("After a close 8 percent above your entry, move the stop up to your entry. "
+                  "Leave at the next open after a close below the 20-day average (the line on the chart)."),
+        "exit_by": None,
+    }
+
+
 # ── tonight ──────────────────────────────────────────────────────────────────────────────────────
 def build_data(days: dict, log=lambda m: None) -> tuple[dict, date]:
     """{symbol: Daily} for every liquid share, from the raw daily files. A renamed share keeps the series that reaches the last day."""
@@ -222,7 +255,8 @@ def _idea(sym: str, D, sig: dict, last_day: date) -> Idea:
         context={"pivot": round(sig["pivot"], 2), "volx": round(sig["volx"], 2), "rs": sig["rs"], "reference_close": round(close, 2),
                  "plan": "next_open", "stop_pct": dl.RULES["stop"] * 100, "unit": "reference (the entry is tomorrow's open)"},
         evidence=evidence.for_source("swing"), paper_position=True,
-        quality=quality("setup", None, 0, 0, False, sig["rs"], 1))
+        quality=quality("setup", None, 0, 0, False, sig["rs"], 1), plan=swing_plan(close, sig["pivot"]),
+        chart={"file": "swing.json", "in": "charts", "key": _position_id(sym, last_day.isoformat())})
 
 
 def run(days: dict, nifty=None, results: Optional[set] = None, book: Optional[dict] = None, ledger: Optional[Ledger] = None,
@@ -287,6 +321,32 @@ def run(days: dict, nifty=None, results: Optional[set] = None, book: Optional[di
     setups.sort(key=lambda s: (s["pct_to_pivot"], -s["rs"]))
     gaps.sort(key=lambda g_: -g_["gap_pct"])
     live_positions = [p for p in book["positions"] if p["status"] in ACTIVE]
+    charts: dict = {}
+    for sym, D, sig in trig:
+        charts[_position_id(sym, last_day.isoformat())] = daily_chart(
+            D, D.n - 1, ep=D.c[-1], st=D.c[-1] * (1 - dl.RULES["stop"]), lines=[("Break level (40-day high)", sig["pivot"])], el="Signal",
+            tn=BUY_NOTE + " The stop shown is for an entry at the signal close.")
+    for p in live_positions:
+        D = data.get(p["symbol"])
+        if D is None or p["id"] in charts:
+            continue
+        if p["status"] == "PENDING":
+            e = D.index.get(date.fromisoformat(p["signal_date"]))
+            if e is not None:
+                charts[p["id"]] = daily_chart(D, e, ep=D.c[e], st=D.c[e] * (1 - dl.RULES["stop"]), lines=[("Break level (40-day high)", p["pivot"])],
+                                              el="Signal", tn=BUY_NOTE + " The stop shown is for an entry at the signal close.")
+            continue
+        e = D.index.get(date.fromisoformat(p["entry_date"]))
+        if e is not None:
+            charts[p["id"]] = daily_chart(
+                D, e, ep=p["entry"], st=p["stop"], lines=[("Break level (40-day high)", p["pivot"])], el="Entry",
+                tn=("The stop has moved up to the entry price." if p.get("breakeven") else "The stop is 8 percent below the entry.") + " " + EXIT_NOTE)
+    for s in sorted(setups, key=lambda s: (s["pct_to_pivot"], -s["rs"]))[:10]:
+        D = data.get(s["symbol"])
+        if D is not None:
+            charts[f"{s['symbol']}:setup"] = daily_chart(
+                D, D.n - 1, ep=D.c[-1], st=None, lines=[("Break level (40-day high)", s["pivot"])], el="Now",
+                tn="Not a setup yet: price has to close above the break level on at least 1.5 times normal volume.")
     closed_recent = sorted((p for p in book["positions"] if p["status"] == "CLOSED"), key=lambda p: p["exit_date"], reverse=True)[:KEEP_CLOSED]
     doc: dict[str, Any] = {
         "schema": SCHEMA, "generated_at": now.isoformat(timespec="seconds"), "asof": last_day.isoformat(),
@@ -304,6 +364,7 @@ def run(days: dict, nifty=None, results: Optional[set] = None, book: Optional[di
         "recently_closed": [{"id": p["id"], "symbol": p["symbol"], "entry_date": p["entry_date"], "entry": p["entry"],
                              "exit_date": p["exit_date"], "exit": p["exit"], "reason": p["reason"], "r": p.get("r")} for p in closed_recent],
         "gap_watch": gaps[:10],
+        "charts": charts,
         "ideas": [_idea(s, D, sig, last_day).to_dict() for s, D, sig in trig],
         "evidence": evidence.for_source("swing"),
         "note": NOTE,

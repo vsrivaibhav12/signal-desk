@@ -159,10 +159,32 @@ def build_chart(S, i_sig, i_end, overlays, lines, box, ep, xp=None, before=30, a
     return ch
 
 
+def decorate_chart(ch, tr):
+    """Adds to a trade's chart what a reader needs to act on it: the stop, the target, the direction, and the trailing line.
+
+    Works from the chart's own candles ([open, high, low, close]) and indicator lines, so it can also bring older stored charts up to date.
+      st / tg   the stop and the target (either may be None)
+      dir       +1 for a buy, -1 for a sell
+      tr        the trailing exit line, {"label", "v": one value per candle}, when the strategy has one:
+                  drive         a close beyond the high/low of the previous `trail` candles ends the trade
+                  ema_pullback  a close through the 50-period average ends the trade
+    """
+    ch["dir"], ch["st"], ch["tg"] = tr["dir"], tr.get("stop"), tr.get("target")
+    rule, k = tr.get("rule_exit"), ch["k"]
+    if rule == "drive_trail":
+        n = tr.get("trail", 3)
+        long = tr["dir"] == 1
+        vals = [None if j < n else round(min(c[2] for c in k[j - n:j]) if long else max(c[1] for c in k[j - n:j]), 2) for j in range(len(k))]
+        ch["tr"] = {"label": f"Trail: a close {'below' if long else 'above'} this line ends the trade", "v": vals}
+    elif rule == "trend_fail" and "ema50" in ch.get("ov", {}):
+        ch["tr"] = {"label": "Exit line: a close through the 50-period average ends the trade", "v": ch["ov"].pop("ema50")}
+    return ch
+
+
 def _finish(tr, S, strat, i_end, closed, want):
     lines, box, i0 = tr.pop("_lines"), tr.pop("_box"), tr.pop("_i0")
     if want:
-        tr["_chart"] = build_chart(S, i0, i_end, strat.get("overlay", []), lines, box, tr["entry"], tr["exit"] if closed else None)
+        tr["_chart"] = decorate_chart(build_chart(S, i0, i_end, strat.get("overlay", []), lines, box, tr["entry"], tr["exit"] if closed else None), tr)
     return tr
 
 

@@ -1,5 +1,9 @@
+import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
+import type { Idea } from "../generated/live";
 import type { Swing } from "../generated/swing";
+import { ChartBlock } from "../components/ChartBlock";
+import { PlanList } from "../components/PlanList";
 import { dash, inr, price, shortDate, signedR } from "../lib/format";
 import { swingSize } from "../lib/sizing";
 import { Pill, pnlClass } from "../components/ui";
@@ -18,6 +22,23 @@ function Sizer({ entry, stopPct }: { entry: number; stopPct: number }) {
       <div class="field"><label>Shares at the reference close</label>
         <div style="padding:8px 0;font-weight:700">{size.qty} <span class="muted small">{size.qty ? `· ${inr(size.value)} invested · ${inr(size.risk)} at risk if stopped` : "· too small for this risk"}</span></div></div>
     </div>
+  );
+}
+
+const chartRef = (key: string) => ({ file: "swing.json", in: "charts", key });
+
+/** A table row with a button that opens its chart in a row underneath. `columns` is the number of columns including the button's. */
+function ChartRow({ app, name, k, columns, children }: { app: AppState; name: string; k: string; columns: number; children: ComponentChildren }) {
+  const [open, setOpen] = useState(false);
+  const has = !!(app.snap.swing as unknown as { charts?: Record<string, unknown> } | undefined)?.charts?.[k];
+  return (
+    <>
+      <tr>
+        {children}
+        <td>{has ? <button type="button" class="iconbtn" aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} the chart for ${name}`} onClick={() => setOpen(!open)}>{open ? "Hide" : "Chart"}</button> : <span class="muted small">none</span>}</td>
+      </tr>
+      {open && has && <tr class="chartrow"><td colSpan={columns}><ChartBlock app={app} chartRef={chartRef(k)} name={name} /></td></tr>}
+    </>
   );
 }
 
@@ -50,7 +71,8 @@ export function SwingScreen({ app }: { app: AppState }) {
                   <div><span class="l">Stop (about)</span><span class="v">{price(t.stop_hint)}</span></div>
                   <div><span class="l">20-day average</span><span class="v">{price(t.sma20)}</span></div>
                 </div>
-                <p class="small muted">Buy at the next open (skip it if it opens more than 8% above the broken level). The stop sits 8% below your actual entry. It moves to your entry after a close 8% up, and you leave at the next open after a close below the 20-day average.</p>
+                <ChartBlock app={app} chartRef={chartRef(`${t.symbol}:${sw.asof}`)} name={t.symbol} />
+                <PlanList plan={(sw.ideas as unknown as Idea[]).find((i) => i.name === t.symbol)?.plan} />
                 <Sizer entry={t.close} stopPct={t.risk_pct} />
               </article>
             ))}
@@ -62,14 +84,14 @@ export function SwingScreen({ app }: { app: AppState }) {
         <div class="card-head"><h2>Paper book</h2><span class="muted small">followed exactly as the research simulated it</span></div>
         {sw.positions.length ? (
           <div class="tablewrap"><table>
-            <thead><tr><th>Share</th><th>Status</th><th class="r">Entry</th><th class="r">Stop</th><th class="r">Last close</th><th class="r">Progress</th></tr></thead>
+            <thead><tr><th>Share</th><th>Status</th><th class="r">Entry</th><th class="r">Stop</th><th class="r">Last close</th><th class="r">Progress</th><th>Chart</th></tr></thead>
             <tbody>{sw.positions.map((p) => (
-              <tr key={p.id}>
+              <ChartRow key={p.id} app={app} name={p.symbol} k={p.id} columns={7}>
                 <td><b>{p.symbol}</b><div class="muted small">signal {shortDate(p.signal_date)}</div></td>
                 <td>{p.status === "PENDING" ? "Enters at the next open" : p.status === "EXIT_PENDING" ? "Leaves at the next open" : p.breakeven ? "Open, stop at entry" : "Open"}</td>
                 <td class="r">{price(p.entry)}</td><td class="r">{price(p.stop)}</td><td class="r">{price(p.last_close)}</td>
                 <td class={`r ${pnlClass(p.open_r)}`}>{signedR(p.open_r)}</td>
-              </tr>))}</tbody></table></div>
+              </ChartRow>))}</tbody></table></div>
         ) : <p class="muted">The book is empty.</p>}
         {sw.recently_closed.length > 0 && (
           <>
@@ -86,9 +108,11 @@ export function SwingScreen({ app }: { app: AppState }) {
         <div class="card-head"><h2>Near their pivot</h2><span class="muted small">leaders with a tight base, within {(sw.rules as Record<string, number>).near_pivot_pct}% below the break level</span></div>
         {sw.setups.length ? (
           <div class="tablewrap"><table>
-            <thead><tr><th>Share</th><th class="r">Close</th><th class="r">Break level</th><th class="r">To go</th><th class="r">Base depth</th><th class="r">Strength</th></tr></thead>
+            <thead><tr><th>Share</th><th class="r">Close</th><th class="r">Break level</th><th class="r">To go</th><th class="r">Base depth</th><th class="r">Strength</th><th>Chart</th></tr></thead>
             <tbody>{sw.setups.map((s) => (
-              <tr key={s.symbol}><td><b>{s.symbol}</b></td><td class="r">{price(s.close)}</td><td class="r">{price(s.pivot)}</td><td class="r">{s.pct_to_pivot}%</td><td class="r">{s.base_depth_pct}%</td><td class="r">{Math.round(s.rs)}</td></tr>))}</tbody></table></div>
+              <ChartRow key={s.symbol} app={app} name={s.symbol} k={`${s.symbol}:setup`} columns={7}>
+                <td><b>{s.symbol}</b></td><td class="r">{price(s.close)}</td><td class="r">{price(s.pivot)}</td><td class="r">{s.pct_to_pivot}%</td><td class="r">{s.base_depth_pct}%</td><td class="r">{Math.round(s.rs)}</td>
+              </ChartRow>))}</tbody></table></div>
         ) : <p class="muted">None at this close.</p>}
         <p class="muted small" style="margin-top:8px">A watch list, not ideas: nothing here has broken out yet.</p>
       </section>

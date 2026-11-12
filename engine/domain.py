@@ -181,6 +181,7 @@ class Position:
     open_r: Optional[float]
     quote_status: str                   # FRESH, STALE (the stop cannot be verified) or UNKNOWN
     contract: Optional[str] = None
+    chart: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -213,6 +214,8 @@ class Idea:
     contract: Optional[str] = None
     paper_position: bool = False
     quality: int = 0
+    plan: dict = field(default_factory=dict)         # in words: where to enter, the stop, the target, the trail, when to leave
+    chart: Optional[dict] = None                      # where its chart is: {"file", "key"} and optionally "in"
 
     def to_dict(self) -> dict:
         return asdict(self)

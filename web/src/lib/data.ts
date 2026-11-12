@@ -163,6 +163,24 @@ export async function loadLedger(source: Source, snap: Snapshot, nowMs: number, 
   return { ...snap, ledger, hashes, errors };
 }
 
+/** Where an idea's chart is kept: a file of charts by trade id, or (for swing) a map inside swing.json. */
+export interface ChartRef { file: string; key: string; in?: string }
+export type ChartFile = Record<string, unknown>;
+
+/** Fetches one chart file (a map from trade id to chart). */
+export async function fetchChartFile(source: Source, path: string, nowMs: number, fetchImpl: typeof fetch = fetch): Promise<ChartFile> {
+  const doc = await fetchJson<ChartFile>(bust(source.base + path, nowMs), fetchImpl);
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) throw new FetchError("is not valid data");
+  return doc;
+}
+
+/** The stored chart an idea points at, if it has been loaded. Never throws. */
+export function findChart(snap: Pick<Snapshot, "swing">, files: Record<string, ChartFile | null | undefined>, ref: ChartRef | null | undefined): unknown {
+  if (!ref) return undefined;
+  if (ref.file === "swing.json") return (snap.swing as unknown as Record<string, Record<string, unknown> | undefined> | undefined)?.[ref.in ?? "charts"]?.[ref.key];
+  return files[ref.file]?.[ref.key];
+}
+
 export function allLedgerTrades(snap: Snapshot): LedgerTrade[] {
   return Object.values(snap.ledger).flat().sort((a, b) => (a.entry_time < b.entry_time ? -1 : 1));
 }

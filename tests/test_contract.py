@@ -466,6 +466,18 @@ def test_the_dashboards_sample_data_follows_the_contract():
         path = os.path.join(demo, entry["path"])
         assert os.path.getsize(path) == entry["bytes"], entry["path"]
         assert manifest._sha256(path) == entry["sha256"], entry["path"]
+    # every actionable idea and every position in the sample has its chart, and every stored chart follows the chart contract
+    swing = load("swing.json")
+    live_doc = load("live.json")
+    for item in [i for i in live_doc["ideas"] if i["grade"] == "take"] + live_doc["positions"]:
+        assert item["chart"]["key"] in load(item["chart"]["file"]), f"no chart for {item['id']}"
+    for idea in swing["ideas"]:
+        assert idea["chart"]["key"] in swing["charts"], idea["id"]
+    for name in [f["path"] for f in doc["files"] if f["path"].startswith("chartlive_")]:
+        for ch in load(name).values():
+            contract.assert_valid("chart", ch)
+    for ch in swing["charts"].values():
+        contract.assert_valid("chart", ch)
     ledger_files = [f["path"] for f in doc["files"] if f["path"].startswith(("ledger-", "ledger_swing-"))]
     assert ledger_files
     for name in ledger_files:

@@ -18,7 +18,8 @@
     "gap_watch",
     "ideas",
     "evidence",
-    "note"
+    "note",
+    "charts"
   ],
   "properties": {
     "schema": {
@@ -341,6 +342,12 @@
     },
     "note": {
       "type": "string"
+    },
+    "charts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
     }
   }
 }

@@ -11,10 +11,14 @@ import shutil
 import tempfile
 from datetime import date, datetime
 
-from engine import clock, contract, journal, ledger, live, manifest
+from engine import charts, clock, contract, journal, ledger, live, manifest
+from engine.clock import at
 from engine.run import load_config
+from engine.strategies import sim
+from engine.strategies.indicators import Series
 from tests import test_swing as ts
 from tests.simulate import main as simulate
+from tests.test_strategies import DAY, flat_day
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "web", "public", "demo")
@@ -26,6 +30,44 @@ NOW = datetime.fromisoformat("2026-11-11T13:05:30+05:30")
 def write(name, obj):
     with open(os.path.join(OUT, name), "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+
+
+def nifty_session(base=25300.0, until="13:00"):
+    """Yesterday (quiet) and this morning on made-up Nifty prices: a tight opening range, a breakout above it, then a trend with pullbacks."""
+    import math
+    t0 = clock.ts(at(DAY, "09:15"))
+    n = (clock.ts(at(DAY, until)) - t0) // 300
+    prev, out = flat_day(DAY.replace(day=DAY.day - 1), price=base - 40, volume=1000), []
+    p = base
+    for i in range(n):
+        c = base + 18 * math.sin(i * 1.3) if i < 6 else base - 6 + 4 * (i - 6) if i < 10 else base + 34 + 7 * (i - 10) + 18 * math.sin((i - 10) / 3.0)
+        o = p
+        out.append([t0 + i * 300, o, max(o, c) + 4 + 3 * abs(math.sin(i)), min(o, c) - 4 - 3 * abs(math.cos(i)), c, 1000])
+        p = c
+    return prev + out
+
+
+def sample_charts(doc, feed, desk, S):
+    """Charts for the sample ideas, made by the engine's own functions. Returns {file name: {key: chart}}."""
+    files, trades = {}, {t["id"]: t for t in desk["trades"]}
+    for item in doc["ideas"] + doc["positions"]:
+        ref = item.get("chart")
+        if not ref or ref["file"] == "chartlive_options.json":
+            continue
+        sid = ref["file"][len("chartlive_"):-len(".json")]
+        src_path = os.path.join(ROOT, "tests", f"chartlive_{sid}.json")
+        if not os.path.exists(src_path):
+            continue
+        ch = json.load(open(src_path, encoding="utf-8")).get(ref["key"])
+        if ch and ref["key"] in trades:
+            files.setdefault(ref["file"], {})[ref["key"]] = sim.decorate_chart(ch, trades[ref["key"]])
+    options = {}
+    for t in feed["trades"]:
+        if t["status"] == "OPEN" and t["date"] == DAY.isoformat():
+            ch = charts.option_trade_chart(S, t)
+            if ch:
+                options[t["id"]] = ch
+    return files, options
 
 
 def swing_sample(folder):
@@ -67,11 +109,38 @@ def main():
         {"name": "Normal-volume baseline", "status": "complete", "detail": "205 of 205 shares"},
         {"name": "Results calendar", "status": "fresh", "detail": "2026-11-11 08:31"},
         {"name": "Broker", "status": "ok", "detail": "412 requests this run, history 2.5/s"}]}
+    S = Series(nifty_session())
+    a = S.starts[DAY]
+    hi, lo = max(S.h[a:a + 6]), min(S.l[a:a + 6])
+    nifty_trade = next(t for t in feed["trades"] if t["date"] == DAY.isoformat() and t["name"] == "Nifty 50")
+    j = 11                                                          # the 10:10 candle, which closes at 10:15
+    nifty_trade.update({                                            # the Nifty trade is still open in the sample, so it has a chart and a plan
+        "status": "OPEN", "dir": 1, "action": "BUY", "option_type": "CE", "entry_min": clock.ts(at(DAY, "10:17")), "entry_time": at(DAY, "10:17").isoformat(),
+        "range_high": round(hi, 2), "range_low": round(lo, 2), "range_mid": round((hi + lo) / 2, 2), "underlying_entry": round(S.c[j], 2),
+        "stop_underlying": round((hi + lo) / 2, 2), "target_underlying": round(hi + (hi - lo), 2), "phase": "initial", "remaining": nifty_trade["qty"],
+        "last_price": round(nifty_trade["entry_price"] * 1.12, 2), "open_pnl": round(nifty_trade["entry_price"] * 0.12 * nifty_trade["qty"], 2),
+        "last_update": stamp(40), "quote_status": "FRESH", "exit_time": None, "exit_price": None, "exit_reason": None, "exit_type": None,
+        "pnl": None, "pnl_pct": None, "r": None, "result": None})
+    read = {"id": "BANKNIFTY", "name": "Bank Nifty", "state": "Call side broke out", "score": 5, "side": "CE", "market_agrees": True, "grade": "take", "why_not": [],
+            "factors": [{"text": "Broke above the opening range", "ok": True}, {"text": "Above VWAP", "ok": True}], "spot": round(S.c[-1], 2),
+            "range_high": round(hi, 2), "range_low": round(lo, 2), "warnings": [],
+            "idea": {"contract": "BANKNIFTY 54000 CE", "symbol": "NSE_FO|777", "premium": 412.5, "stop": 309.4, "target": 567.2, "lot": 30, "risk_per_lot": 3093,
+                     "cost_ratio": 0.11, "spread_pct": 0.9, "oi": 48210, "quote_age_s": 14, "expiry": "2026-11-18"}}
+    desk["options_scan"] = {"asof": stamp(45), "items": [read], "heavy": []}
     doc = live.build(NOW, cfg, feed, desk, extra={"journal": {"enabled": True}})
     for idea, minutes in zip(doc["ideas"], (2, 4, 7, 11)):          # the sample's signals are from this morning; make a few recent
         idea["signaled_at"] = stamp(minutes * 60)
     contract.assert_valid("live", doc)
     write("live.json", doc)
+    strategy_files, options = sample_charts(doc, feed, desk, S)
+    scan_key = next(i["chart"]["key"] for i in doc["ideas"] if i["id"].startswith("scan:"))
+    options[scan_key] = charts.scan_chart(S, read, {"name": "Bank Nifty", "range": ["09:15", "09:45"]}, DAY)
+    for ch in options.values():
+        contract.assert_valid("chart", ch)
+    for name, content in {**strategy_files, "chartlive_options.json": options}.items():
+        for ch in content.values():
+            contract.assert_valid("chart", ch)
+        write(name, content)
 
     work = tempfile.mkdtemp()
     try:
