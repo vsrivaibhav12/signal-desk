@@ -1,4 +1,4 @@
-"""Price history for the strategy tools: Fyers first, Yahoo Finance as the fallback."""
+"""Price history for the strategy tools: Kotak Neo first (or Fyers), Yahoo Finance as the fallback."""
 import os
 import sys
 from datetime import timedelta
@@ -18,17 +18,17 @@ def series_from_yahoo(insts, markets, universe, cache_dir=None, log=print):
     return out, missing
 
 
-def series_from_fyers(fy, symbols, days, log=print):
-    """5-minute candles from Fyers, fetched in chunks (Fyers allows about 100 days per request)."""
+def series_from_broker(broker, symbols, days, log=print, label="the broker"):
+    """5-minute candles from Kotak Neo or Fyers. The broker class splits long ranges into the sizes its API allows."""
     end = clock.now().date()
     start = end - timedelta(days=days)
     out, missing = {}, []
     for n, sym in enumerate(symbols):
-        candles, hi = [], end
         try:
-            while hi > start:
+            candles, hi = [], end
+            while hi > start:                       # Fyers takes about 100 days a request; Kotak splits these further itself
                 lo = max(start, hi - timedelta(days=95))
-                candles += fy.history(sym, "5", lo, hi)
+                candles += broker.history(sym, "5", lo, hi)
                 hi = lo - timedelta(days=1)
             if len(candles) < 500:
                 raise RuntimeError("too little data")
@@ -40,10 +40,34 @@ def series_from_fyers(fy, symbols, days, log=print):
             out[sym] = Series(uniq)
         except Exception as e:
             missing.append(sym)
-            log(f"  Fyers gave nothing for {sym}: {e}")
+            log(f"  {label} gave nothing for {sym}: {e}")
         if (n + 1) % 25 == 0:
-            log(f"  loaded {n + 1} of {len(symbols)} price histories from Fyers")
+            log(f"  loaded {n + 1} of {len(symbols)} price histories from {label}")
     return out, missing
+
+
+def series_from_fyers(fy, symbols, days, log=print):
+    return series_from_broker(fy, symbols, days, log, "Fyers")
+
+
+def quiet_kotak(log=print):
+    """Kotak Neo needs only the consumer key, so there is nothing to log in to. Returns a ready Kotak or None."""
+    key = os.environ.get("KOTAK_CONSUMER_KEY", "").strip()
+    if not key:
+        return None
+    try:
+        from ..kotak import Kotak
+        import yaml
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, "config.yaml"), encoding="utf-8") as f:
+            bc = ((yaml.safe_load(f) or {}).get("broker") or {}).get("kotak") or {}
+        k = Kotak(key, environment=bc.get("environment", "prod"), index_tokens=bc.get("index_tokens"), log=log)
+        if k.probe():
+            return k
+        log("Kotak Neo did not accept the consumer key.")
+    except Exception as e:
+        log(f"Kotak Neo was not available ({e}).")
+    return None
 
 
 def quiet_fyers_login(root, log=print):

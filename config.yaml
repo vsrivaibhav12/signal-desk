@@ -4,6 +4,14 @@
 #  Lines starting with # are notes for you. The tool ignores them.
 # ─────────────────────────────────────────────────────────────
 
+# One ceiling shared by the options/cash rulebook and the eleven-strategy paper desk.
+# Each engine also has its own tighter sub-limits below.
+portfolio:
+  enabled: true
+  max_open_positions: 8
+  max_open_risk: 17500
+  max_daily_loss: 3500
+
 general:
   lots: 1                    # lots per options trade. With 1 lot the whole trade exits at the target.
                              # With 2 or more, half is booked at the target and the rest is trailed.
@@ -11,12 +19,33 @@ general:
   max_trades_per_day: 0      # per market. 0 = no limit, take every trade that triggers
   stop_after_losses: 0       # stop a market for the day after this many losing trades. 0 = never stop
   max_range_pct: 0.6         # skip the day if the opening range is wider than this % of price
+  portfolio:
+    enabled: true
+    max_open_positions: 5
+    max_open_risk: 15000       # total initial rupee risk allowed across open rulebook positions
+    max_daily_loss: 3000       # stop accepting new rulebook trades after this much realised loss
 
 # Early exit: leave a trade before the stop-loss when the pattern that triggered it breaks.
 early_exit:
   enabled: true
   closes_back_inside_range: 2   # exit after this many 5-minute closes back inside the opening range. 0 = off
   vwap_break: true              # exit on a 5-minute close on the wrong side of the day's average price line
+
+# Where prices come from. This tool only reads prices; it never places an order with either broker.
+#   kotak = Kotak Neo (the default). Needs one GitHub secret, KOTAK_CONSUMER_KEY, and no daily login.
+#           Kotak gives no price history for MCX commodities, so the commodity markets below are paused.
+#   fyers = Fyers (needs FYERS_APP_ID and FYERS_SECRET_KEY, and a login through Telegram each day).
+broker:
+  primary: kotak
+  kotak:
+    environment: prod
+    # If the Kotak check (Actions tab, "Kotak check") says an index name was not found, set it here, for example:
+    # index_tokens:
+    #   "NSE:NIFTY50-INDEX": "nse_cm|Nifty 50"
+    #   "NSE:NIFTYBANK-INDEX": "nse_cm|Nifty Bank"
+    #   "NSE:FINNIFTY-INDEX": "nse_cm|Nifty Fin Service"
+    #   "NSE:MIDCPNIFTY-INDEX": "nse_cm|NIFTY MIDCAP SELECT"
+    #   "BSE:SENSEX-INDEX": "bse_cm|SENSEX"
 
 # News: scans free headlines for Nifty 200 stocks and shows why a stock may be moving.
 news:
@@ -175,7 +204,7 @@ stocks:
   premium_stop_pct: 30       # used only when trade_as is option
   min_days_to_expiry: 5      # used only when trade_as is option (avoids expiry week)
 
-# Strategy desk: ten intraday strategies (six from the Flattrade article, two Bollinger, two EMA) that run
+# Strategy desk: eleven intraday strategies (six from the Flattrade article, two Bollinger, two EMA) that run
 # at the same time on the Nifty 200 shares and five indices. Each is tested on past prices and followed live.
 # Every trade is a paper trade: shares bought or sold intraday, or one lot of an index future. Nothing is ordered.
 strategies:
@@ -183,6 +212,13 @@ strategies:
   telegram: signals            # signals = a grouped message whenever any strategy triggers, plus a summary after the
                                # close (can be many a day). summary = the after-close summary only. off = none
   alert_for: all               # all, or a list to limit the alerts, e.g. [orb, vwap, gap]
+  alert_grade: take            # take = alert only on trades that pass all required checks.
+                               # Unknown required data fails closed to watch. all = alert on every risk-approved signal.
+  # decide:                    # what makes a signal a real trade (take) instead of something to watch
+  #   max_cost_ratio: 0.25     # round-trip costs may be at most this share of the amount risked
+  #   min_volume: 2.0          # shares need this many times their usual volume for the time of day
+  #   need_market: true        # Nifty must be on the same side of its VWAP as the trade
+  #   no_conflict: true        # no other strategy already on the opposite side of the same stock
   exit_by: "15:15"             # every trade is closed by this time
   risk_per_trade: 500          # rupees risked on one share trade (this sets the quantity)
   max_position_value: 40000    # never size a share position above this many rupees
@@ -191,6 +227,15 @@ strategies:
   #   stock_per_trade: 40
   #   stock_pct: 0.03
   #   stock_slippage_pct: 0.03
+  portfolio:
+    enabled: true
+    require_take_grade: true
+    max_open_positions: 5
+    max_open_positions_per_symbol: 1
+    max_total_open_risk: 2500  # strategy desk's own stricter risk ceiling
+    max_daily_loss: 1500       # strategy desk's own stricter realised-loss ceiling
+  execution:
+    entry_mode: next_open      # next_open = after the signal candle closes; signal_close is optimistic
   # params:                    # change one number of one strategy, for example:
   #   momentum: {stock: {rsi: 65}}
 

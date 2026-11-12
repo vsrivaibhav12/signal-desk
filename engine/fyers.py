@@ -10,11 +10,10 @@ DATA = "https://api-t1.fyers.in/data"
 AUTH_CODES = {-8, -15, -16, -17}
 
 
-class FyersError(Exception):
-    pass
+from .errors import AuthError, BrokerError  # noqa: E402  (shared with the Kotak adapter)
 
 
-class AuthError(FyersError):
+class FyersError(BrokerError):
     pass
 
 
@@ -91,7 +90,7 @@ class Fyers:
         try:
             self._get(f"{DATA}/quotes", {"symbols": "NSE:NIFTY50-INDEX"})
             return True
-        except FyersError:
+        except BrokerError:
             return False
 
     def history(self, symbol, resolution, day_from, day_to):

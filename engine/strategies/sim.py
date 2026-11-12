@@ -6,6 +6,7 @@ so a live trade follows exactly the rules that were tested. It never places an o
 import copy
 
 from .. import clock
+from . import decide, risk
 from .defs import EXITS, STRATEGIES, window_minutes
 from .indicators import hhmm_to_min, minute_of_day
 
@@ -21,6 +22,12 @@ DEFAULTS = {
     "costs": {"stock_per_trade": 40.0, "stock_pct": 0.03, "stock_slippage_pct": 0.03,
               "index_per_trade": 80.0, "index_pct": 0.02, "index_slippage_pct": 0.01},
     "params": {},                       # per-strategy overrides, e.g. {"momentum": {"stock": {"rsi": 65}}}
+    "portfolio": {
+        "enabled": True, "require_take_grade": True, "max_open_positions": 5,
+        "max_open_positions_per_symbol": 1, "max_total_open_risk": 2500.0,
+        "max_daily_loss": 1500.0,
+    },
+    "execution": {"entry_mode": "next_open"},
 }
 
 
@@ -31,6 +38,7 @@ def settings(cfg):
             out[k].update(v)
         else:
             out[k] = v
+    out["decide"] = decide.settings(cfg)
     return out
 
 
@@ -50,9 +58,20 @@ def _iso(t):
     return clock.from_ts(t).isoformat(timespec="seconds")
 
 
-def _open_trade(strat, inst, S, i, sig, cfg):
-    d, c = sig["dir"], S.c[i]
+def _open_trade(strat, inst, S, i, sig, cfg, entry_i=None):
+    """Create a trade from a completed signal candle and an execution candle.
+
+    i is always the signal candle. entry_i may point to the next candle for a
+    more conservative fill model; chart identity remains tied to the signal.
+    """
+    entry_i = i if entry_i is None else entry_i
+    d, c = sig["dir"], (S.c[i] if entry_i == i else S.o[entry_i])
+    p_trail = params(cfg, strat, inst["kind"]).get("trail", 3)
     stop = sig["stop"]
+    # If the market gaps through the signal's protective stop before the modeled
+    # execution, the setup is no longer valid. Do not widen the stop to force a fill.
+    if d * (c - stop) <= 0:
+        return None
     floor = c * cfg["min_risk_pct"][inst["kind"]] / 100
     if d * (c - stop) < floor:
         stop = c - d * floor
@@ -65,16 +84,20 @@ def _open_trade(strat, inst, S, i, sig, cfg):
     if target is not None and d * (target - c) <= 0:
         return None
     if inst["kind"] == "index":
-        qty = inst["lot"]
+        qty = int(inst["lot"])
     else:
-        qty = max(1, min(int(cfg["risk_per_trade"] // unit), int(cfg["max_position_value"] // c) or 1))
+        qty = risk.quantity_for_risk(c, unit, cfg["risk_per_trade"], cfg["max_position_value"])
+        if qty < 1:
+            return None
+    entry_ts = S.t[i] + 300 if entry_i == i else S.t[entry_i]
     return {
         "id": f"{strat['id']}|{inst['name']}|{S.t[i]}", "strategy": strat["id"], "symbol": inst["symbol"],
         "name": inst["name"], "kind": inst["kind"], "dir": d, "date": S.day[i].isoformat(),
-        "entry_t": _iso(S.t[i] + 300), "entry_ts": S.t[i] + 300, "entry": round(c, 2),
+        "signal_t": _iso(S.t[i] + 300), "signal_ts": S.t[i] + 300,
+        "entry_t": _iso(entry_ts), "entry_ts": entry_ts, "entry": round(c, 2),
         "stop": round(stop, 2), "target": round(target, 2) if target is not None else None,
         "qty": qty, "risk": round(qty * unit, 2), "why": sig["why"], "regime": sig["regime"],
-        "rule_exit": sig.get("exit"), "status": "OPEN", "last": round(c, 2), "open_pnl": 0.0,
+        "rule_exit": sig.get("exit"), "trail": p_trail, "status": "OPEN", "last": round(c, 2), "open_pnl": 0.0,
         "exit_by": cfg["exit_by"],
         "_lines": sig.get("lines") or [], "_box": sig.get("box"), "_i0": i,      # used for the chart, then removed
     }
@@ -145,13 +168,14 @@ def _finish(tr, S, strat, i_end, closed, want):
     return tr
 
 
-def simulate(S, inst, strat, cfg, days=None, live_day=None, chart_from=None):
+def simulate(S, inst, strat, cfg, days=None, live_day=None, chart_from=None, market=None):
     """All trades one strategy would have taken in one symbol.
 
     days     the dates to look at (None = every date in the data)
     live_day a date allowed to end the data with a trade still open (live use). Any other
              day's open trade is closed at that day's last candle.
     chart_from  from this date on, each trade also gets a "_chart" (candles and levels to draw it)
+    market  the Nifty series, used for the "does Nifty agree" check that grades each trade
     """
     kind = inst["kind"]
     p = params(cfg, strat, kind)
@@ -176,9 +200,29 @@ def simulate(S, inst, strat, cfg, days=None, live_day=None, chart_from=None):
             if tr is None and w0 <= end <= w1 and end < exit_min and i >= cfg["min_bars"] and (not cap or taken < cap):
                 sig = strat["scan"](S, i, p)
                 if sig:
-                    tr = _open_trade(strat, inst, S, i, sig, cfg)
+                    mode = (cfg.get("execution") or {}).get("entry_mode", "next_open")
+                    provisional = False
+                    if mode == "next_open":
+                        # Signal is known only after candle i closes; the fill is the next candle's open.
+                        if i >= b:
+                            if day != live_day:
+                                continue
+                            # Live, and that candle has not been drawn yet. Report the signal now instead of a
+                            # candle late, filled at this candle's close (the best guess of the next open). The next
+                            # pass replays the day and replaces it with the real open; the trade keeps its id.
+                            entry_i, provisional = i, True
+                        else:
+                            entry_i = i + 1
+                    elif mode == "signal_close":
+                        entry_i = i
+                    else:
+                        raise ValueError(f"Unsupported execution.entry_mode: {mode}")
+                    tr = _open_trade(strat, inst, S, i, sig, cfg, entry_i=entry_i)
                     if tr:
                         taken += 1
+                        tr["fill_model"] = "provisional" if provisional else mode
+                        tr["dec"] = decide.assess(S, i, tr, trade_cost(tr["kind"], tr["qty"], tr["entry"], tr["entry"], cfg), market,
+                                                  cfg["decide"])
         if tr is not None:
             if day == live_day:
                 out.append(_finish(tr, S, strat, b, False, want))
@@ -199,18 +243,29 @@ def build_instruments(markets, universe, lots):
     return out
 
 
+def market_series(series, insts):
+    """The Nifty 50 series, if it is among the loaded data."""
+    for sym, inst in insts.items():
+        if inst["name"] == "Nifty 50" and sym in series:
+            series[sym].symbol = sym
+            return series[sym]
+    return None
+
+
 def run_all(series, insts, cfg, days=None, live_day=None, only=None, log=print, chart_from=None):
     """series: {symbol: Series}. Returns {strategy id: [trades]}."""
     res = {s["id"]: [] for s in STRATEGIES if not only or s["id"] in only}
+    mkt = market_series(series, insts)
     for n, (sym, S) in enumerate(series.items()):
         inst = insts.get(sym)
         if not inst:
             continue
         for strat in STRATEGIES:
             if strat["id"] in res:
-                res[strat["id"]] += simulate(S, inst, strat, cfg, days, live_day, chart_from)
+                res[strat["id"]] += simulate(S, inst, strat, cfg, days, live_day, chart_from, mkt)
         if (n + 1) % 50 == 0:
             log(f"    scanned {n + 1} of {len(series)} symbols")
+    decide.finalize([t for v in res.values() for t in v], cfg["decide"])
     for v in res.values():
         v.sort(key=lambda t: t["entry_ts"])
     return res

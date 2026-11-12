@@ -1,0 +1,20 @@
+Signal Desk 2.1.1
+Build date: 2026-11-12
+
+This release package contains the application source, the rebuilt static dashboard,
+GitHub Actions workflows, configuration, offline tests, and setup/release documentation.
+
+Start with SETUP_GUIDE.md. Review config.yaml and RELEASE_NOTES.md before enabling
+scheduled workflows. Configure the required Fyers and Telegram values as GitHub
+Actions repository secrets; never put credentials in source files.
+
+The software is for research and paper trading. It does not place broker orders.
+Fyers login, Telegram delivery, GitHub Pages publication, and live market data must
+be verified in the installing user's own accounts.
+
+Offline verification performed for this release:
+- Python source compilation
+- strategy, simulator/backtest, publishing and trade-lifecycle regression suites
+- rulebook-engine integration replay
+- YAML parsing for application configuration and workflows
+- dashboard JavaScript syntax validation

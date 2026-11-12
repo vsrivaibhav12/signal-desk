@@ -249,6 +249,41 @@ def scan_orb(S, i, p):
     return None
 
 
+# ── Opening drive: get in early on a thrust, instead of waiting for the breakout at the high ──
+def scan_drive(S, i, p):
+    day = S.day[i]
+    a = S.starts[day]
+    if i - a > 2 or S.slot[a] != 0:
+        return None
+    o, c, h, l = S.day_open[day], S.c[i], S.h[i], S.l[i]
+    for d in (1, -1):
+        move = d * (c - o) / o * 100
+        if move < p["min_move"]:
+            continue
+        if S.has_volume:
+            cr = S.cumratio[i]
+            if cr is None or cr < p["min_vol"]:
+                continue
+            vtxt = f"Volume so far today is {cr:.1f}x what it normally is by this time, so this is real buying or selling, not a drift."
+        else:
+            vtxt = "This is an index, which has no volume, so the volume check does not apply."
+        rng = h - l
+        pos = ((c - l) if d == 1 else (h - c)) / rng if rng > 0 else 0
+        if pos < p["close_pos"] or d * (c - S.vwap[i]) <= 0:
+            continue
+        prior = S.c[a:i]
+        if prior and d * (c - (max(prior) if d == 1 else min(prior))) < 0:
+            continue                                   # not still pushing to a new extreme
+        extreme = min(S.l[a:i + 1]) if d == 1 else max(S.h[a:i + 1])
+        stop = c - d * abs(c - extreme) * p["stop_frac"]
+        why = [f"The stock is {move:.1f}% {'up' if d == 1 else 'down'} from the open after only {(i - a + 1) * 5} minutes: a thrust.", vtxt,
+               f"The candle closed in the {'top' if d == 1 else 'bottom'} {int((1 - p['close_pos']) * 100)}% of its range and {_word(d)} VWAP ({n2(S.vwap[i])}), so buyers/sellers kept control to the close.",
+               f"Entering now, near the start of the move, instead of waiting for a breakout that would come at the high. Stop is {n2(stop)}; the trade is held while price keeps making progress and ends when a candle closes through the low of the last {p['trail']} candles."]
+        return _sig(d, stop, why, f"Opening thrust of {move:.1f}% on {S.cumratio[i]:.1f}x volume" if S.has_volume else f"Opening thrust of {move:.1f}%",
+                    exit="drive_trail", lines=[("Today's open", o), ("VWAP", S.vwap[i])])
+    return None
+
+
 # ── 7. Bollinger bounce ──────────────────────────────────────
 def scan_bb_bounce(S, i, p):
     if i < 120 or S.bb_lo[i] is None or S.adx[i] is None or S.atr[i] is None:
@@ -369,12 +404,35 @@ def exit_trend_fail(S, i, tr):
     return None
 
 
-EXITS = {"momentum_fade": exit_momentum_fade, "ema_cross_back": exit_ema_cross_back, "trend_fail": exit_trend_fail}
+def exit_drive_trail(S, i, tr):
+    n = tr.get("trail", 3)
+    if n <= 0 or i - n < 0:
+        return None
+    if tr["dir"] == 1 and S.c[i] < min(S.l[i - n:i]):
+        return f"Price closed below the low of the last {n} candles, so the thrust is over"
+    if tr["dir"] == -1 and S.c[i] > max(S.h[i - n:i]):
+        return f"Price closed above the high of the last {n} candles, so the thrust is over"
+    return None
+
+
+EXITS = {"momentum_fade": exit_momentum_fade, "ema_cross_back": exit_ema_cross_back, "trend_fail": exit_trend_fail,
+         "drive_trail": exit_drive_trail}
 
 
 # ── the catalogue ────────────────────────────────────────────
 # Windows are the times a signal candle may CLOSE in. stock/index hold the numbers for each kind of market.
 STRATEGIES = [
+    {"id": "drive", "name": "Opening drive", "source": "Lesson from a missed entry", "scan": scan_drive,
+     "window": ["09:20", "09:30"],
+     "best_for": "A stock that opens and runs hard in the first 5 to 15 minutes on heavy volume, when waiting for a breakout means buying the high.",
+     "risk": "A thrust that fades after the open, or a gap-and-fail. The stop is wide because it sits at the base of the move.",
+     "rules": ["Only in the first 15 minutes (candles closing 9:20 to 9:30).",
+               "The stock must already be up (or down) 1.5% or more from the open, on at least 3x its usual volume by this time.",
+               "The candle must close in the top 30% of its range (bottom 30% for a sell), on the right side of VWAP, still making a new high (or low) for the day.",
+               "Enter at that candle's close, near the start of the move. Stop at the base of the move (the low of the day so far for a buy).",
+               "No fixed target: the trade ends when a candle closes below the low of the last 3 candles (above the high for a sell), or at 3:15 pm."],
+     "stock": {"min_move": 1.5, "min_vol": 3.0, "close_pos": 0.7, "stop_frac": 1.0, "trail": 3},
+     "index": {"min_move": 0.5, "min_vol": 0.0, "close_pos": 0.7, "stop_frac": 1.0, "trail": 3}},
     {"id": "momentum", "name": "Momentum", "source": "Flattrade article", "scan": scan_momentum,
      "window": ["09:35", "10:30"],
      "best_for": "The first hour of the session, when news and volume drive fast moves.",
@@ -480,7 +538,7 @@ STRATEGIES = [
 ]
 
 # Indicator lines drawn on each strategy's trade chart (names match Series attributes)
-OVERLAYS = {"momentum": ["vwap"], "reversal": ["vwap"], "vwap": ["vwap"], "gap": ["vwap"],
+OVERLAYS = {"drive": ["vwap"], "momentum": ["vwap"], "reversal": ["vwap"], "vwap": ["vwap"], "gap": ["vwap"],
             "bb_bounce": ["bb_up", "bb_mid", "bb_lo"], "bb_squeeze": ["bb_up", "bb_mid", "bb_lo"],
             "ema_cross": ["ema9", "ema21"], "ema_pullback": ["ema20", "ema50"]}
 for _s in STRATEGIES:

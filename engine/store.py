@@ -63,11 +63,15 @@ class Store:
             return None
 
     def publish(self, own=None, own_prefix=()):
-        """Push the data folder to the 'data' branch. One commit per day keeps it small.
+        """Publish the data folder to the 'data' branch, keeping the branch small and never clobbering anyone.
 
-        own: the files this program is allowed to overwrite (own_prefix: and any file starting with these). Every other file is first
-        refreshed from what is already online, so one program can never wipe out another's
-        work (for example a backtest overwriting the live trade log).
+        History stays small: all of one day's publishes are folded into a single commit for that day, so the branch
+        gains one commit a day however often this runs (about every two minutes), instead of hundreds.
+
+        Nothing is overwritten blindly. Files owned by another workflow are first refreshed from the branch, and the
+        replacement is pushed with a lease: it only goes through if the branch is still exactly what was just read. If
+        another job pushed in the meantime, the branch is read again and the commit rebuilt, up to three times. A plain
+        force push is never used.
         """
         if not os.path.isdir(self._path(".git")):
             return
@@ -75,24 +79,42 @@ class Store:
         def git(*args, raw=False):
             return subprocess.run(["git", *args], cwd=self.folder, capture_output=True, text=not raw)
 
-        if own is not None and git("fetch", "--quiet", "--depth", "1", "origin", "data").returncode == 0:
+        def refresh_unowned():
+            """Reads the branch and copies in the files other workflows own. Returns its tip, or None if unreadable."""
+            if git("fetch", "--quiet", "origin", "data").returncode != 0:
+                return None
+            tip = git("rev-parse", "FETCH_HEAD").stdout.strip()
             names = git("ls-tree", "-r", "--name-only", "FETCH_HEAD").stdout.split("\n")
+            owned = set(own or ())
             for name in filter(None, names):
-                if name in own or name.startswith(tuple(own_prefix)) or "/" in name:
+                if name in owned or name.startswith(tuple(own_prefix)) or "/" in name:
                     continue
                 blob = git("show", f"FETCH_HEAD:{name}", raw=True)
                 if blob.returncode == 0:
                     with open(self._path(name), "wb") as f:
                         f.write(blob.stdout)
-        git("add", "-A")
-        if not git("status", "--porcelain").stdout.strip():
-            return
+            return tip
+
         today = "data " + clock.now().date().isoformat()
-        last = git("log", "-1", "--pretty=%s").stdout.strip()
-        if last == today:
-            git("commit", "--amend", "-m", today)
-        else:
-            git("commit", "-m", today)
-        res = git("push", "--force", "origin", "HEAD:data")
-        if res.returncode != 0:
-            print("Could not publish data:", res.stderr.strip()[-200:])
+        for attempt in range(3):
+            tip = refresh_unowned() if own is not None or attempt else None
+            git("add", "-A")
+            dirty = bool(git("status", "--porcelain").stdout.strip())
+            if not dirty and attempt == 0:
+                return
+            if dirty:
+                have_head = git("rev-parse", "--verify", "HEAD").returncode == 0
+                same_day = have_head and git("log", "-1", "--pretty=%s").stdout.strip() == today
+                made = git("commit", "--amend", "-m", today) if same_day else git("commit", "-m", today)
+                if made.returncode != 0:
+                    print("Could not create data commit:", made.stderr.strip()[-200:])
+                    return
+            if tip:
+                push = git("push", f"--force-with-lease=data:{tip}", "origin", "HEAD:data")
+            else:
+                push = git("push", "origin", "HEAD:data")          # the branch does not exist yet, or could not be read
+            if push.returncode == 0:
+                return
+            if attempt == 2:
+                print("Could not publish data (the branch kept changing underneath):", push.stderr.strip()[-300:])
+                return

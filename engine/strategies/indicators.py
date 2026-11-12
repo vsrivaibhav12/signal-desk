@@ -178,6 +178,12 @@ class Series:
         self._relative_volume(vol_days)
         self._gap_info()
 
+    def index_of(self, t):
+        """Position of the candle that started at time t, or None."""
+        if not hasattr(self, "_tmap"):
+            self._tmap = {x: k for k, x in enumerate(self.t)}
+        return self._tmap.get(t)
+
     def _vwap(self):
         """Average price of the day so far. Indices carry no volume, so they get a plain average."""
         self.vwap = [None] * self.n
@@ -194,25 +200,35 @@ class Series:
     def _relative_volume(self, days_back):
         """Each bar's volume compared with the same time of day over the previous sessions."""
         self.rvol = [None] * self.n
+        self.cumratio = [None] * self.n       # volume so far today against the same point on earlier days
         self.first15_ratio = {}
         if not self.has_volume:
             return
         by_slot = {}                          # slot -> list of volumes from earlier days
+        cum_slot = {}                         # slot -> list of cumulative volumes from earlier days
         first15 = []
         for d in self.days:
             a, b = self.starts[d], self.ends[d]
+            run = 0
             for i in range(a, b + 1):
+                run += self.v[i]
                 hist = by_slot.get(self.slot[i], [])[-days_back:]
                 if len(hist) >= 3:
                     avg = sum(hist) / len(hist)
                     self.rvol[i] = self.v[i] / avg if avg > 0 else None
+                ch = cum_slot.get(self.slot[i], [])[-days_back:]
+                if len(ch) >= 3 and sum(ch) > 0:
+                    self.cumratio[i] = run / (sum(ch) / len(ch))
             f15 = sum(self.v[i] for i in range(a, b + 1) if self.slot[i] < 3)
             past = first15[-days_back:]
             if len(past) >= 3 and sum(past) > 0:
                 self.first15_ratio[d] = f15 / (sum(past) / len(past))
             first15.append(f15)
+            run = 0
             for i in range(a, b + 1):
+                run += self.v[i]
                 by_slot.setdefault(self.slot[i], []).append(self.v[i])
+                cum_slot.setdefault(self.slot[i], []).append(run)
 
     def _gap_info(self):
         self.prev_close = {}

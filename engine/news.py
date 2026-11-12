@@ -112,7 +112,14 @@ class NewsDesk:
                 continue
             if not title or now - when > timedelta(hours=max_age_hours) or when > now + timedelta(minutes=10):
                 continue
-            out.append({"title": title[:180], "source": source or "News", "link": (it.findtext("link") or "").strip(),
+            link = (it.findtext("link") or "").strip()
+            try:
+                parsed = urllib.parse.urlparse(link)
+                if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                    link = ""
+            except Exception:
+                link = ""
+            out.append({"title": title[:180], "source": source or "News", "link": link,
                         "t": when.isoformat(timespec="minutes")})
         return out
 

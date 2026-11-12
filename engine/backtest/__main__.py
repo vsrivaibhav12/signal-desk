@@ -1,6 +1,7 @@
 """Run a backtest.
 
     python -m engine.backtest --source yahoo            quick: last ~60 days, 5-minute data, no login
+    python -m engine.backtest --source kotak --days 180  longer: 1-minute data from Kotak Neo (needs KOTAK_CONSUMER_KEY)
     python -m engine.backtest --source fyers --days 180  longer: 1-minute data from your Fyers account
 """
 import argparse
@@ -70,7 +71,7 @@ def fyers_login(log):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=["yahoo", "fyers"], default="yahoo")
+    ap.add_argument("--source", choices=["yahoo", "kotak", "fyers"], default="yahoo")
     ap.add_argument("--days", type=int, default=180)
     ap.add_argument("--out", default=os.path.join(ROOT, "_data", "backtest.json"))
     ap.add_argument("--cache", default=None)
@@ -93,6 +94,14 @@ def main():
         bars, n_stocks, missing = load_yahoo(markets, uni, cache_dir=a.cache, log=log)
         source = "Yahoo Finance, 5-minute candles"
         fine = False
+    elif a.source == "kotak":
+        from ..strategies.data import quiet_kotak
+        kt = quiet_kotak(log)
+        if kt is None:
+            sys.exit("Kotak Neo prices are not available. Check that the KOTAK_CONSUMER_KEY secret is set and correct.")
+        bars, n_stocks, missing = load_fyers(kt, markets, uni, a.days, log=log)
+        source = "Kotak Neo, 1-minute candles"
+        fine = True
     else:
         fy, tg = fyers_login(log)
         bars, n_stocks, missing = load_fyers(fy, markets, uni, a.days, log=log)
@@ -100,7 +109,7 @@ def main():
         fine = True
     nifty = cfg["markets"][0]["spot"]
     days = [d for d in bars[nifty].days]
-    if a.source == "fyers":
+    if a.source in ("fyers", "kotak"):
         cut = clock.now().date().fromordinal(clock.now().date().toordinal() - a.days)
         days = [d for d in days if d >= cut]
     # the first days only warm up the 10-day volume average used by the stock scan

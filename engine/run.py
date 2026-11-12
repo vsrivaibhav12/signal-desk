@@ -7,6 +7,7 @@ heartbeat goes stale (the working run died), the next run takes over and
 carries on from the saved state. That is what keeps the tool awake.
 """
 import os
+import secrets
 import re
 import sys
 import time
@@ -19,10 +20,11 @@ import yaml
 from . import clock
 from .clock import at, clock_text
 from .core import Engine
-from .fyers import AuthError, Fyers
+from . import brokers
+from .errors import AuthError
+from .fyers import Fyers
 from .store import Store
 from .strategies.desk import StrategyDesk
-from .symbols import Master
 from .telegram import Telegram
 
 RUN_BUDGET = 5 * 3600 + 5 * 60   # GitHub stops a run at 6 hours, so hand over before that
@@ -98,16 +100,25 @@ class Session:
     def __init__(self):
         self.cfg = load_config()
         env = os.environ
-        need = ["FYERS_APP_ID", "FYERS_SECRET_KEY", "TELEGRAM_BOT_TOKEN"]
+        self.kind = brokers.primary(self.cfg)
+        self.label = brokers.label(self.kind)
+        need = brokers.required_secrets(self.kind) + ["TELEGRAM_BOT_TOKEN"]
         missing = [k for k in need if not env.get(k)]
         if missing:
             sys.exit("Setup is not finished. These secrets are missing in GitHub: " + ", ".join(missing))
+        self.notes = brokers.adjust_config(self.cfg, self.kind)
         self.pin = env.get("FYERS_PIN", "").strip()
         self.tg = Telegram(env["TELEGRAM_BOT_TOKEN"])
-        self.store = Store(os.path.join(ROOT, "_data"), env["FYERS_SECRET_KEY"] + env["TELEGRAM_BOT_TOKEN"])
+        self.store = Store(os.path.join(ROOT, "_data"), brokers.secret_material(env) + env["TELEGRAM_BOT_TOKEN"])
         self.secure = self.store.load_secure()
-        self.tg.chat_id = self.secure.get("chat_id")
-        self.fy = Fyers(env["FYERS_APP_ID"], env["FYERS_SECRET_KEY"])
+        configured_chat = env.get("TELEGRAM_CHAT_ID", "").strip()
+        if configured_chat:
+            try:
+                configured_chat = int(configured_chat)
+            except ValueError:
+                sys.exit("TELEGRAM_CHAT_ID must be a numeric Telegram chat ID.")
+        self.tg.chat_id = configured_chat or self.secure.get("chat_id")
+        self.fy, self.master = brokers.build(self.cfg, env)
         self.url = dashboard_url(self.cfg)
         self.started = time.time()
         self.engine = None
@@ -133,11 +144,16 @@ class Session:
     def claim_owner(self, until):
         if self.tg.chat_id:
             return True
-        print(f"Waiting for you to open your Telegram bot (@{self.tg.me()}) and tap Start ...")
+        pairing = os.environ.get("TELEGRAM_PAIRING_CODE", "").strip()
+        if not pairing:
+            print("No saved Telegram chat. Set TELEGRAM_PAIRING_CODE (a long random secret) or TELEGRAM_CHAT_ID; refusing an unpaired /start.")
+            return False
+        print(f"Waiting for a paired /start {pairing[:2]}… on your Telegram bot (@{self.tg.me()}) ...")
+        expected = "/start " + pairing
         while clock.now() < until:
             self.beat()
             for chat, text, _ in self.tg.poll(wait=20):
-                if text.lower().startswith("/start"):
+                if secrets.compare_digest(text.strip().encode("utf-8"), expected.encode("utf-8")):
                     self.tg.chat_id = self.secure["chat_id"] = chat
                     self.store.save_secure(self.secure)
                     self.tg.send("👋 Connected. I will send your trade alerts here.\n"
@@ -145,8 +161,24 @@ class Session:
                     return True
         return False
 
+    # ── Kotak Neo: no login, only a check that the consumer key works ──
+    def check_prices(self, until):
+        for attempt in range(4):
+            if self.fy.probe():
+                return True
+            if clock.now() >= until:
+                break
+            self.beat()
+            time.sleep(15)
+        self.tg.send("⚠️ <b>Kotak Neo is not giving me prices.</b>\nEither the Consumer Key (the KOTAK_CONSUMER_KEY secret) "
+                     "was not accepted, or Kotak is down. Check the key in the Kotak Neo app: More, Trade API. "
+                     "I will try again at the next check.")
+        return False
+
     # ── Fyers login ──────────────────────────────────────────
     def login(self, until):
+        if self.kind == "kotak":
+            return self.check_prices(until)
         today = clock.now().date().isoformat()
         self.fy.token = self.secure.get("access_token")
         if self.fy.token and self.fy.probe():
@@ -262,18 +294,22 @@ class Session:
             self.beat(running=False, force=True)
             sys.exit(f"Nobody tapped Start on the Telegram bot @{self.tg.me()}. Open the bot, tap Start, and run again.")
         if not self.login(until):
-            self.tg.send("I could not log in to Fyers in time, so I am stopping for this session.")
+            self.tg.send(f"I could not get prices from {self.label}, so I am stopping for this session.")
             self.beat(running=False, force=True)
-            sys.exit("Fyers login was not completed.")
+            sys.exit(f"{self.label} prices were not available.")
         feed = self.feed
-        self.engine = Engine(self.cfg, self.fy, Master(), self.tg.send, feed)
+        self.engine = Engine(
+            self.cfg, self.fy, self.master, self.tg.send, feed,
+            portfolio_provider=lambda: getattr(getattr(self, "desk", None), "state", {}).get("trades", []),
+        )
         self.desk = StrategyDesk(self.cfg, self.fy, self.tg.send, os.path.join(ROOT, "_data"), self.engine.universe,
                                  [m for m in self.cfg["markets"] if m.get("kind") == "index"],
-                                 heartbeat=self.beat, options_trades=lambda: self.feed["trades"])
+                                 heartbeat=self.beat, options_trades=lambda: self.feed["trades"],
+                                 flush=lambda: (self.desk.save(), setattr(self.desk, "dirty", False), self.beat(force=True)))
         if not sess:
             nxt = next((s for s in sessions(self.cfg, now.date()) if s[1] > now), None)
             when = f"today at {clock_text(nxt[1])}" if nxt and now.weekday() < 5 else "on the next trading day"
-            self.tg.send(f"✅ Setup check passed. Fyers and Telegram are both working.\n"
+            self.tg.send(f"✅ Setup check passed. {self.label} and Telegram are both working.\n"
                          f"Markets are outside my working hours right now. I will start by myself {when}.\n"
                          f"Dashboard: {self.url}")
             feed["status"]["phase"] = "resting"
@@ -289,7 +325,7 @@ class Session:
             self.tg.send(f"🔄 I had stopped and have restarted myself. Carrying on with the {label} markets "
                          f"from where I left off. Open trades are being followed again.")
         else:
-            self.tg.send(f"🟢 Watching the {label} markets until {clock_text(end)}.")
+            self.tg.send(f"🟢 Watching the {label} markets until {clock_text(end)}." + ("\n" + " ".join(self.notes) if self.notes else ""))
         feed["status"].update({"session": f"{today}-{name}", "handover": False, "phase": "watching"})
         auth_fails, last_error = 0, None
         while True:
@@ -307,12 +343,12 @@ class Session:
                 auth_fails = 0
             except AuthError as e:
                 auth_fails += 1
-                print("Fyers login problem:", e)
+                print(f"{self.label} problem:", e)
                 if auth_fails <= 2:
                     if not self.login(end):
                         break
                 elif auth_fails == 3:
-                    self.tg.send("⚠️ Fyers keeps turning down my price requests even after logging in. "
+                    self.tg.send(f"⚠️ {self.label} keeps turning down my price requests. "
                                  "I will keep trying every minute.")
             except Exception as e:                 # one bad minute must never stop the engine
                 traceback.print_exc()

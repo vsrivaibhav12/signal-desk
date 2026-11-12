@@ -6,6 +6,7 @@ outside the range, then follow the trade to its stop, target or time exit.
 Every trade it suggests is written to the log and scored. It never places orders.
 """
 import os
+import html
 import traceback
 from datetime import timedelta
 
@@ -46,12 +47,13 @@ def score(trades):
 
 
 class Engine:
-    def __init__(self, cfg, broker, master, notify, feed, news=None):
+    def __init__(self, cfg, broker, master, notify, feed, news=None, portfolio_provider=None):
         self.cfg = cfg
         self.broker = broker
         self.master = master
         self.notify = notify
         self.feed = feed
+        self.portfolio_provider = portfolio_provider or (lambda: [])
         self.dirty = False
         self._cache = {}
         here = os.path.dirname(__file__)
@@ -157,7 +159,8 @@ class Engine:
             for i in sorted(self.day["news"], key=lambda x: x["tag"] != "Results"):
                 if i["symbol"] not in seen and len(lines) < 10:
                     seen.add(i["symbol"])
-                    lines.append(f"• <b>{i['name']}</b> ({i['tag']}): {i['title']} [{i['source']}]")
+                    lines.append(f"• <b>{html.escape(i['name'])}</b> ({html.escape(i['tag'])}): "
+                                 f"{html.escape(i['title'])} [{html.escape(i['source'])}]")
             self.notify("📰 <b>Stocks in the news today</b>\n" + "\n".join(lines) +
                         "\n\nThese are only headlines. A stock still has to pass the scan and the rules to become a trade.")
             self._log(now, f"News scan: {len(seen)} Nifty 200 stocks are in today's headlines.")
@@ -177,9 +180,28 @@ class Engine:
                          "markets": {}, "stocks": stocks, "log": [], "news": [],
                          "newsdesk": {"errors": 0, "last": 0}}
         # Anything still open from an earlier day was missed while the tool was offline.
+        # An option cannot be defensibly marked closed at its last cached premium: its
+        # quote may be stale and the option market may have moved materially. Keep the
+        # record, but exclude it from realised P&L and expose it as unresolved.
         for t in stale:
-            self._close(t, None, None, now, t.get("last_price", t["entry_price"]),
-                        "Closed at the last known price because the tool was offline at exit time")
+            if t.get("kind") == "option":
+                t.update({
+                    "status": "UNRESOLVED",
+                    "exit_time": now.isoformat(timespec="seconds"),
+                    "exit_reason": ("No verified option exit price was available before the tool rolled to a new day. "
+                                    "The last premium is retained for reference only; P&L is unresolved."),
+                    "open_pnl": None,
+                    "pnl": None,
+                    "result": None,
+                    "unresolved_reason": "Last option premium is not a verified exit fill.",
+                })
+                self._event(t, now, "UNRESOLVED", "Paper position retained as unresolved; no exit price or P&L was invented.")
+                self.notify(f"⚠️ <b>{t['name']}: paper trade unresolved</b>\n"
+                            "The tool rolled to a new day without a verified option exit price. "
+                            "The position is retained in the trade log without realised P&L.")
+            else:
+                self._close(t, None, None, now, t.get("last_price", t["entry_price"]),
+                            "Closed at the last known underlying price because the tool was offline at exit time")
         if status["day"]["skip"]:
             self._log(now, "Today is on your skip list, so no new trades will be taken.")
         self.dirty = True
@@ -314,7 +336,7 @@ class Engine:
             return self._finish(S, now, f"Stocks: no Nifty 200 stock passed today's scan (needs a "
                                         f"{num(s['min_move_pct'])}% move on {num(s['volume_multiple'])}x usual volume).")
         lines = [f"• {p['name']}: {'up' if p['chg'] > 0 else 'down'} {abs(p['chg'])}%, volume {p['volx']}x usual"
-                 + (f"\n   📰 {p['news'][0]['title']} [{p['news'][0]['source']}]" if p["news"] else "")
+                 + (f"\n   📰 {html.escape(p['news'][0]['title'])} [{html.escape(p['news'][0]['source'])}]" if p["news"] else "")
                  for p in picks]
         self._log(now, "Stock watchlist: " + "; ".join(
             f"{p['name']} {'up' if p['chg'] > 0 else 'down'} {abs(p['chg'])}% on {p['volx']}x volume" for p in picks))
@@ -435,12 +457,53 @@ class Engine:
                 reasons.append(f"The stock made today's watchlist: {'up' if w['chg'] > 0 else 'down'} "
                                f"{abs(w['chg'])}% with {w['volx']}x its usual early volume.")
                 for n in (w.get("news") or [])[:1]:
-                    reasons.append(f"It is in the news today ({n['tag']}): “{n['title']}” [{n['source']}].")
+                    reasons.append(f"It is in the news today ({html.escape(n['tag'])}): “{html.escape(n['title'])}” "
+                               f"[{html.escape(n['source'])}].")
         if u["max_range_pct"]:
             reasons.append(f"The opening range was {R['pct']:.2f}% wide, inside the {num(u['max_range_pct'])}% limit.")
         return not fails, reasons, fails, v
 
     # ── opening a trade ──────────────────────────────────────
+    def _portfolio_rejection(self, candidate, today):
+        """Shared limits for the rulebook engine's options and cash paper positions."""
+        limits = (self.cfg.get("general") or {}).get("portfolio") or {}
+        day = today.isoformat()
+        open_now = [t for t in self.trades if t.get("date") == day and t.get("status") == "OPEN"]
+        closed = [t for t in self.trades if t.get("date") == day and t.get("status") == "CLOSED"]
+        realized = sum(float(t.get("pnl", 0) or 0) for t in closed)
+        open_risk = sum(float(t.get("risk_amount", 0) or 0) for t in open_now)
+        risk_amount = float(candidate.get("risk_amount", 0) or 0)
+        reasons = []
+        if limits.get("enabled", True):
+            if realized <= -float(limits.get("max_daily_loss", 3000)):
+                reasons.append("rulebook daily loss limit reached")
+            if len(open_now) >= int(limits.get("max_open_positions", 5)):
+                reasons.append("rulebook maximum concurrent positions reached")
+            if open_risk + risk_amount > float(limits.get("max_open_risk", 15000)):
+                reasons.append("rulebook maximum open risk would be exceeded")
+
+        # The second guard is shared with the strategy desk. It prevents two
+        # independent engines from spending the same capital/risk budget twice.
+        shared = self.cfg.get("portfolio") or {}
+        if shared.get("enabled", True):
+            external = [t for t in (self.portfolio_provider() or [])
+                        if t.get("date") == day and t.get("status") in ("OPEN", "CLOSED")
+                        and t.get("risk_approved", True)]
+            external_open = [t for t in external if t.get("status") == "OPEN"]
+            external_closed = [t for t in external if t.get("status") == "CLOSED"]
+            combined_positions = len(open_now) + len(external_open)
+            combined_risk = (open_risk + sum(float(t.get("risk", t.get("risk_amount", 0)) or 0)
+                                             for t in external_open))
+            combined_realized = realized + sum(float(t.get("net", t.get("pnl", 0)) or 0)
+                                                for t in external_closed)
+            if combined_realized <= -float(shared.get("max_daily_loss", 3500)):
+                reasons.append("shared portfolio daily loss limit reached")
+            if combined_positions >= int(shared.get("max_open_positions", 8)):
+                reasons.append("shared portfolio maximum positions reached")
+            if combined_risk + risk_amount > float(shared.get("max_open_risk", 17500)):
+                reasons.append("shared portfolio open risk would be exceeded")
+        return reasons
+
     def _open(self, u, st, disc, now, up, close, reasons, v):
         g = self.cfg["general"]
         R = st["range"]
@@ -491,7 +554,13 @@ class Engine:
         else:
             s = self.cfg["stocks"]
             risk = abs(close - R["mid"]) or close * 0.002
-            qty = max(1, min(int(s["risk_per_trade"] // risk), int(s["max_position_value"] // close) or 1))
+            from .strategies.risk import quantity_for_risk
+            qty = quantity_for_risk(close, risk, s["risk_per_trade"], s["max_position_value"])
+            if qty < 1:
+                st["armed"] = False
+                self._log(now, f"{u['name']}: breakout passed, but no share can be sized within both the "
+                               f"₹{num(s['risk_per_trade'], 0)} risk and ₹{num(s['max_position_value'], 0)} position limits.", "warn")
+                return False
             tr.update({"kind": "stock", "side": 1 if up else -1, "action": "BUY" if up else "SELL",
                        "symbol": u["signal"], "contract": u["name"], "lots": None, "lot_size": 1,
                        "qty": qty, "units": qty, "entry_price": close, "stop_price": None,
@@ -502,6 +571,14 @@ class Engine:
         tr.update({"remaining": tr["qty"], "last_price": tr["entry_price"], "underlying_last": close,
                    "last_update": tr["entry_time"], "open_pnl": 0.0,
                    "risk_amount": round(tr["risk_per_unit"] * tr["qty"], 2), "headline": what})
+        if tr["kind"] == "option":
+            tr["quote_status"] = "FRESH"
+            tr["quote_received_at"] = now.isoformat(timespec="seconds")
+        rejected = self._portfolio_rejection(tr, today)
+        if rejected:
+            st["armed"] = False
+            self._log(now, f"{u['name']}: setup passed, but no paper entry was accepted: {'; '.join(rejected)}.", "warn")
+            return False
         self.trades.append(tr)
         disc["trades"] += 1
         st["armed"] = False
@@ -527,7 +604,25 @@ class Engine:
         d = tr["dir"]
         if tr["kind"] == "option":
             q = self._quote(tr["symbol"])
-            price = q["lp"] if q and q.get("lp") else tr["last_price"]
+            if not q or not isinstance(q.get("lp"), (int, float)) or q.get("lp") <= 0:
+                # Never present a cached premium as a fresh mark or claim that its stop
+                # is being monitored. Leave the paper position explicitly unmonitored.
+                tr["quote_status"] = "STALE"
+                tr["underlying_last"] = sig[-1][4]
+                tr.setdefault("quote_stale_since", now.isoformat(timespec="seconds"))
+                if not tr.get("quote_warning_sent"):
+                    tr["quote_warning_sent"] = True
+                    self.notify(f"⚠️ <b>{tr['name']}: option quote unavailable</b>\n"
+                                f"The last premium ₹{num(tr['last_price'])} is stale. The premium stop cannot be verified; "
+                                f"this paper trade is marked UNMONITORED until a fresh quote returns.")
+                    self._log(now, f"{tr['name']}: option quote unavailable; premium-based trade management paused.", "warn")
+                self.dirty = True
+                return
+            price = q["lp"]
+            tr["quote_status"] = "FRESH"
+            tr["quote_received_at"] = now.isoformat(timespec="seconds")
+            tr.pop("quote_stale_since", None)
+            tr["quote_warning_sent"] = False
         else:
             price = sig[-1][4]
         booked = sum(tr["side"] * (f["price"] - tr["entry_price"]) * f["qty"] for f in tr["fills"])

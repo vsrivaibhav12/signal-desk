@@ -126,6 +126,8 @@ def build(cfg, master, days, plans, rng):
     for day in days:
         plan = plans[day]
         for m in cfg["markets"]:
+            if not m.get("enabled", True):
+                continue
             p = plan.get(m["id"], "flat")
             if p == "closed":
                 continue

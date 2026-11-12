@@ -1,10 +1,11 @@
 name: Strategy backtest
 
-# Tests all ten strategies on past prices. It runs by itself every weekday evening after the market closes,
+# Tests all eleven strategies on past prices. It runs by itself every weekday evening after the market closes,
 # and you can run it by hand from the Actions tab at any time. It runs on its own computer, so it works
 # alongside the live Trade engine without slowing it down.
-#   auto  = your Fyers prices if a login is saved (up to the days you ask for), otherwise free Yahoo prices (about 60 days)
-#   yahoo = free prices only, never uses your login
+#   auto  = Kotak Neo prices if KOTAK_CONSUMER_KEY is set, else a saved Fyers login, else free Yahoo prices (about 60 days)
+#   yahoo = free prices only
+#   kotak = Kotak Neo only; stops with an error if the key is missing or wrong
 #   fyers = Fyers only; stops with an error if no login is saved
 on:
   schedule:
@@ -12,13 +13,13 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "auto, yahoo or fyers"
+        description: "auto, yahoo, kotak or fyers"
         type: choice
-        options: [auto, yahoo, fyers]
+        options: [auto, yahoo, kotak, fyers]
         default: auto
       days:
-        description: "Calendar days of history to ask Fyers for (about 250 = one year of trading)"
-        default: "250"
+        description: "Calendar days of history to ask the broker for (365 calendar days is about 250 market sessions)"
+        default: "365"
 
 permissions:
   contents: write
@@ -56,11 +57,12 @@ jobs:
 
       - name: Run the strategy backtest
         env:
+          KOTAK_CONSUMER_KEY: ${{ secrets.KOTAK_CONSUMER_KEY }}
           FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
           FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
           FYERS_PIN: ${{ secrets.FYERS_PIN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           PYTHONUNBUFFERED: "1"
           SOURCE: ${{ inputs.source || 'auto' }}
-          DAYS: ${{ inputs.days || '250' }}
+          DAYS: ${{ inputs.days || '365' }}
         run: python -m engine.strategies --source "$SOURCE" --days "$DAYS"

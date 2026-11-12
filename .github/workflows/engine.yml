@@ -66,9 +66,12 @@ jobs:
       - name: Run the engine
         if: steps.awake.outputs.go == 'yes'
         env:
+          KOTAK_CONSUMER_KEY: ${{ secrets.KOTAK_CONSUMER_KEY }}
           FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
           FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
           FYERS_PIN: ${{ secrets.FYERS_PIN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_PAIRING_CODE: ${{ secrets.TELEGRAM_PAIRING_CODE }}
           PYTHONUNBUFFERED: "1"
         run: python -m engine.run

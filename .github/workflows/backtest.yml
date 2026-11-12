@@ -1,18 +1,19 @@
 name: Backtest
 
 # Run by hand from the Actions tab: choose "Backtest", press "Run workflow".
-#   quick = last ~60 days from a free source, no Fyers login, takes about 3 minutes
-#   fyers = longer history from your Fyers account (needs login), takes 30 to 90 minutes
+#   quick = last ~60 days from a free source, no login, takes about 3 minutes
+#   kotak = longer history from Kotak Neo (needs the KOTAK_CONSUMER_KEY secret), takes 30 to 90 minutes
+#   fyers = longer history from your Fyers account (needs a saved Fyers login)
 on:
   workflow_dispatch:
     inputs:
       source:
-        description: "quick (free source, about 60 days) or fyers (your Fyers account, longer)"
+        description: "quick (free source, about 60 days), kotak (Kotak Neo, longer) or fyers (Fyers, longer)"
         type: choice
-        options: [quick, fyers]
+        options: [quick, kotak, fyers]
         default: quick
       days:
-        description: "How many calendar days back (only used for fyers)"
+        description: "How many calendar days back (only used for kotak and fyers)"
         default: "180"
 
 permissions:
@@ -51,6 +52,7 @@ jobs:
 
       - name: Run the backtest
         env:
+          KOTAK_CONSUMER_KEY: ${{ secrets.KOTAK_CONSUMER_KEY }}
           FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
           FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
           FYERS_PIN: ${{ secrets.FYERS_PIN }}
@@ -59,7 +61,9 @@ jobs:
           SOURCE: ${{ inputs.source }}
           DAYS: ${{ inputs.days }}
         run: |
-          if [ "$SOURCE" = "fyers" ]; then
+          if [ "$SOURCE" = "kotak" ]; then
+            python -m engine.backtest --source kotak --days "$DAYS"
+          elif [ "$SOURCE" = "fyers" ]; then
             python -m engine.backtest --source fyers --days "$DAYS"
           else
             python -m engine.backtest --source yahoo

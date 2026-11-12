@@ -231,6 +231,29 @@ table.watch td:first-child,table.watch th:first-child{text-align:left}
 .actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px}
 .took{font-size:.9rem;display:inline-flex;gap:8px;align-items:center;cursor:pointer}
 .took input{width:18px;height:18px}
+
+/* decision-first page */
+.fresh{font-size:.84rem;color:var(--muted);margin-top:8px;display:flex;gap:4px 8px;flex-wrap:wrap;align-items:center}
+.fresh b{color:var(--ink)}
+.fresh .chip{padding:3px 12px;font-size:.82rem}
+.dchips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+.dchip{font-size:.78rem;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.dchip.ok{background:var(--gain-soft);color:var(--gain)} .dchip.no{background:var(--loss-soft);color:var(--loss)}
+.take{border-left:5px solid var(--gain)}
+.take-actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:0 14px 12px}
+.mover{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.mover-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mv-pct{font:700 1.5rem var(--display);font-variant-numeric:tabular-nums}
+.mover .dchips{padding:8px 0 0}
+details.blk{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
+details.blk>summary{display:flex;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;font:600 1rem var(--body);list-style:none;align-items:baseline}
+details.blk>summary::-webkit-details-marker{display:none}
+details.blk>summary>span:first-child{flex:1}
+details.blk>summary::after{content:"+";margin-left:4px;color:var(--muted);font-size:1.2rem}
+details.blk[open]>summary::after{content:"\2212"}
+.blk-body{padding:0 16px 16px}
+.blk-body .sec-head{display:none}
+.take .what small{white-space:normal;overflow:visible}
 </style>
 </head>
 <body>
@@ -240,6 +263,7 @@ table.watch td:first-child,table.watch th:first-child{text-align:left}
     <div class="pulse" id="pulse"><span class="dot"></span><span>Loading</span></div>
   </header>
   <div id="banner"></div>
+  <div id="fresh" class="fresh"></div>
   <main id="app" aria-live="polite"></main>
   <footer>Signal Desk follows a fixed rulebook and keeps score of its own suggestions as paper trades. It never places orders. Prices can differ from what you get in your broker app, and past results do not promise future ones.</footer>
 </div>
@@ -248,7 +272,15 @@ table.watch td:first-child,table.watch th:first-child{text-align:left}
 
 <script>
 const DEMO = /*__DEMO__*/null;
-const LIVE = location.hostname.endsWith("github.io");
+const LIVE = location.hostname.endsWith("github.io") ||
+  (location.protocol.startsWith("http") && !["localhost", "127.0.0.1", "::1"].includes(location.hostname) && !location.hostname.endsWith(".local"));
+// Set to "github-username/repository-name" when using a custom domain or a user-site root URL.
+const DATA_REPOSITORY = "";
+const dataRepository = () => {
+  if (DATA_REPOSITORY && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(DATA_REPOSITORY)) return DATA_REPOSITORY;
+  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  return owner && repo ? `${owner}/${repo}` : "";
+};
 const BT_DEMO = /*__BT__*/null;
 const STRATS = /*__STRATS__*/[];
 const SB_DEMO = /*__SB__*/null;
@@ -270,7 +302,9 @@ const srcMeta = id => SOURCES.find(s => s.id === id) || { id, name: id, rules: [
 const hashSheet = () => { const m = location.hash.match(/^#s=([\w]+)/); return m && SOURCES.some(s => s.id === m[1]) ? m[1] : null; };
 const state = { feed: null, bt: null, btAt: 0, sb: null, sbAt: 0, sl: null, slAt: 0, slError: false, error: null,
   open: new Set(), openGroups: new Set(), lshown: 25, sshown: 25, openAll: false, sheet: hashSheet(), sheetFrom: null,
-  logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "", charts: {} };
+  logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "", charts: {}, det: new Set(), loadedAt: 0, loading: false, showEnded: false };
+const REFRESH_MS = 120000;                 // the page re-reads the data every 2 minutes
+let INNER = false;                         // while true, a section returns only its content (used inside the collapsed blocks)
 const $ = id => document.getElementById(id);
 const ROWS = new Map();           // trade id -> trade, filled while rendering, so a chart can find its stop and target
 // "I took this" marks live in this browser only (the tool itself never places orders)
@@ -282,6 +316,10 @@ const rupee = x => (x < 0 ? "−" : "") + "₹" + inr(Math.abs(x), Math.abs(x) >
 const signed = x => (x > 0 ? "+" : x < 0 ? "−" : "") + "₹" + inr(Math.abs(x), Math.abs(x) >= 1000 ? 0 : 2);
 const cls = x => (x > 0 ? "gain" : x < 0 ? "loss" : "");
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function safeHttpUrl(value) {
+  try { const u = new URL(String(value || ""), location.href); return ["http:", "https:"].includes(u.protocol) ? u.href : ""; }
+  catch (_) { return ""; }
+}
 // Times in the feed are already India time, so read the clock straight from the text.
 const hhmm = iso => { if (!iso) return ""; let h = +iso.slice(11, 13), m = iso.slice(14, 16); const ap = h >= 12 ? "pm" : "am"; h = h % 12 || 12; return `${h}:${m} ${ap}`; };
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -293,9 +331,10 @@ async function loadBt() {
   if (!LIVE) { state.bt = BT_DEMO; return; }
   if (Date.now() - state.btAt < 15 * 60e3) return;
   state.btAt = Date.now();
-  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  const base = dataBase();
+  if (!base) { state.error = "unreachable"; return; }
   try {
-    const r = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/data/backtest.json?t=${Math.floor(Date.now() / 6e5)}`);
+    const r = await fetch(`${base}backtest.json?t=${Math.floor(Date.now() / 6e5)}`);
     if (r.ok) state.bt = await r.json();
   } catch (e) { /* the section simply stays empty */ }
 }
@@ -303,8 +342,8 @@ async function loadBt() {
 
 const dataBase = () => {
   if (!LIVE) return "tests/";
-  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
-  return `https://raw.githubusercontent.com/${owner}/${repo}/data/`;
+  const repo = dataRepository();
+  return repo ? `https://raw.githubusercontent.com/${repo}/data/` : "";
 };
 
 async function loadStrat() {
@@ -314,18 +353,19 @@ async function loadStrat() {
     state.sbAt = Date.now();
     try { const r = await fetch(`${base}strategies_backtest.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) state.sb = await r.json(); } catch (e) { /* stays empty */ }
   }
-  if (Date.now() - state.slAt > 170e3) {            // the live strategy file is large, so ask for it every 3 minutes
+  {
     state.slAt = Date.now();
-    try { const r = await fetch(`${base}strategies.json?t=${Math.floor(Date.now() / 6e4)}`, { cache: "no-store" }); if (r.ok) { state.sl = await r.json(); state.slError = false; } } catch (e) { state.slError = true; }
+    try { const r = await fetch(`${base}strategies.json?t=${Date.now()}`, { cache: "no-store" }); if (r.ok) { state.sl = await r.json(); state.slError = false; } } catch (e) { state.slError = true; }
   }
 }
 
 async function loadFeed() {
   if (!LIVE) { state.feed = DEMO; return; }
-  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  const repository = dataRepository();
+  if (!repository) { state.error = "unreachable"; return; }
   const tries = [
-    [`https://api.github.com/repos/${owner}/${repo}/contents/feed.json?ref=data`, { headers: { Accept: "application/vnd.github.raw+json" }, cache: "no-store" }],
-    [`https://raw.githubusercontent.com/${owner}/${repo}/data/feed.json?t=${Date.now()}`, { cache: "no-store" }],
+    [`https://api.github.com/repos/${repository}/contents/feed.json?ref=data`, { headers: { Accept: "application/vnd.github.raw+json" }, cache: "no-store" }],
+    [`https://raw.githubusercontent.com/${repository}/data/feed.json?t=${Date.now()}`, { cache: "no-store" }],
   ];
   let missing = false;
   for (const [url, opt] of tries) {
@@ -395,7 +435,7 @@ function newsBlock(items) {
   return `<div class="card" style="padding:0"><ul class="news">${items.slice(0, 14).map(n => `<li>
     <span><span class="who">${esc(n.name)}</span><span class="tag ${esc(n.tag)}">${esc(n.tag)}</span></span>
     <span class="mv ${cls(n.chg || 0)}">${n.chg == null ? "" : (n.chg > 0 ? "+" : "−") + Math.abs(n.chg).toFixed(2) + "%"}</span>
-    <span class="hl">${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title)}</span>
+    <span class="hl">${safeHttpUrl(n.link) ? `<a href="${esc(safeHttpUrl(n.link))}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>` : esc(n.title)}</span>
     <span class="src">${esc(n.source)}, ${hhmm(n.t)}</span></li>`).join("")}</ul></div>
     <p class="note">Headlines only, from free news feeds. The percentage is the stock’s move at the 9:30 am scan. A stock in the news still has to pass the scan and every rule before it becomes a trade.</p>`;
 }
@@ -529,19 +569,27 @@ function fromBt(cols, r, sid) {
   const o = {}; cols.forEach((c, i) => { o[c] = r[i]; });
   return { sid, src: "bt", id: o.id, iso: o.date + "T" + o.in, date: o.date, name: o.name, dir: o.dir, inT: o.in, outT: o.out,
     entry: o.entry, exit: o.exit, stop: o.stop, target: o.target, qty: o.qty, risk: o.risk, gross: o.gross, cost: o.cost, net: o.net, r: o.r,
-    how: o.how, regime: o.regime, why: o.why, status: "CLOSED", result: o.net > 0 ? "WIN" : o.net < 0 ? "LOSS" : "FLAT" };
+    how: o.how, regime: o.regime, why: o.why, dec: o.dec, status: "CLOSED", result: o.net > 0 ? "WIN" : o.net < 0 ? "LOSS" : "FLAT" };
 }
 function fromLive(t) {
   return { sid: t.strategy, src: "live", id: t.id, iso: t.entry_t, date: t.date, name: t.name, dir: t.dir, inT: t.entry_t.slice(11, 16), outT: t.exit_t ? t.exit_t.slice(11, 16) : "",
     entry: t.entry, exit: t.exit, stop: t.stop, target: t.target, qty: t.qty, risk: t.risk, gross: t.gross, cost: t.cost, net: t.net, r: t.net_r,
-    how: t.exit_type, regime: t.regime, why: t.why, status: t.status, result: t.result, last: t.last, open: t.open_pnl, reason: t.exit_reason, late: t.late };
+    how: t.exit_type, regime: t.regime, why: t.why, dec: t.dec, status: t.status, result: t.result, last: t.last, open: t.open_pnl, reason: t.exit_reason, late: t.late };
 }
+// The options desk's trades are graded on the one check that applies to them here: would costs eat the trade?
+function optDecision(t) {
+  const cost = 100 + (t.qty || 0) * (t.entry_price || 0) * 0.01, cr = t.risk_amount ? cost / t.risk_amount : 9;
+  return { g: cr > 0.25 ? "watch" : "take", f: cr > 0.25 ? ["cost"] : [], cr: Math.round(cr * 100) / 100, cv: null, nm: null, cf: 0 };
+}
+const gradeOf = t => (t.dec && t.dec.g) || "watch";
+
 function fromOpt(t) {
   return { sid: "options", src: "live", opt: true, id: t.id, iso: t.entry_time, date: t.date, name: t.name, headline: t.headline, contract: t.contract, dir: t.dir,
     inT: (t.entry_time || "").slice(11, 16), outT: (t.exit_time || "").slice(11, 16), entry: t.entry_price, exit: t.exit_price, last: t.last_price,
     stop: t.stop_underlying, target: t.target_underlying, uEntry: t.underlying_entry, uLast: t.underlying_last, stopPrice: t.kind === "option" ? t.stop_price : null,
     kind: t.kind, lots: t.lots, qty: t.qty, risk: t.risk_amount, gross: t.pnl, cost: 0, net: t.pnl, r: t.r, how: exitType(t), reason: t.exit_reason,
-    why: t.reasons, events: t.events, status: t.status, result: t.result, open: t.open_pnl, regime: t.book };
+    why: t.reasons, events: t.events, status: t.status, result: t.result, open: t.open_pnl, regime: t.book, dec: optDecision(t),
+    unresolvedReason: t.unresolved_reason, quoteStatus: t.quote_status, quoteReceivedAt: t.quote_received_at };
 }
 const optRows = () => ((state.feed && state.feed.trades) || []).map(fromOpt);
 const stratRows = id => ((state.sl && state.sl.trades) || []).filter(t => !id || t.strategy === id).map(fromLive);
@@ -559,7 +607,7 @@ function liveRecord(id) {
 function srcStats(id) {
   const rows = id === "options" ? optRows() : stratRows(id), td = todayOf(id);
   const today = rows.filter(r => r.date === td), open = today.filter(r => r.status === "OPEN");
-  const todayNet = today.reduce((s, r) => s + (r.status === "OPEN" ? (r.open || 0) : r.net), 0);
+  const todayNet = today.reduce((s, r) => s + (r.status === "OPEN" ? (r.open || 0) : r.status === "CLOSED" ? (r.net || 0) : 0), 0);
   let bt = null, curve = [], level = "few";
   if (id === "options") {
     const b = state.bt, m = b && b.variants[0].summary;
@@ -569,6 +617,33 @@ function srcStats(id) {
     if (b && b.summary.n) { bt = { n: b.summary.n, win: b.summary.win_rate, net: b.summary.pnl, gross: b.summary.gross_pnl }; curve = b.curve; level = b.level; }
   }
   return { id, meta: srcMeta(id), today: { n: today.length, open: open.length, net: todayNet }, rec: id === "options" ? sstats(rows) : liveRecord(id), bt, curve, level };
+}
+
+/* ───────────── the decision: take, or just watch ───────────── */
+const FAIL_WORDS = { cost: "stop too tight for the costs", vol: "volume is ordinary", mkt: "Nifty is against it", conf: "conflicting signal in the stock" };
+function decChips(t) {
+  const d = t.dec;
+  if (!d) return "";
+  const c = (ok, text) => `<span class="dchip ${ok ? "ok" : "no"}">${ok ? "✓" : "✗"} ${text}</span>`, pc = Math.round(d.cr * 100), out = [];
+  out.push(c(!d.f.includes("cost"), d.f.includes("cost") ? `Costs would take ${pc}% of the risk` : `Stop wide enough (costs ${pc}% of the risk)`));
+  if (d.cv != null) out.push(c(!d.f.includes("vol"), d.f.includes("vol") ? `Volume only ${d.cv}x normal` : `Volume ${d.cv}x normal`));
+  if (d.nm != null) out.push(c(!d.f.includes("mkt"), d.f.includes("mkt") ? "Nifty is against it" : "Nifty agrees"));
+  out.push(c(!d.f.includes("conf"), d.f.includes("conf") ? `${d.cf} opposite signal${d.cf > 1 ? "s" : ""} in this stock` : "No conflicting signal"));
+  return `<div class="dchips">${out.join("")}</div>`;
+}
+
+function takeCard(t) {
+  ROWS.set(t.id, t);
+  const isOpen = state.open.has(t.id), pnl = t.status === "OPEN" ? (t.open ?? 0) : t.net, buy = t.dir === 1, nw = newsFor(t.name)[0];
+  return `<div class="row take"><button data-trade="${esc(t.id)}" aria-expanded="${isOpen}">
+      <span class="pill ${buy ? "BUY" : "SELL"}">${buy ? "BUY" : "SELL"}</span>
+      <span class="what"><span class="tag-s">${esc(srcMeta(t.sid).name)}</span>${t.opt && t.quoteStatus === "STALE" ? `<span class="tag-s" style="background:var(--loss-soft);color:var(--loss)">QUOTE STALE</span>` : ""}${takenSet.has(t.id) ? `<span class="tag-s" style="background:var(--gain-soft);color:var(--gain)">Taken</span>` : ""}${nw ? `<span class="tag-s" style="background:var(--live-soft);color:var(--live)" title="${esc(nw.title)}">In the news: ${esc(nw.tag)}</span>` : ""}${t.opt ? esc(t.headline) : esc(t.name)}
+        <small>${t.status === "OPEN" ? "Triggered" : "Ended"} ${clock24(t.inT)} · quantity ${t.opt ? (t.kind === "option" ? t.lots + " lot" + (t.lots > 1 ? "s" : "") : inr(t.qty)) : inr(t.qty)} · entry ₹${inr(t.entry)} · stop ${t.opt && t.stopPrice ? "₹" + inr(t.stopPrice) + " (option)" : "₹" + inr(t.stop)}${t.target ? " · target ₹" + inr(t.target) : " · no fixed target"} · risk ${rupee(t.risk)}${t.opt && t.quoteStatus === "STALE" ? " · premium quote stale; stop unverified" : ""}</small></span>
+      <span class="res ${cls(pnl)}">${signed(pnl)}<small>${t.opt && t.quoteStatus === "STALE" ? "stale mark" : t.status === "OPEN" ? "so far" : "ended"}</small></span></button>
+    ${decChips(t)}
+    <div class="take-actions"><button class="chip" data-copy="${esc(t.id)}">Copy order details</button>
+      <label class="took"><input type="checkbox" data-took="${esc(t.id)}" ${takenSet.has(t.id) ? "checked" : ""}> I took this trade</label></div>
+    ${isOpen ? rowDetail(t, true) : ""}</div>`;
 }
 
 /* ───────────── trade charts ───────────── */
@@ -672,7 +747,7 @@ function ticketText(t) {
   return `${t.dir === 1 ? "BUY" : "SELL"} ${inr(t.qty)} ${t.name} | entry about ₹${inr(t.entry)} | stop ₹${inr(t.stop)} | ${t.target ? `target ₹${inr(t.target)}` : "no fixed target"} | planned risk ${risk} | ${name}`;
 }
 
-function rowDetail(t) {
+function rowDetail(t, noActions) {
   ROWS.set(t.id, t);
   const open = t.status === "OPEN", nowP = open ? (t.last ?? t.entry) : t.exit;
   const fact = (l, v, c) => `<div>${l}<b class="${c || ""}">${v}</b></div>`;
@@ -688,12 +763,13 @@ function rowDetail(t) {
       ${t.opt && t.stopPrice ? fact("Option stop-loss", "₹" + inr(t.stopPrice)) : ""}
       ${!open && !t.opt ? fact("Before costs", signed(t.gross), cls(t.gross)) + fact("Costs", rupee(t.cost)) : ""}
       ${!open ? fact(t.opt ? "Result, before costs" : "After costs", signed(t.net), cls(t.net)) : ""}</div>
-    <div class="actions">${t.src === "live" ? `<button class="chip" data-copy="${esc(t.id)}">Copy order details</button>` : ""}
-      <label class="took"><input type="checkbox" data-took="${esc(t.id)}" ${takenSet.has(t.id) ? "checked" : ""}> I took this trade</label></div>
+    ${noActions ? "" : `<div class="actions">${t.src === "live" ? `<button class="chip" data-copy="${esc(t.id)}">Copy order details</button>` : ""}
+      <label class="took"><input type="checkbox" data-took="${esc(t.id)}" ${takenSet.has(t.id) ? "checked" : ""}> I took this trade</label></div>`}
+    ${t.dec ? `<p class="subhead">${gradeOf(t) === "take" ? "Worth taking: it passed all the tool's checks" : "Only watching: it failed " + t.dec.f.map(f => FAIL_WORDS[f]).join(" and ")}</p>${decChips(t)}` : ""}
     ${t.regime && !t.opt ? `<p class="subhead">Market condition when it triggered</p><div>${esc(t.regime)}</div>` : ""}
     ${t.why ? `<p class="subhead">Why this trade was triggered</p><ul class="why">${t.why.map(r => `<li>${esc(r)}</li>`).join("")}</ul>`
       : `<p class="note">The reasons are kept for the most recent trades only, to keep this page light.</p>`}
-    ${news.length ? `<p class="subhead">In the news today</p><ul class="why">${news.map(n => `<li>${esc(n.tag)}: ${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title)} <span class="muted">[${esc(n.source)}]</span></li>`).join("")}</ul>` : ""}
+    ${news.length ? `<p class="subhead">In the news today</p><ul class="why">${news.map(n => `<li>${esc(n.tag)}: ${safeHttpUrl(n.link) ? `<a href="${esc(safeHttpUrl(n.link))}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>` : esc(n.title)} <span class="muted">[${esc(n.source)}]</span></li>`).join("")}</ul>` : ""}
     ${t.events ? `<p class="subhead">What happened</p><ol class="timeline">${t.events.map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>` : ""}
     ${t.late ? `<p class="note">This signal was found after the fact (the desk was restarted), so no alert was sent for it.</p>` : ""}
   </div>`;
@@ -707,18 +783,21 @@ function ladderOf(t) {
 }
 
 function tradeRow(t, showSrc) {
-  const isOpen = state.open.has(t.id), pnl = t.status === "OPEN" ? (t.open ?? 0) : t.net, pill = t.status === "OPEN" ? "OPEN" : t.result;
+  const unresolved = t.status === "UNRESOLVED";
+  const isOpen = state.open.has(t.id), pnl = t.status === "OPEN" ? (t.open ?? 0) : t.net, pill = unresolved ? "UNRESOLVED" : t.status === "OPEN" ? "OPEN" : t.result;
   const head = t.opt ? esc(t.headline) : `${t.dir === 1 ? "BUY" : "SELL"} ${inr(t.qty)} ${esc(t.name)}`;
-  const sub = t.status === "OPEN"
-    ? `In at ${clock24(t.inT)}, ₹${inr(t.entry)}. ${t.opt ? (t.stopPrice ? "Option stop ₹" + inr(t.stopPrice) + "." : "") : `Stop ₹${inr(t.stop)}${t.target ? `, target ₹${inr(t.target)}` : ", no fixed target"}`}`
-    : `${clock24(t.inT)} at ₹${inr(t.entry)} to ${clock24(t.outT)} at ₹${inr(t.exit)}. ${esc(t.reason || HOW[t.how] || t.how)}`;
+  const sub = unresolved
+    ? `Entered ${clock24(t.inT)} at ₹${inr(t.entry)}. No verified exit price; last option premium is reference-only. ${esc(t.unresolvedReason || t.reason || "Outcome unresolved")}`
+    : t.status === "OPEN"
+      ? `In at ${clock24(t.inT)}, ₹${inr(t.entry)}. ${t.opt ? (t.stopPrice ? "Option stop ₹" + inr(t.stopPrice) + "." : "") + (t.quoteStatus === "STALE" ? " Last premium is stale; premium stop is unverified." : "") : `Stop ₹${inr(t.stop)}${t.target ? `, target ₹${inr(t.target)}` : ", no fixed target"}`}`
+      : `${clock24(t.inT)} at ₹${inr(t.entry)} to ${clock24(t.outT)} at ₹${inr(t.exit)}. ${esc(t.reason || HOW[t.how] || t.how)}`;
   const nw = newsFor(t.name)[0];
-  const tags = (showSrc ? `<span class="tag-s">${esc(srcMeta(t.sid).name)}</span>` : "") + (takenSet.has(t.id) ? `<span class="tag-s" style="background:var(--gain-soft);color:var(--gain)">Taken</span>` : "") +
+  const tags = (showSrc ? `<span class="tag-s">${esc(srcMeta(t.sid).name)}</span>` : "") + (t.opt && t.quoteStatus === "STALE" ? `<span class="tag-s" style="background:var(--loss-soft);color:var(--loss)">QUOTE STALE</span>` : "") + (takenSet.has(t.id) ? `<span class="tag-s" style="background:var(--gain-soft);color:var(--gain)">Taken</span>` : "") +
     (nw ? `<span class="tag-s" style="background:var(--live-soft);color:var(--live)" title="${esc(nw.title)}">In the news: ${esc(nw.tag)}</span>` : "");
   return `<div class="row"><button data-trade="${esc(t.id)}" aria-expanded="${isOpen}">
-      <span class="pill ${pill}">${pill === "WIN" ? "Won" : pill === "LOSS" ? "Lost" : pill === "OPEN" ? "Open" : "Flat"}</span>
+      <span class="pill ${pill}">${pill === "WIN" ? "Won" : pill === "LOSS" ? "Lost" : pill === "OPEN" ? "Open" : pill === "UNRESOLVED" ? "Unresolved" : "Flat"}</span>
       <span class="what">${tags}${head}<small>${sub}</small></span>
-      <span class="res ${cls(pnl)}">${signed(pnl)}<small>${t.status === "CLOSED" ? num1(t.r || 0) + "R" + (t.opt ? "" : " after costs") : "so far"}</small></span>
+      <span class="res ${cls(pnl)}">${unresolved ? "—" : signed(pnl)}<small>${unresolved ? "P&L unresolved" : t.status === "CLOSED" ? num1(t.r || 0) + "R" + (t.opt ? "" : " after costs") : "so far"}</small></span>
     </button>${isOpen ? rowDetail(t) : ""}</div>`;
 }
 
@@ -731,8 +810,71 @@ function rowList(rows, key, showSrc) {
   return html;
 }
 
-/* ───────────── the page, in the order a trader uses it ───────────── */
-const sec = (id, title, right, inner) => `<section id="${id}"><div class="sec-head"><h2>${title}</h2><span class="muted" style="font-size:.88rem">${right || ""}</span></div>${inner}</section>`;
+/* ───────────── the page: act first, everything else second ───────────── */
+function takeExplainer() {
+  const dec = state.sb && state.sb.decision;
+  const rules = dec ? dec.rules : { cost: "Round-trip cost is at most 25% of the amount risked", vol: "Volume is at least 2x normal for this time of day (indices pass)", mkt: "Nifty is on the same side of its VWAP as the trade", conf: "No other strategy is already on the opposite side of the same stock today" };
+  const res = dec && dec.take.n ? `<p class="note"><b>What the backtest says.</b> Over ${state.sb.period.days} sessions the tool produced ${dec.all.n.toLocaleString("en-IN")} signals. About ${dec.take_per_day} a day passed all four checks (${dec.take.n.toLocaleString("en-IN")} in total). Those lost ${num1(dec.take.summary.avg_r)}R each on average after costs, against ${num1(dec.all.summary.avg_r)}R for every signal, so the checks remove most of the loss. <b>They did not make it profitable</b>: the tool is picking the best of a weak set, and no trade here is proven to win.</p>` : "";
+  return `<details style="margin-top:10px"><summary class="muted" style="cursor:pointer;font-size:.9rem">What does "worth taking" mean?</summary>
+    <ul class="why" style="margin-top:8px">${Object.values(rules).map(r => `<li>${esc(r)}</li>`).join("")}</ul>${res}</details>`;
+}
+
+function takeSection(takeOpen, takeEnded, watchCount) {
+  const ex = exposure(takeOpen), shown = state.showEnded ? [...takeOpen, ...takeEnded] : takeOpen;
+  return sec("take", "Worth taking", takeOpen.length ? `${takeOpen.length} open · planned risk ${rupee(ex.risk)}` : "", `
+    ${takeOpen.length ? shown.map(takeCard).join("") : `<div class="empty"><b>No trade meets the tool's standard right now.</b> ${watchCount ? `${watchCount} other signal${watchCount > 1 ? "s are" : " is"} being watched but not recommended (see More, below).` : "Nothing has triggered."} New ones appear here, and in Telegram, as soon as a signal passes all four checks.</div>`}
+    ${takeEnded.length ? `<button class="more" data-ended="1">${state.showEnded ? "Hide" : "Show"} ${takeEnded.length} worth-taking trade${takeEnded.length > 1 ? "s" : ""} that already ended today</button>` : ""}
+    ${takeExplainer()}`);
+}
+
+function mineSection(rows) {
+  const mine = rows.filter(t => takenSet.has(t.id)).sort((a, b) => (a.iso < b.iso ? 1 : -1));
+  if (!mine.length) return sec("mine", "My trades", "", `<div class="empty">Tick <b>I took this trade</b> on any trade and it is followed here with its live result. This is kept on this device only.</div>`);
+  const open = mine.filter(t => t.status === "OPEN"), closed = mine.filter(t => t.status === "CLOSED"), unresolved = mine.filter(t => t.status === "UNRESOLVED");
+  const oNet = open.reduce((a, t) => a + (t.open || 0), 0), cNet = closed.reduce((a, t) => a + t.net, 0);
+  return sec("mine", "My trades", `${open.length} open · <span class="${cls(oNet)}">${signed(oNet)}</span> so far${closed.length ? ` · ${closed.length} closed · <span class="${cls(cNet)}">${signed(cNet)}</span>` : ""}${unresolved.length ? ` · ${unresolved.length} unresolved` : ""}`,
+    `${open.map(t => takeCard(t)).join("")}${unresolved.map(t => tradeRow(t, true)).join("")}${closed.map(t => tradeRow(t, true)).join("")}
+     <p class="note">Results are the tool's numbers for the trades you marked (strategy trades after estimated costs, options before). Unresolved option trades are excluded from realised P&amp;L. Your own fills will differ.</p>`);
+}
+
+function moverCard(m, rows) {
+  const sl = state.sl, today = sl && sl.date, mine = rows.filter(t => t.name === m.name && t.date === today);
+  const take = mine.filter(t => gradeOf(t) === "take" && t.dir === m.dir), watch = mine.filter(t => gradeOf(t) !== "take");
+  const open = m.price / (1 + m.from_open / 100), first = mine.filter(t => t.dir === m.dir).sort((a, b) => (a.iso < b.iso ? -1 : 1))[0];
+  let status;
+  if (take.length) status = `<span class="vchip good">Worth taking</span> ${[...new Set(take.map(t => srcMeta(t.sid).name))].join(", ")} ${m.dir === 1 ? "bought" : "sold"} near ₹${inr(take[0].entry)} at ${clock24(take[0].inT)}.`;
+  else if (mine.length) status = `<span class="vchip mixed">Only watching</span> ${mine.length} signal${mine.length > 1 ? "s" : ""} triggered, but none passed all the checks.`;
+  else status = `<span class="vchip few">No signal yet</span> No strategy has triggered on this stock.`;
+  const late = first ? Math.round(Math.abs((first.entry - open) / (m.price - open)) * 100) : null;
+  const nw = newsFor(m.name)[0], tick = ok => `<span class="dchip ${ok ? "ok" : "no"}">${ok ? "✓" : "✗"}`;
+  return `<div class="mover"><div class="mover-top"><div><b>${esc(m.name)}</b> <span class="muted">₹${inr(m.price)}</span></div><div class="mv-pct ${cls(m.dir)}">${m.move >= 0 ? "+" : "−"}${Math.abs(m.move).toFixed(1)}%</div></div>
+    <div class="dchips">${tick(m.checks.volume)} Volume ${m.vol ?? "n/a"}x normal</span>${tick(m.checks.vwap)} ${m.dir === 1 ? "Above" : "Below"} VWAP</span>${tick(m.checks.held)} Holding near the ${m.dir === 1 ? "high" : "low"}</span></div>
+    ${m.since ? `<div class="muted" style="font-size:.84rem">Flagged as genuine at ${hhmm(m.since)}</div>` : ""}
+    ${nw ? `<div style="font-size:.88rem;margin-top:6px"><span class="tag-s" style="background:var(--live-soft);color:var(--live)">${esc(nw.tag)}</span>${esc(nw.title)}</div>` : ""}
+    <div style="font-size:.9rem;margin-top:8px">${status}</div>
+    ${late != null ? `<div class="muted" style="font-size:.84rem;margin-top:4px">The first signal came after <b>${Math.min(late, 999)}%</b> of the move from the open had already happened${late > 70 ? ", which is late" : late < 35 ? ", which is early" : ""}.</div>` : ""}</div>`;
+}
+
+function moversSection(rows) {
+  const mv = state.sl && state.sl.movers, list = mv ? mv.list : [], genuine = list.filter(m => m.genuine), other = list.filter(m => !m.genuine);
+  if (!state.sl) return sec("movers", "Trend setters", "", `<div class="empty">Waiting for the first strategy pass of the day.</div>`);
+  const up = genuine.filter(m => m.dir === 1), down = genuine.filter(m => m.dir === -1);
+  const col = (title, arr) => arr.length ? `<div><p class="subhead" style="margin-top:0">${title}</p>${arr.map(m => moverCard(m, rows)).join("")}</div>` : "";
+  return sec("movers", "Trend setters", mv ? `as of ${hhmm(mv.asof)}` : "", `
+    ${genuine.length ? `<div class="two">${col("Moving up", up)}${col("Moving down", down)}</div>` : `<div class="empty">No stock is making a big, volume-backed move that is holding right now.</div>`}
+    <p class="note">A <b>genuine</b> trend setter is up or down 2% or more, on at least twice its usual volume, on the right side of VWAP and still holding near the day's high or low. Spikes that have faded, or moves on ordinary volume, are left out.</p>
+    ${other.length ? `<details><summary class="muted" style="cursor:pointer;font-size:.9rem">${other.length} big move${other.length > 1 ? "s" : ""} the tool does not trust yet</summary><ul class="why" style="margin-top:8px">${other.map(m => `<li><b>${esc(m.name)}</b> ${m.move >= 0 ? "+" : "−"}${Math.abs(m.move).toFixed(1)}%: ${[!m.checks.volume ? "volume is ordinary" : "", !m.checks.vwap ? "price is on the wrong side of VWAP" : "", !m.checks.held ? "it has faded from the extreme" : "", m.size < 2 ? "move is under 2%" : ""].filter(Boolean).join(", ")}</li>`).join("")}</ul></details>` : ""}`);
+}
+
+function det(key, title, count, fn) {
+  const open = state.det.has(key);
+  let inner = "";
+  if (open) { INNER = true; try { inner = fn(); } finally { INNER = false; } }
+  return `<details class="blk" data-d="${key}" ${open ? "open" : ""}><summary><span>${title}</span><span class="muted">${count || ""}</span></summary>${open ? `<div class="blk-body">${inner}</div>` : ""}</details>`;
+}
+
+
+const sec = (id, title, right, inner) => INNER ? inner : `<section id="${id}"><div class="sec-head"><h2>${title}</h2><span class="muted" style="font-size:.88rem">${right || ""}</span></div>${inner}</section>`;
 
 function spark(pts) {
   if (!pts || pts.length < 2) return "";
@@ -746,7 +888,7 @@ function spark(pts) {
 function renderHeader() {
   const pulse = $("pulse"), banner = $("banner");
   const out = { running: false, waitingLogin: false, missing: false };
-  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview.</b> The strategy numbers and charts come from <b>real prices</b>: the backtests cover the last 60 trading days and the live panels replay one real session. The options desk's live trades are made-up samples.</div>`;
+  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview only.</b> This bundled dashboard uses sample records for layout testing. Its historical strategy snapshot may predate this release's next-candle execution model; rerun the backtest after setup before evaluating results. The options desk's live trades are synthetic examples.</div>`;
   const st = state.feed && state.feed.status;
   if (!st) { pulse.innerHTML = `<span class="dot"></span><span>Not connected</span>`; return out; }
   const seen = st.heartbeat || st.updated, fresh = seen && (!LIVE || Date.now() - new Date(seen).getTime() < 7 * 60e3);
@@ -761,32 +903,20 @@ function exposure(rows) {
   return { risk: rows.reduce((a, t) => a + (t.risk || 0), 0), cap: rows.reduce((a, t) => a + (t.qty || 0) * (t.entry || 0), 0), pnl: rows.reduce((a, t) => a + (t.open || 0), 0) };
 }
 
-function kpis(S, hd, open) {
-  const trig = S.reduce((a, s) => a + s.today.n, 0), withBt = S.filter(s => s.bt), ahead = withBt.filter(s => s.bt.net > 0).length;
-  const strat = S.filter(s => s.id !== "options"), sNet = strat.reduce((a, s) => a + s.today.net, 0), oNet = (S.find(s => s.id === "options") || { today: { net: 0 } }).today.net;
-  const ex = exposure(open), stocks = new Set(open.map(t => t.name)).size;
-  const sub = state.sb ? `${state.sb.period.days} sessions, ${esc(state.sb.source.split(",")[0])}` : "no backtest yet";
-  return `<div class="kpis">
-    <div class="kpi"><span class="k">Open positions</span><b>${open.length}</b><small>${stocks} stock${stocks === 1 ? "" : "s"} · ${rupee(ex.risk)} planned risk</small></div>
-    <div class="kpi"><span class="k">Triggered today</span><b>${trig}</b><small>across ${S.filter(s => s.today.n).length} of ${S.length} strategies</small></div>
-    <div class="kpi"><span class="k">Result so far today</span><b class="${cls(sNet)}">${signed(sNet)}</b><small>strategies, after costs${oNet ? ` · options ${signed(oNet)} before costs` : ""}</small></div>
-    <div class="kpi"><span class="k">Beat costs in the backtest</span><b>${withBt.length ? `${ahead} of ${withBt.length}` : "n/a"}</b><small>${sub}</small></div></div>`;
-}
-
 function marketSection() {
   const rg = state.sl && state.sl.regime, skip = state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.skip;
-  if (!rg) return sec("market", "Market conditions", "", `<div class="empty">The market read appears after the first 5-minute pass of the day (about 9:20 am). It shows whether the market is trending or ranging, which decides which strategies are allowed to trade.</div>`);
+  if (!rg) return sec("market", "Market", "", `<div class="empty">The market read appears after the first 5-minute pass of the day (about 9:20 am).</div>`);
   const mk = rg.markets.map(m => `<div class="mk"><div><b>${esc(m.name)}</b> <span class="num">${inr(m.price)}</span> ${m.chg == null ? "" : `<span class="${cls(m.chg)}">${m.chg >= 0 ? "+" : "−"}${Math.abs(m.chg).toFixed(2)}%</span>`}</div>
-    <div class="muted">${esc(m.label)} (ADX ${m.adx}) · trend ${m.trend} · ${m.vwap} VWAP · day range ${m.range}%${m.squeeze ? " · bands squeezed" : ""}</div></div>`).join("");
+    <div class="muted">${esc(m.label)} (ADX ${m.adx}) · ${m.vwap} VWAP</div></div>`).join("");
   const b = rg.breadth, f = rg.filters;
   const gate = (id, name) => { const x = f[id], on = x.share != null && x.share >= 50; return `<div class="gate"><span class="vchip ${on ? "good" : "few"}">${esc(name)}: ${x.share == null ? "n/a" : x.share + "% of shares pass"}</span><span class="muted">${esc(x.gate)}</span></div>`; };
-  return sec("market", "Market conditions", `as of ${hhmm(rg.asof)}`, `<div class="card">
+  return sec("market", "Market", `as of ${hhmm(rg.asof)}`, `<div class="card">
     ${skip ? `<p class="alarm" style="margin:0 0 12px">New options trades are paused for today (skip day).</p>` : ""}
     <div class="mkgrid">${mk || '<div class="muted">Index data is not available yet.</div>'}</div>
-    ${b.stocks ? `<div class="mini"><div>Shares trending<b>${b.trending}%</b></div><div>Shares above VWAP<b>${b.above_vwap}%</b></div><div>Shares up on the day<b>${b.up_on_day}%</b></div><div>Shares scanned<b>${b.stocks}</b></div></div>` : ""}
-    <p class="subhead">Three strategies only trade in the right conditions. Each checks the filter on the individual share:</p>
-    <div class="gates">${gate("bb_bounce", "Bollinger bounce")}${gate("ema_pullback", "EMA trend pullback")}${gate("ema_cross", "EMA 9/21 crossover")}</div>
-    <p class="note">A strategy whose filter most shares fail will mostly sit out today. This is a description of the conditions, not a forecast.</p></div>`);
+    ${b.stocks ? `<p class="note" style="margin:10px 0 0"><b>${b.trending}%</b> of shares are trending, <b>${b.above_vwap}%</b> trade above VWAP, <b>${b.up_on_day}%</b> are up on the day.</p>` : ""}
+    <details style="margin-top:8px"><summary class="muted" style="cursor:pointer;font-size:.9rem">Which strategies the conditions favour</summary>
+      <div class="gates" style="margin-top:8px">${gate("bb_bounce", "Bollinger bounce")}${gate("ema_pullback", "EMA trend pullback")}${gate("ema_cross", "EMA 9/21 crossover")}</div>
+      <p class="note">Three strategies only trade in the right conditions, checked on each share. This describes the conditions; it is not a forecast.</p></details></div>`);
 }
 
 function watchSection() {
@@ -826,15 +956,22 @@ function groupRow(g) {
     ${isOpen ? `<div class="grp-body">${g.trades.sort((a, b) => (a.iso < b.iso ? 1 : -1)).map(t => tradeRow(t, true)).join("")}</div>` : ""}</div>`;
 }
 
-function openSection(open) {
-  const groups = groupOpen(open), ex = exposure(open), shown = state.openAll ? groups : groups.slice(0, 8);
-  const sl = state.sl && state.sl.status && state.sl.status.cycle_at;
-  return sec("open", "Open positions", sl ? `strategies last checked ${hhmm(sl)}` : "", open.length ? `
-    <div class="expo"><span><b>${open.length}</b> trades in <b>${groups.length}</b> stocks</span><span>Planned risk <b>${rupee(ex.risk)}</b></span><span>Capital in use <b>${rupee(ex.cap)}</b></span>
-      <span class="${cls(ex.pnl)}"><b>${signed(ex.pnl)}</b> so far, before costs</span></div>
-    ${shown.map(groupRow).join("")}${groups.length > 8 ? `<button class="more" data-openall="1">${state.openAll ? "Show fewer" : `Show all ${groups.length} stocks`}</button>` : ""}
-    <p class="note">These are paper positions from ten strategies running at once, so planned risk and capital in use add up every trade; no real account would hold them all. Trades are grouped by stock, with the stocks where the most strategies agree first. Tap a stock for its trades, each with a chart. Agreement is shown for clarity: in the backtest, trades with other strategies already in the same direction did slightly better before costs, but not after them, and not steadily across the period. Stocks with <b>conflicting</b> signals did worst.</p>`
-    : `<div class="empty">No trade is open. A trade appears here the moment any strategy or the options desk triggers one, with its chart, stop, target and the reasons.</div>`);
+function watchingBlock(rows) {
+  const groups = groupOpen(rows), shown = state.openAll ? groups : groups.slice(0, 12), ex = exposure(rows);
+  if (!rows.length) return `<div class="empty">No signal is being watched right now.</div>`;
+  const reasons = {};
+  rows.forEach(t => (t.dec ? t.dec.f : []).forEach(f => { reasons[f] = (reasons[f] || 0) + 1; }));
+  const why = Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([f, n]) => `${n} ${FAIL_WORDS[f]}`).join(" · ");
+  return `<p class="note" style="margin-top:0">These signals triggered but failed at least one of the tool's checks, so it is <b>not recommending them</b>. ${why ? `Why: ${why}.` : ""} They are kept so you can see what the strategies are doing. Tap a stock for the trades and charts.</p>
+    <div class="expo"><span><b>${rows.length}</b> signals in <b>${groups.length}</b> stocks</span><span class="${cls(ex.pnl)}"><b>${signed(ex.pnl)}</b> so far, before costs</span></div>
+    ${shown.map(groupRow).join("")}${groups.length > 12 ? `<button class="more" data-openall="1">${state.openAll ? "Show fewer" : `Show all ${groups.length} stocks`}</button>` : ""}`;
+}
+
+function takeCell(id) {
+  const b = id === "options" ? null : sbOf(id), t = b && b.take;
+  if (!t || !t.n) return '<span class="muted">n/a</span>';
+  const r = t.summary.avg_r;
+  return `${t.n} · <span class="${cls(r)}">${num1(r)}R</span>${t.n < 100 ? ' <span class="muted" title="Too few trades to trust">(few)</span>' : ""}`;
 }
 
 function scoreboard(S) {
@@ -847,10 +984,10 @@ function scoreboard(S) {
       <td>${r.rec.n ? `${r.rec.n} · <span class="${cls(r.rec.net)}">${signed(r.rec.net)}</span>` : '<span class="muted">none yet</span>'}</td>
       <td>${r.bt ? `${r.bt.n} · ${pct(r.bt.win)}` : '<span class="muted">n/a</span>'}</td>
       <td>${r.bt ? `<span class="zb"><i style="${r.bt.net >= 0 ? "left" : "right"}:50%;width:${w}%;background:${r.bt.net >= 0 ? "var(--gain)" : "var(--loss)"}"></i></span><span class="${cls(r.bt.net)}">${signed(r.bt.net)}</span>` : '<span class="muted">n/a</span>'}</td>
-      <td>${spark(r.curve)}</td><td><span class="vchip ${r.level}">${VERDICT[r.level]}</span></td></tr>`;
+      <td>${takeCell(r.id)}</td><td>${spark(r.curve)}</td><td><span class="vchip ${r.level}">${VERDICT[r.level]}</span></td></tr>`;
   }).join("");
   return sec("board", "Which strategy is working?", "Tap any row to drill in", `
-    <div class="card" style="padding:6px 0"><div class="scroll"><table class="cmp"><thead><tr><th>Strategy</th><th>Today</th><th>Live record</th><th>Backtest</th><th>After costs</th><th>Trend</th><th>Verdict</th></tr></thead><tbody>${body}</tbody></table></div></div>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="cmp"><thead><tr><th>Strategy</th><th>Today</th><th>Live record</th><th>Backtest</th><th>After costs</th><th>"Take" trades only</th><th>Trend</th><th>Verdict</th></tr></thead><tbody>${body}</tbody></table></div></div>
     <p class="note">Live record counts closed live trades, after costs for the strategies and before costs for the options desk. Backtest is the same rules on past prices, after estimated costs. The trend line is the backtest's running total.</p>`);
 }
 
@@ -864,6 +1001,7 @@ function logFilter(rows) {
   if (state.logSrc === "strategies") out = out.filter(x => x.sid !== "options");
   else if (state.logSrc !== "all") out = out.filter(x => x.sid === state.logSrc);
   if (state.logStatus === "open") out = out.filter(x => x.status === "OPEN");
+  else if (state.logStatus === "unresolved") out = out.filter(x => x.status === "UNRESOLVED");
   else if (state.logStatus === "won") out = out.filter(x => x.status === "CLOSED" && x.net > 0);
   else if (state.logStatus === "lost") out = out.filter(x => x.status === "CLOSED" && x.net < 0);
   else if (state.logStatus === "taken") out = out.filter(x => takenSet.has(x.id));
@@ -878,7 +1016,7 @@ function logFilter(rows) {
 
 function logSection() {
   const all = allRows(), list = logFilter(all);
-  const sources = [["all", "Everything"], ["options", "Options desk"], ["strategies", "All ten strategies"], ...STRATS.map(s => [s.id, s.name])];
+  const sources = [["all", "Everything"], ["options", "Options desk"], ["strategies", `All ${STRATS.length} strategies`], ...STRATS.map(s => [s.id, s.name])];
   const chip = (k, key, v, label) => `<button class="chip" data-${k}="${v}" aria-pressed="${state[key] === v}">${label}</button>`;
   const closed = list.filter(x => x.status === "CLOSED"), won = closed.filter(x => x.net > 0).length, lost = closed.filter(x => x.net < 0).length;
   const net = closed.reduce((s, x) => s + x.net, 0);
@@ -891,12 +1029,12 @@ function logSection() {
     <div class="filters">
       <label class="muted" style="align-self:center">Source <select id="logsrc" class="ctl">${sources.map(([v, l]) => `<option value="${v}" ${state.logSrc === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
       <input id="logq" class="ctl" type="search" placeholder="Search a stock or index" value="${esc(state.logQ)}" aria-label="Search by stock or index" style="border-radius:999px;min-width:200px">
-      <span style="width:6px"></span>${[["all", "All"], ["open", "Open"], ["won", "Won"], ["lost", "Lost"], ["taken", "Taken by me"]].map(([v, l]) => chip("lstatus", "logStatus", v, l)).join("")}
+      <span style="width:6px"></span>${[["all", "All"], ["open", "Open"], ["unresolved", "Unresolved"], ["won", "Won"], ["lost", "Lost"], ["taken", "Taken by me"]].map(([v, l]) => chip("lstatus", "logStatus", v, l)).join("")}
       <span style="width:6px"></span>${[["all", "All time"], ["7", "Last 7 days"], ["today", "Latest day"]].map(([v, l]) => chip("lperiod", "logPeriod", v, l)).join("")}</div>
     ${mine.length ? `<p class="note" style="margin-top:0">You marked <b>${mine.length}</b> trade${mine.length > 1 ? "s" : ""} as taken (on this device only). ${mineClosed.length ? `Of those, ${mineClosed.length} ${mineClosed.length > 1 ? "have" : "has"} closed for <b class="${cls(mineClosed.reduce((a, x) => a + x.net, 0))}">${signed(mineClosed.reduce((a, x) => a + x.net, 0))}</b> by the tool's numbers.` : ""}</p>` : ""}
     ${all.length ? (list.length ? body : `<div class="empty">No trade matches these filters.</div>`) : `<div class="empty">No trades yet. They appear here as soon as the options desk or any strategy triggers one.</div>`}
     ${list.length ? `<button class="dl" data-logcsv="1">Download these ${list.length} trades (spreadsheet file)</button>` : ""}
-    <p class="note">Strategy results are after estimated costs; options desk results are before costs, so totals that mix the two mix their bases. Strategy trades are kept in detail for 10 days; older ones are folded into running totals.</p>`);
+    <p class="note">Strategy results are after estimated costs; options desk results are before costs, so totals that mix the two mix their bases. Unresolved option positions are retained without fabricated exit prices or realised P&amp;L. Strategy trades are kept in detail for 10 days; older ones are folded into running totals.</p>`);
 }
 
 function downloadLog() {
@@ -946,12 +1084,58 @@ function btTrades(id) {
     <button class="dl" data-csv="${id}">Download these trades (spreadsheet file)</button>`;
 }
 
+function takeBlock(id) {
+  const b = sbOf(id), t = b && b.take;
+  if (!t || !t.n) return `<div class="card" style="margin-bottom:14px"><h3>When this strategy's signals are worth taking</h3><p class="muted" style="margin:6px 0 0">In the backtest none of this strategy's signals passed all four checks, so it would never have been called worth taking.</p></div>`;
+  const s = t.summary, h = t.halves, all = b.summary;
+  return `<div class="card" style="margin-bottom:14px"><h3>When this strategy's signals are worth taking</h3>
+    <p class="muted" style="margin:6px 0 10px">Only ${t.n} of ${all.n.toLocaleString("en-IN")} signals (${(t.n / all.n * 100).toFixed(1)}%) passed all four checks.</p>
+    <div class="mini"><div>Worth-taking trades<b>${t.n}</b></div><div>Win rate<b>${pct(s.win_rate)}</b></div><div>Per trade, after costs<b class="${cls(s.avg_r)}">${num1(s.avg_r)}R</b></div>
+      <div>All signals, per trade<b class="${cls(all.avg_r)}">${num1(all.avg_r)}R</b></div></div>
+    <div class="halves"><div>First half<b class="${cls(h[0].avg_r || 0)}">${h[0].n ? num1(h[0].avg_r) + "R" : "n/a"}</b>${h[0].n || 0} trades</div><div>Second half<b class="${cls(h[1].avg_r || 0)}">${h[1].n ? num1(h[1].avg_r) + "R" : "n/a"}</b>${h[1].n || 0} trades</div></div>
+    ${t.n < 100 ? `<p class="note">Fewer than 100 trades, so this is too few to trust either way.</p>` : ""}</div>`;
+}
+
+function portfolioBacktestBlock() {
+  const p = state.sb && state.sb.portfolio;
+  if (!p || !p.performance) return `<div class="empty">Run the updated strategy backtest to see portfolio-level results.</div>`;
+  const x = p.performance, v = p.chronological_validation || {};
+  const reasons = Object.entries(x.rejection_reasons || {}).sort((a, b) => b[1] - a[1]);
+  const metric = (label, value, tone = "") => `<div>${label}<b class="${tone}">${value}</b></div>`;
+  const fmt = n => n == null ? "n/a" : (typeof n === "number" ? n.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : n);
+  const split = ["train", "validation", "test"].map(k => {
+    const z = v[k] || {}, m = z.summary || {};
+    return `<div class="card"><h3>${k[0].toUpperCase() + k.slice(1)}</h3><div class="muted">${z.sessions || 0} sessions · ${z.trades || 0} trades</div><b class="${cls(m.pnl || 0)}">${m.pnl == null ? "n/a" : signed(m.pnl)}</b><div class="muted">PF ${fmt(m.profit_factor)} · win ${pct(m.win_rate)}</div></div>`;
+  }).join("");
+  return `<div class="card" style="margin-bottom:14px"><h3>Portfolio after admission and risk limits</h3>
+    <p class="muted" style="margin:6px 0 10px">Only risk-approved TAKE signals are counted here. Rejected candidates remain visible in the individual strategy research tabs.</p>
+    <div class="mini">${metric("Candidates", fmt(x.candidates))}${metric("Risk-approved", fmt(x.approved))}${metric("Rejected", fmt(x.rejected))}${metric("Closed", fmt(x.closed))}
+      ${metric("Win rate", pct(x.win_rate))}${metric("Profit factor", fmt(x.profit_factor))}${metric("Net P&L", signed(x.net_pnl), cls(x.net_pnl))}${metric("Max drawdown", signed(-Math.abs(x.max_drawdown)), "loss")}</div>
+    ${reasons.length ? `<p class="note">Most common rejection reasons: ${reasons.map(([k, n]) => `${esc(k.replaceAll("_", " "))} (${n})`).join(" · ")}</p>` : ""}
+    <h3 style="margin-top:16px">Chronological diagnostic split</h3><div class="two">${split}</div>
+    <p class="note">The split is a chronological reporting diagnostic, not a parameter-optimised or untouched holdout. It should not be treated as proof of future performance.</p>
+  </div>`;
+}
+
+function portfolioLiveBlock() {
+  const p = state.sl && state.sl.portfolio_today;
+  if (!p) return "";
+  const fmt = n => n == null ? "n/a" : (typeof n === "number" ? n.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : n);
+  return `<div class="card"><h3>Live strategy portfolio gate</h3><div class="mini">
+    <div>Approved<b>${fmt(p.approved)}</b></div><div>Filtered<b>${fmt(p.rejected)}</b></div>
+    <div>Open in strategy desk<b>${fmt(p.open)}</b></div><div>Open across both engines<b>${fmt(p.shared_open_positions ?? p.open)}</b></div>
+    <div>Shared open risk<b>${rupee(p.shared_open_risk ?? 0)}</b></div><div>Closed<b>${fmt(p.closed)}</b></div>
+    <div>Strategy net P&L<b class="${cls(p.net_pnl)}">${signed(p.net_pnl)}</b></div><div>Shared realised P&L<b class="${cls(p.shared_realized_pnl || 0)}">${signed(p.shared_realized_pnl || 0)}</b></div>
+    <div>Max drawdown<b>${signed(-Math.abs(p.max_drawdown || 0))}</b></div>
+    </div><p class="note">This is a paper portfolio. Both engines share position-count, aggregate-risk and realised-daily-loss ceilings; the strategy desk also has stricter internal limits.</p></div>`;
+}
+
 function sheetHtml() {
   const id = state.sheet;
   if (!id) return "";
   const m = srcMeta(id), isOpt = id === "options", st = srcStats(id);
   const btBody = isOpt ? (state.bt ? backtestBlock(state.bt) : `<div class="empty">No options backtest yet. Run the Backtest workflow from the Actions tab.</div>`)
-    : `${btBlock(id)}${btTrades(id) ? `<h3 class="sec">Backtest trades</h3>${btTrades(id)}` : ""}`;
+    : `${takeBlock(id)}${btBlock(id)}${btTrades(id) ? `<h3 class="sec">Backtest trades</h3>${btTrades(id)}` : ""}`;
   return `<div class="veil" data-close="1"></div>
     <aside class="sheet" role="dialog" aria-modal="true" aria-label="${esc(m.name)}">
       <div class="sheet-top"><div><div class="muted" style="font-size:.82rem">${esc(m.source)}</div><div class="sheet-title">${esc(m.name)} <span class="vchip ${st.level}">${VERDICT[st.level]}</span></div></div>
@@ -979,7 +1163,30 @@ function closeSheet() {
   if (state.sheetFrom && document.contains(state.sheetFrom)) state.sheetFrom.focus();
 }
 
-const NAV = [["market", "Market"], ["watch", "Watching"], ["open", "Open positions"], ["board", "Strategies"], ["log", "Trades"], ["news", "News"]];
+const NAV = [["take", "Worth taking"], ["mine", "My trades"], ["movers", "Trend setters"], ["market", "Market"], ["more", "More"]];
+
+function freshness() {
+  const el = $("fresh"), sl = state.sl && state.sl.status;
+  if (!el) return;
+  if (!LIVE) { el.innerHTML = `<span class="muted">Preview data, so it does not refresh.</span>`; return; }
+  const bar = sl && sl.bar_end ? clock24(sl.bar_end.slice(11, 16)) : null;
+  const age = sl && sl.cycle_at ? (Date.now() - new Date(sl.cycle_at).getTime()) / 60e3 : null;
+  const stale = age != null && age > 9 && inHours();
+  el.innerHTML = `${bar ? `Prices as of the <b>${bar}</b> candle · ` : ""}page updated <b>${hhmm(new Date(state.loadedAt + 19800e3).toISOString())}</b> · refreshes every 2 minutes (next in <span id="cd">2:00</span>) · <button class="chip" data-refresh="1" ${state.loading ? "disabled" : ""}>${state.loading ? "Refreshing…" : "Refresh now"}</button>
+    ${stale ? `<span class="loss"> Strategy data is ${Math.round(age)} minutes old.</span>` : ""}`;
+}
+function tickCountdown() {
+  const c = $("cd");
+  if (!c || !state.loadedAt) return;
+  const left = Math.max(0, Math.round((state.loadedAt + REFRESH_MS - Date.now()) / 1000));
+  c.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+}
+async function refresh() {
+  if (state.loading) return;
+  state.loading = true; freshness();
+  try { await load(); state.loadedAt = Date.now(); } finally { state.loading = false; }
+  render();
+}
 
 function render() {
   const keep = document.querySelector(".sheet-body"), sy = keep ? keep.scrollTop : 0;
@@ -987,23 +1194,39 @@ function render() {
   if (!state.feed && !state.sl && !state.sb) {
     $("app").innerHTML = state.error === "none-yet"
       ? `<p class="lead">Nothing to show yet.</p><p class="sublead">The engine has not run for the first time. Open your GitHub page, go to Actions, choose Trade engine, and press Run workflow. This page fills in a minute after it starts.</p>`
-      : `<p class="lead">${state.error === "unreachable" ? "Could not reach the trade data." : "Loading…"}</p><p class="sublead">${state.error === "unreachable" ? "Check your internet connection. This page tries again by itself every 90 seconds." : ""}</p>`;
+      : `<p class="lead">${state.error === "unreachable" ? "Could not reach the trade data." : "Loading…"}</p><p class="sublead">${state.error === "unreachable" ? "Check your internet connection. This page tries again by itself every 2 minutes." : ""}</p>`;
     $("sheet").innerHTML = "";
+    freshness();
     return;
   }
   ROWS.clear();
-  const S = SOURCES.map(s => srcStats(s.id)), open = allRows().filter(r => r.status === "OPEN"), trig = S.reduce((a, s) => a + s.today.n, 0);
-  const lead = open.length ? `${open.length} trade${open.length > 1 ? "s" : ""} open right now.` : hd.waitingLogin ? "Waiting for your Fyers login." : hd.running ? "No open trade. Watching for a setup."
-    : hd.missing ? "The engine is not checking in." : "Markets are resting. Nothing open.";
+  const rows = allRows(), open = rows.filter(r => r.status === "OPEN");
+  const takeOpen = open.filter(t => gradeOf(t) === "take").sort((a, b) => (a.iso < b.iso ? 1 : -1));
+  const todaySl = state.sl && state.sl.date;
+  const takeEnded = rows.filter(t => t.status === "CLOSED" && gradeOf(t) === "take" && t.date === (t.opt ? todayOf("options") : todaySl)).sort((a, b) => (a.iso < b.iso ? 1 : -1));
+  const watchOpen = open.filter(t => gradeOf(t) !== "take");
+  const S = SOURCES.map(s => srcStats(s.id)), trig = S.reduce((a, s) => a + s.today.n, 0);
+  const mineOpen = open.filter(t => takenSet.has(t.id)).length;
+  const lead = takeOpen.length ? `${takeOpen.length} trade${takeOpen.length > 1 ? "s" : ""} worth taking right now.` : hd.waitingLogin ? "Waiting for your Fyers login."
+    : hd.missing ? "The engine is not checking in." : hd.running ? "Nothing worth taking right now." : "Markets are resting.";
+  const genuine = ((state.sl && state.sl.movers && state.sl.movers.list) || []).filter(m => m.genuine).length;
   $("app").innerHTML = `<nav class="jump" aria-label="Sections">${NAV.map(([id, l]) => `<button class="chip" data-jump="${id}">${l}</button>`).join("")}</nav>
     <p class="lead">${lead}</p>
-    <p class="sublead">${trig ? `${trig} trade${trig > 1 ? "s" : ""} triggered today` : "No trade triggered today"} across the options desk and ten strategies.</p>
-    ${kpis(S, hd, open)}${marketSection()}${watchSection()}${openSection(open)}${scoreboard(S)}${logSection()}${newsSection()}
-    ${(state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.log || []).length ? `<details class="log"><summary>Today’s options-desk activity log</summary><ol class="timeline">${state.feed.status.day.log.slice().reverse().map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol></details>` : ""}
-    ${state.sb ? `<details class="assume card"><summary>What the strategy backtests assume</summary><ul>${state.sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details>` : ""}`;
+    <p class="sublead">${trig} signals triggered today across the options desk and ${STRATS.length} strategies. The tool is recommending ${takeOpen.length + takeEnded.length} of them. ${genuine ? `${genuine} genuine trend setter${genuine > 1 ? "s" : ""} on the move.` : ""}${mineOpen ? ` You are in ${mineOpen} trade${mineOpen > 1 ? "s" : ""}.` : ""}</p>
+    ${takeSection(takeOpen, takeEnded, watchOpen.length)}${mineSection(rows)}${moversSection(rows)}${marketSection()}
+    <section id="more"><div class="sec-head"><h2>More</h2><span class="muted" style="font-size:.88rem">everything the tool is doing, if you want to look</span></div>
+      ${det("watching", "Signals the tool is only watching", `${watchOpen.length} open, not recommended`, () => watchingBlock(watchOpen))}
+      ${det("board", "Which strategy is working?", `${SOURCES.length} strategies, backtest and live`, () => scoreboard(S))}
+      ${det("portfolio", "Portfolio risk and validation", "What survives overlapping signals and risk limits", () => `${portfolioLiveBlock()}${state.sb ? portfolioBacktestBlock() : `<div class="empty">The strategy backtest has not reported a portfolio result yet.</div>`}`)}
+      ${det("watch", "Stock watchlist and opening ranges", "", () => watchSection())}
+      ${det("log", "Every trade", `${rows.length} in the log`, () => logSection())}
+      ${det("news", "In the news", `${newsList().length} headlines`, () => newsSection())}
+      ${(state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.log || []).length ? det("alog", "Options desk activity log", "", () => `<ol class="timeline">${state.feed.status.day.log.slice().reverse().map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>`) : ""}
+      ${state.sb ? det("assume", "What the backtests assume", "", () => `<ul class="why">${state.sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`) : ""}</section>`;
   $("sheet").innerHTML = sheetHtml();
   const nb = document.querySelector(".sheet-body"); if (nb) nb.scrollTop = sy;
   document.documentElement.style.overflow = state.sheet ? "hidden" : "";
+  freshness(); tickCountdown();
   hydrateCharts();
 }
 const rerender = () => { const y = scrollY; render(); scrollTo(0, y); };
@@ -1012,6 +1235,8 @@ document.addEventListener("click", e => {
   const b = e.target.closest("button, tr[data-sheet], [data-close], input[data-took]");
   if (!b) return;
   if (b.dataset.close) { closeSheet(); return; }
+  if (b.dataset.refresh) { refresh(); return; }
+  if (b.dataset.ended) { state.showEnded = !state.showEnded; rerender(); return; }
   if (b.dataset.sheet) { openSheet(b.dataset.sheet, b.tagName === "BUTTON" ? b : null); return; }
   if (b.dataset.jump) { const el = $(b.dataset.jump); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   if (b.dataset.group) { const k = b.dataset.group; state.openGroups.has(k) ? state.openGroups.delete(k) : state.openGroups.add(k); rerender(); return; }
@@ -1039,6 +1264,10 @@ document.addEventListener("input", e => {
   const pos = e.target.selectionStart; rerender();
   const box = $("logq"); if (box) { box.focus(); box.setSelectionRange(pos, pos); }
 });
+document.addEventListener("toggle", e => {          // remember which blocks are open, so a refresh does not close them
+  const d = e.target;
+  if (d.dataset && d.dataset.d) { if (d.open) state.det.add(d.dataset.d); else state.det.delete(d.dataset.d); if (d.open && !d.querySelector(".blk-body")) rerender(); }
+}, true);
 window.addEventListener("hashchange", () => { const s = hashSheet(); if (s !== state.sheet) { state.sheet = s; state.sshown = 25; render(); } });
 
 function downloadBt() {
@@ -1072,8 +1301,12 @@ function loginHelper() {
 
 
 (async function start() {
-  await load(); render(); loginHelper();
-  if (LIVE) setInterval(async () => { await load(); render(); }, 90000);
+  await load(); state.loadedAt = Date.now(); render(); loginHelper();
+  if (LIVE) {
+    setInterval(refresh, REFRESH_MS);
+    setInterval(tickCountdown, 1000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - state.loadedAt > 60e3) refresh(); });   // catch up when you return to the tab
+  }
 })();
 </script>
 </body>
