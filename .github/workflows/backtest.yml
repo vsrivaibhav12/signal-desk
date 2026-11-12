@@ -1,0 +1,66 @@
+name: Backtest
+
+# Run by hand from the Actions tab: choose "Backtest", press "Run workflow".
+#   quick = last ~60 days from a free source, no Fyers login, takes about 3 minutes
+#   fyers = longer history from your Fyers account (needs login), takes 30 to 90 minutes
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "quick (free source, about 60 days) or fyers (your Fyers account, longer)"
+        type: choice
+        options: [quick, fyers]
+        default: quick
+      days:
+        description: "How many calendar days back (only used for fyers)"
+        default: "180"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backtest
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open the data folder
+        run: |
+          git config --global user.name "signal-desk"
+          git config --global user.email "signal-desk@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" data > /dev/null; then
+            git clone --quiet --depth 3 --branch data --single-branch "$REMOTE" _data
+          else
+            mkdir _data && cd _data && git init --quiet -b data && git remote add origin "$REMOTE"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install --quiet -r requirements.txt
+
+      - name: Run the backtest
+        env:
+          FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
+          FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
+          FYERS_PIN: ${{ secrets.FYERS_PIN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+          SOURCE: ${{ inputs.source }}
+          DAYS: ${{ inputs.days }}
+        run: |
+          if [ "$SOURCE" = "fyers" ]; then
+            python -m engine.backtest --source fyers --days "$DAYS"
+          else
+            python -m engine.backtest --source yahoo
+          fi

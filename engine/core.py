@@ -12,6 +12,7 @@ from datetime import timedelta
 from . import clock, rules
 from .clock import at, ts, clock_text
 from .fyers import AuthError
+from .news import NewsDesk
 
 WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
 NIFTY_SPOT = "NSE:NIFTY50-INDEX"
@@ -45,7 +46,7 @@ def score(trades):
 
 
 class Engine:
-    def __init__(self, cfg, broker, master, notify, feed):
+    def __init__(self, cfg, broker, master, notify, feed, news=None):
         self.cfg = cfg
         self.broker = broker
         self.master = master
@@ -54,8 +55,10 @@ class Engine:
         self.dirty = False
         self._cache = {}
         here = os.path.dirname(__file__)
-        with open(os.path.join(here, "nifty100.txt"), encoding="utf-8") as f:
-            self.universe = [x.strip() for x in f if x.strip() and not x.startswith("#")]
+        with open(os.path.join(here, "nifty200.txt"), encoding="utf-8") as f:
+            pairs = [x.strip().split("|") for x in f if x.strip() and not x.startswith("#")]
+        self.universe = [p[0] for p in pairs]
+        self.news = news if news is not None else NewsDesk([(p[0], p[-1]) for p in pairs])
 
     # ── small helpers ────────────────────────────────────────
     @property
@@ -122,6 +125,8 @@ class Engine:
     def tick(self, now):
         self._cache = {}
         self._roll_day(now)
+        self.day.setdefault("news", [])
+        self.day.setdefault("newsdesk", {"errors": 0, "last": 0})
         for m in self.cfg["markets"]:
             if not m.get("enabled", True):
                 continue
@@ -129,8 +134,36 @@ class Engine:
             self._safe(lambda: self._tick_market(m, st, now), st, m["name"], now)
         if self.cfg["stocks"].get("enabled"):
             S = self.day["stocks"]
-            self._safe(lambda: self._tick_stocks(now), S, "Nifty 100 stocks", now)
+            if (self.cfg.get("news") or {}).get("enabled", True):
+                self._safe(lambda: self._tick_news(now), self.day["newsdesk"], "the news feeds", now)
+            self._safe(lambda: self._tick_stocks(now), S, "Nifty 200 stocks", now)
         self._refresh_status(now)
+
+    # ── news ─────────────────────────────────────────────────
+    def _tick_news(self, now):
+        nd = self.day["newsdesk"]
+        today = now.date()
+        if not (at(today, "08:40") <= now <= at(today, "15:10")) or ts(now) - nd.get("last", 0) < 1200:
+            return
+        nd["last"] = ts(now)
+        have = {(i["symbol"], i["title"][:50].lower()) for i in self.day["news"]}
+        fresh = [i for i in self.news.refresh() if (i["symbol"], i["title"][:50].lower()) not in have]
+        if fresh:
+            self.day["news"] = sorted(self.day["news"] + fresh, key=lambda x: x["t"], reverse=True)[:80]
+            self.dirty = True
+        if not nd.get("briefed") and self.day["news"] and now >= at(today, "08:50"):
+            nd["briefed"] = True
+            seen, lines = set(), []
+            for i in sorted(self.day["news"], key=lambda x: x["tag"] != "Results"):
+                if i["symbol"] not in seen and len(lines) < 10:
+                    seen.add(i["symbol"])
+                    lines.append(f"• <b>{i['name']}</b> ({i['tag']}): {i['title']} [{i['source']}]")
+            self.notify("📰 <b>Stocks in the news today</b>\n" + "\n".join(lines) +
+                        "\n\nThese are only headlines. A stock still has to pass the scan and the rules to become a trade.")
+            self._log(now, f"News scan: {len(seen)} Nifty 200 stocks are in today's headlines.")
+
+    def _news_for(self, symbol):
+        return [i for i in self.day["news"] if i["symbol"] == symbol][:2]
 
     def _roll_day(self, now):
         today = now.date().isoformat()
@@ -141,7 +174,8 @@ class Engine:
         stocks = new_state()
         stocks.update({"watch": [], "scanned": False, "units": {}})
         status["day"] = {"date": today, "skip": today in [str(d) for d in self.cfg.get("skip_dates") or []],
-                         "markets": {}, "stocks": stocks, "log": []}
+                         "markets": {}, "stocks": stocks, "log": [], "news": [],
+                         "newsdesk": {"errors": 0, "last": 0}}
         # Anything still open from an earlier day was missed while the tool was offline.
         for t in stale:
             self._close(t, None, None, now, t.get("last_price", t["entry_price"]),
@@ -194,7 +228,7 @@ class Engine:
         }
         self._tick_unit(unit, st, st, now)
 
-    # ── Nifty 100 stocks ─────────────────────────────────────
+    # ── Nifty 200 stocks ─────────────────────────────────────
     def _tick_stocks(self, now):
         s = self.cfg["stocks"]
         S = self.day["stocks"]
@@ -204,7 +238,7 @@ class Engine:
         if S["done"] and not has_open:
             return
         if now < r1 + timedelta(seconds=20):
-            S["note"] = f"Scans the Nifty 100 at {clock_text(r1)}"
+            S["note"] = f"Scans the Nifty 200 at {clock_text(r1)}"
             return
         if not S["scanned"]:
             if now > e1:
@@ -243,8 +277,13 @@ class Engine:
                 if abs(chg) >= s["min_move_pct"]:
                     movers.append((sym, chg))
         movers.sort(key=lambda x: -abs(x[1]))
+        moves = {sym.split(":")[1][:-3]: round(chg, 2) for sym, chg in
+                 ((s_, (q["lp"] - q["prev_close"]) / q["prev_close"] * 100) for s_, q in quotes.items()
+                  if q.get("lp") and q.get("prev_close"))}
+        for i in self.day["news"]:
+            i["chg"] = moves.get(i["symbol"])
         picks = []
-        for sym, chg in movers[:25]:  # strongest first, so the first to pass are the strongest
+        for sym, chg in movers[:40]:  # strongest first, so the first to pass are the strongest
             first = {}
             for c in self.broker.history(sym, "15", today - timedelta(days=25), today):
                 dt = clock.from_ts(c[0])
@@ -256,17 +295,29 @@ class Engine:
                 continue
             mult = today_vol / (sum(past) / len(past))
             if mult >= s["volume_multiple"]:
-                picks.append({"symbol": sym, "name": sym.split(":")[1].replace("-EQ", ""),
-                              "chg": round(chg, 2), "volx": round(mult, 1)})
+                name = sym.split(":")[1][:-3]
+                news = self._news_for(name)
+                if not news and (self.cfg.get("news") or {}).get("enabled", True):
+                    try:
+                        news = self.news.for_stock(name)
+                        for i in news:
+                            i["chg"] = round(chg, 2)
+                        self.day["news"] = (news + self.day["news"])[:80]
+                    except Exception as e:
+                        print("News lookup skipped for", name, type(e).__name__)
+                picks.append({"symbol": sym, "name": name, "chg": round(chg, 2), "volx": round(mult, 1),
+                              "news": [{k: i[k] for k in ("title", "source", "tag", "link")} for i in news[:2]]})
             if len(picks) >= s["watchlist_size"]:
                 break
         S["watch"], S["scanned"] = picks, True
         if not picks:
-            return self._finish(S, now, f"Stocks: no Nifty 100 stock passed today's scan (needs a "
+            return self._finish(S, now, f"Stocks: no Nifty 200 stock passed today's scan (needs a "
                                         f"{num(s['min_move_pct'])}% move on {num(s['volume_multiple'])}x usual volume).")
         lines = [f"• {p['name']}: {'up' if p['chg'] > 0 else 'down'} {abs(p['chg'])}%, volume {p['volx']}x usual"
+                 + (f"\n   📰 {p['news'][0]['title']} [{p['news'][0]['source']}]" if p["news"] else "")
                  for p in picks]
-        self._log(now, "Stock watchlist: " + "; ".join(x[2:] for x in lines))
+        self._log(now, "Stock watchlist: " + "; ".join(
+            f"{p['name']} {'up' if p['chg'] > 0 else 'down'} {abs(p['chg'])}% on {p['volx']}x volume" for p in picks))
         self.notify("👀 <b>Stock watchlist for today</b>\n" + "\n".join(lines) +
                     "\nI will alert you if any of them breaks out with the market's support.")
 
@@ -313,9 +364,9 @@ class Engine:
         if self.day["skip"]:
             st["note"] = "Paused for today"
             return
-        if disc["losses"] >= g["stop_after_losses"]:
+        if g.get("stop_after_losses") and disc["losses"] >= g["stop_after_losses"]:
             return self._finish(st, now, f"{u.get('group', u['name'])}: stopped for the day after a losing trade.")
-        if disc["trades"] >= g["max_trades_per_day"]:
+        if g.get("max_trades_per_day") and disc["trades"] >= g["max_trades_per_day"]:
             return self._finish(st, now, f"{u.get('group', u['name'])}: daily limit of {g['max_trades_per_day']} trades reached.")
 
         five = [c for c in rules.five_minute(sig, now_ts)
@@ -383,6 +434,8 @@ class Engine:
             if w:
                 reasons.append(f"The stock made today's watchlist: {'up' if w['chg'] > 0 else 'down'} "
                                f"{abs(w['chg'])}% with {w['volx']}x its usual early volume.")
+                for n in (w.get("news") or [])[:1]:
+                    reasons.append(f"It is in the news today ({n['tag']}): “{n['title']}” [{n['source']}].")
         if u["max_range_pct"]:
             reasons.append(f"The opening range was {R['pct']:.2f}% wide, inside the {num(u['max_range_pct'])}% limit.")
         return not fails, reasons, fails, v
@@ -403,6 +456,7 @@ class Engine:
             "stop_underlying": R["mid"], "target_underlying": target, "exit_by": u["exit_by"],
             "reasons": reasons, "status": "OPEN", "phase": "initial", "events": [], "fills": [],
             "entry_time": now.isoformat(timespec="seconds"), "entry_min": ts(now) // 60 * 60,
+            "news": (u.get("scan") or {}).get("news") or [],
         }
         edge = "below" if up else "above"
         if u["trade_as"] == "option":
@@ -490,18 +544,18 @@ class Engine:
         if tr["phase"] == "initial":
             if tr["kind"] == "option" and price <= tr["stop_price"]:
                 return self._close(tr, st, disc, now, price,
-                                   f"Stop-loss hit: the option fell {num(tr['stop_pct'])}% to ₹{num(price)}")
+                                   f"Stop-loss hit: the option fell {num(tr['stop_pct'])}% to ₹{num(price)}", "STOP")
             if five and d * (five[-1][4] - tr["stop_underlying"]) < 0:
                 return self._close(tr, st, disc, now, price,
                                    f"Stop-loss hit: {name} closed a 5-minute candle back past the middle "
-                                   f"of the range ({num(tr['stop_underlying'])})")
+                                   f"of the range ({num(tr['stop_underlying'])})", "STOP")
             hit = since and (max(c[2] for c in since) >= tr["target_underlying"] if d == 1
                              else min(c[3] for c in since) <= tr["target_underlying"])
             if hit:
                 half = tr["units"] // 2
                 if half < 1:
                     return self._close(tr, st, disc, now, price,
-                                       f"Target reached: {name} touched {num(tr['target_underlying'])}")
+                                       f"Target reached: {name} touched {num(tr['target_underlying'])}", "TARGET")
                 self._fill(tr, now, half, price, "Target reached, half booked")
                 tr["phase"] = "trail"
                 tr["t1_min"] = now_ts // 60 * 60
@@ -513,18 +567,35 @@ class Engine:
                             f"Move your stop to the entry price (₹{num(tr['entry_price'])}). "
                             f"I will trail the rest along the average price line.")
                 return
+            ee = self.cfg.get("early_exit") or {}
+            if ee.get("enabled"):
+                n = int(ee.get("closes_back_inside_range") or 0)
+                if n and len(five) >= n and all((c[4] < tr["range_high"]) if d == 1 else (c[4] > tr["range_low"])
+                                                for c in five[-n:]):
+                    return self._close(tr, st, disc, now, price,
+                                       f"Early exit: the breakout failed, with {n} five-minute closes "
+                                       f"back inside the opening range", "EARLY")
+                if ee.get("vwap_break"):
+                    vw5 = [c for c in rules.five_minute(vw, now_ts) if c[0] >= tr["entry_min"]]
+                    v = rules.vwap(vw, vw5[-1][0] + 300) if vw5 else None
+                    if v is not None and d * (vw5[-1][4] - v) < 0:
+                        return self._close(tr, st, disc, now, price,
+                                           "Early exit: price closed on the wrong side of the day's "
+                                           "average price line, so the trend support is gone", "EARLY")
         else:
             if tr["side"] * (price - tr["entry_price"]) <= 0:
-                return self._close(tr, st, disc, now, price, "Rest closed at the entry price after the target")
+                return self._close(tr, st, disc, now, price, "Rest closed at the entry price after the target",
+                                   "TRAIL")
             vw5 = [c for c in rules.five_minute(vw, now_ts) if c[0] >= tr["t1_min"]]
             if vw5:
                 v = rules.vwap(vw, vw5[-1][0] + 300)
                 if v is not None and d * (vw5[-1][4] - v) < 0:
                     return self._close(tr, st, disc, now, price,
-                                       "Trailing exit: price closed back across the day's average price line")
+                                       "Trailing exit: price closed back across the day's average price line",
+                                       "TRAIL")
         x = at(now.date(), tr["exit_by"])
         if now >= x:
-            return self._close(tr, st, disc, now, price, f"Time exit at {clock_text(x)}")
+            return self._close(tr, st, disc, now, price, f"Time exit at {clock_text(x)}", "TIME")
         st["note"] = "In a trade"
 
     def _fill(self, tr, now, units, price, reason):
@@ -532,7 +603,7 @@ class Engine:
         tr["fills"].append({"t": now.isoformat(timespec="seconds"), "qty": qty, "price": price, "reason": reason})
         tr["remaining"] -= qty
 
-    def _close(self, tr, st, disc, now, price, reason):
+    def _close(self, tr, st, disc, now, price, reason, kind="OTHER"):
         if tr["remaining"] > 0:
             self._fill(tr, now, tr["remaining"] // tr["lot_size"], price, reason)
         pnl = sum(tr["side"] * (f["price"] - tr["entry_price"]) * f["qty"] for f in tr["fills"])
@@ -540,7 +611,7 @@ class Engine:
         tr.update({
             "status": "CLOSED", "exit_time": now.isoformat(timespec="seconds"),
             "exit_price": round(sum(f["price"] * f["qty"] for f in tr["fills"]) / qty, 2),
-            "exit_reason": reason, "pnl": round(pnl, 2), "open_pnl": None, "last_price": price,
+            "exit_reason": reason, "exit_type": kind, "pnl": round(pnl, 2), "open_pnl": None, "last_price": price,
             "pnl_pct": round(pnl / (tr["entry_price"] * qty) * 100, 2) if tr["entry_price"] else 0,
             "r": round(pnl / tr["risk_amount"], 2) if tr.get("risk_amount") else 0,
             "result": "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "FLAT",
@@ -574,8 +645,9 @@ class Engine:
                 for w in S["watch"]:
                     tiles.append(self._tile(w["name"], w["name"], "Stocks", S["units"].get(w["symbol"], {}), now))
             else:
-                tiles.append({"id": "STOCKS", "name": "Nifty 100 stocks", "book": "Stocks",
+                tiles.append({"id": "STOCKS", "name": "Nifty 200 stocks", "book": "Stocks",
                               "note": S.get("note") or "", "done": S.get("done", False)})
+        status["news"] = self.day.get("news", [])[:40]
         status["tiles"] = tiles
         status["updated"] = now.isoformat(timespec="seconds")
         status["score"] = score(self.trades)

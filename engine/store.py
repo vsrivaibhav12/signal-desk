@@ -49,14 +49,41 @@ class Store:
         with open(self._path("secure.bin"), "wb") as f:
             f.write(self._fernet.encrypt(json.dumps(data).encode()))
 
-    def publish(self):
-        """Push the data folder to the 'data' branch. One commit per day keeps it small."""
+    def remote_status(self):
+        """The status last published by any run, read fresh from GitHub."""
+        if not os.path.isdir(self._path(".git")):
+            return None
+        run = lambda *a: subprocess.run(["git", *a], cwd=self.folder, capture_output=True, text=True)
+        if run("fetch", "--quiet", "--depth", "1", "origin", "data").returncode != 0:
+            return None
+        shown = run("show", "FETCH_HEAD:feed.json")
+        try:
+            return json.loads(shown.stdout).get("status") if shown.returncode == 0 else None
+        except ValueError:
+            return None
+
+    def publish(self, own=None):
+        """Push the data folder to the 'data' branch. One commit per day keeps it small.
+
+        own: the files this program is allowed to overwrite. Every other file is first
+        refreshed from what is already online, so one program can never wipe out another's
+        work (for example a backtest overwriting the live trade log).
+        """
         if not os.path.isdir(self._path(".git")):
             return
 
-        def git(*args):
-            return subprocess.run(["git", *args], cwd=self.folder, capture_output=True, text=True)
+        def git(*args, raw=False):
+            return subprocess.run(["git", *args], cwd=self.folder, capture_output=True, text=not raw)
 
+        if own is not None and git("fetch", "--quiet", "--depth", "1", "origin", "data").returncode == 0:
+            names = git("ls-tree", "-r", "--name-only", "FETCH_HEAD").stdout.split("\n")
+            for name in filter(None, names):
+                if name in own or "/" in name:
+                    continue
+                blob = git("show", f"FETCH_HEAD:{name}", raw=True)
+                if blob.returncode == 0:
+                    with open(self._path(name), "wb") as f:
+                        f.write(blob.stdout)
         git("add", "-A")
         if not git("status", "--porcelain").stdout.strip():
             return

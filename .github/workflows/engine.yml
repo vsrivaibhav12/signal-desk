@@ -1,21 +1,19 @@
 name: Trade engine
 
-# Starts by itself every weekday: 8:45 am for the morning markets and
-# 5:40 pm for crude oil and gold (India time). You can also start it by hand
-# from the Actions tab with the "Run workflow" button.
+# GitHub's timer knocks every 10 minutes during market hours (India time:
+# about 8:30 am to 3:30 pm and 4:30 pm to 11:30 pm, weekdays). If the engine is
+# already awake, the new run leaves within a few seconds. If the engine has
+# stopped for any reason, the new run takes over from where it left off.
+# You can also start it by hand from the Actions tab with "Run workflow".
 on:
   schedule:
-    - cron: "15 3 * * 1-5"
-    - cron: "10 12 * * 1-5"
+    - cron: "*/10 3-9 * * 1-5"
+    - cron: "*/10 11-17 * * 1-5"
   workflow_dispatch:
 
 permissions:
   contents: write
   actions: write
-
-concurrency:
-  group: trade-engine
-  cancel-in-progress: false
 
 jobs:
   run:
@@ -37,14 +35,36 @@ jobs:
             mkdir _data && cd _data && git init --quiet -b data && git remote add origin "$REMOTE"
           fi
 
+      # A quick look before installing anything: if another run checked in
+      # within the last 5 minutes, this one has nothing to do.
+      - name: Is the engine already awake?
+        id: awake
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, datetime, os
+          go = "yes"
+          try:
+              s = json.load(open("_data/feed.json"))["status"]
+              age = (datetime.datetime.now(datetime.timezone.utc)
+                     - datetime.datetime.fromisoformat(s["heartbeat"])).total_seconds()
+              if s.get("running") and age < 300 and os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+                  go = "no"
+          except Exception:
+              pass
+          print(f"go={go}")
+          PY
+
       - uses: actions/setup-python@v5
+        if: steps.awake.outputs.go == 'yes'
         with:
           python-version: "3.12"
           cache: pip
 
-      - run: pip install --quiet -r requirements.txt
+      - if: steps.awake.outputs.go == 'yes'
+        run: pip install --quiet -r requirements.txt
 
       - name: Run the engine
+        if: steps.awake.outputs.go == 'yes'
         env:
           FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
           FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}

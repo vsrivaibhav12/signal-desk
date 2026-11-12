@@ -8,9 +8,19 @@ general:
   lots: 1                    # lots per options trade. With 1 lot the whole trade exits at the target.
                              # With 2 or more, half is booked at the target and the rest is trailed.
   strike: ATM                # ATM = at-the-money, ITM1 = one strike in-the-money
-  max_trades_per_day: 2      # per market
-  stop_after_losses: 1       # stop a market for the day after this many losing trades
+  max_trades_per_day: 0      # per market. 0 = no limit, take every trade that triggers
+  stop_after_losses: 0       # stop a market for the day after this many losing trades. 0 = never stop
   max_range_pct: 0.6         # skip the day if the opening range is wider than this % of price
+
+# Early exit: leave a trade before the stop-loss when the pattern that triggered it breaks.
+early_exit:
+  enabled: true
+  closes_back_inside_range: 2   # exit after this many 5-minute closes back inside the opening range. 0 = off
+  vwap_break: true              # exit on a 5-minute close on the wrong side of the day's average price line
+
+# News: scans free headlines for Nifty 200 stocks and shows why a stock may be moving.
+news:
+  enabled: true
 
 # Days on which the tool should not take new trades (RBI policy, Budget, etc).
 # Format: "YYYY-MM-DD". You can also just send the word  skip  to your Telegram bot on the day.
@@ -60,6 +70,34 @@ markets:
     min_days_to_expiry: 3    # no trades on expiry day or the two days before it
     near_expiry: skip
 
+  - id: FINNIFTY
+    name: Fin Nifty
+    enabled: true
+    kind: index
+    spot: "NSE:FINNIFTY-INDEX"
+    root: FINNIFTY
+    master: NSE_FO
+    range: ["09:15", "09:45"]
+    entry: ["09:45", "11:30"]
+    exit_by: "14:45"
+    premium_stop_pct: 30
+    min_days_to_expiry: 3
+    near_expiry: skip
+
+  - id: MIDCPNIFTY
+    name: Midcap Nifty
+    enabled: true
+    kind: index
+    spot: "NSE:MIDCPNIFTY-INDEX"
+    root: MIDCPNIFTY
+    master: NSE_FO
+    range: ["09:15", "09:45"]
+    entry: ["09:45", "11:30"]
+    exit_by: "14:45"
+    premium_stop_pct: 30
+    min_days_to_expiry: 3
+    near_expiry: skip
+
   - id: CRUDE
     name: Crude oil
     enabled: true
@@ -91,6 +129,38 @@ markets:
     min_days_to_expiry: 3
     near_expiry: roll
 
+  - id: SILVER
+    name: Silver
+    enabled: true
+    kind: commodity
+    root: SILVERM            # SILVERM = silver mini (5 kg)
+    multiplier: 5            # SILVERM price is per kg and a lot is 5 kg
+    master: MCX_COM
+    session_start: "09:00"
+    range: ["18:00", "18:30"]
+    entry: ["18:30", "20:30"]
+    exit_by: "22:30"
+    premium_stop_pct: 25
+    min_days_to_expiry: 3
+    near_expiry: roll
+
+  - id: NATGAS
+    name: Natural gas
+    enabled: true
+    kind: commodity
+    root: NATGASMINI         # mini contract (250 mmBtu). Use NATURALGAS for the big one.
+    multiplier: 250          # NATURALGAS = 1250
+    master: MCX_COM
+    session_start: "09:00"
+    range: ["18:00", "18:30"]
+    entry: ["18:30", "20:30"]
+    exit_by: "22:30"
+    premium_stop_pct: 30
+    min_days_to_expiry: 3
+    near_expiry: roll
+    skip_weekdays: [THU]     # weekly US gas storage report evening
+    max_range_pct: 1.5       # natural gas swings more than the others, so it gets a wider limit
+
 stocks:
   enabled: true
   range: ["09:15", "09:30"]
@@ -98,9 +168,39 @@ stocks:
   exit_by: "15:00"
   min_move_pct: 1.0          # stock must be up or down at least this much from yesterday's close
   volume_multiple: 2.0       # first 15 minutes' volume must be at least this many times its usual
-  watchlist_size: 3
+  watchlist_size: 6          # how many Nifty 200 stocks to watch each day
   trade_as: cash             # cash = buy or sell the share itself, option = buy the stock's option
   risk_per_trade: 500        # rupees you are willing to lose on one stock trade (sets the quantity)
   max_position_value: 40000  # never suggest a stock position bigger than this many rupees
   premium_stop_pct: 30       # used only when trade_as is option
   min_days_to_expiry: 5      # used only when trade_as is option (avoids expiry week)
+
+# Strategy desk: ten intraday strategies (six from the Flattrade article, two Bollinger, two EMA) that run
+# at the same time on the Nifty 200 shares and five indices. Each is tested on past prices and followed live.
+# Every trade is a paper trade: shares bought or sold intraday, or one lot of an index future. Nothing is ordered.
+strategies:
+  enabled: true
+  telegram: signals            # signals = a grouped message whenever any strategy triggers, plus a summary after the
+                               # close (can be many a day). summary = the after-close summary only. off = none
+  alert_for: all               # all, or a list to limit the alerts, e.g. [orb, vwap, gap]
+  exit_by: "15:15"             # every trade is closed by this time
+  risk_per_trade: 500          # rupees risked on one share trade (this sets the quantity)
+  max_position_value: 40000    # never size a share position above this many rupees
+  max_trades_per_symbol_day: 0 # 0 = no limit
+  # costs:                     # estimates; raise them if your broker charges more
+  #   stock_per_trade: 40
+  #   stock_pct: 0.03
+  #   stock_slippage_pct: 0.03
+  # params:                    # change one number of one strategy, for example:
+  #   momentum: {stock: {rsi: 65}}
+
+# Backtest: only used when you run the Backtest workflow. Leave as it is unless you want to
+# test other assumptions. These are estimates of what trading really costs you.
+# backtest:
+#   option_cost_per_trade: 100     # rupees per option trade (brokerage, taxes, fees)
+#   option_slippage_pct: 0.5       # % of the option price lost on each of buying and selling
+#   stock_cost_per_trade: 40
+#   stock_cost_pct: 0.03
+#   stock_slippage_pct: 0.03
+#   iv:                            # how expensive options are assumed to be (13% = 0.13)
+#     NIFTY: 0.13

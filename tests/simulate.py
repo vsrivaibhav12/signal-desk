@@ -19,8 +19,29 @@ from engine.core import Engine, score  # noqa: E402
 from engine.symbols import Master  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE = {"NSE:NIFTY50-INDEX": 24500, "BSE:SENSEX-INDEX": 80200, "NSE:NIFTYBANK-INDEX": 55300,
-        "CRUDEOILM": 7900, "GOLDM": 154000}
+
+
+class FakeNews:
+    """Stands in for the real news feeds during the replay. Headlines are placeholders."""
+    names = {"TATASTEEL": "Tata Steel", "INFY": "Infosys", "BEL": "Bharat Electronics", "LT": "Larsen & Toubro"}
+    text = {"TATASTEEL": ("Results", "Sample headline: quarterly results announced before the open"),
+            "INFY": ("Order win", "Sample headline: company wins a large new contract"),
+            "BEL": ("Order win", "Sample headline: fresh orders received this week"),
+            "LT": ("Broker view", "Sample headline: brokerage changes its target price")}
+
+    def refresh(self, max_age_hours=18):
+        t = (clock.now() - timedelta(minutes=50)).isoformat(timespec="minutes")
+        return [{"symbol": s, "name": self.names[s], "tag": tag, "title": title, "source": "Sample source",
+                 "link": "", "t": t} for s, (tag, title) in self.text.items()]
+
+    def for_stock(self, symbol, limit=2):
+        return []
+
+
+def base_price(master, m, expiry):
+    ks = sorted(r["strike"] for r in master.rows(m["master"], m["root"]) if r["expiry"] == expiry and r["type"] == "CE")
+    return ks[len(ks) // 2]
+
 
 
 def path(day, key, start, minutes, base, plan, rng):
@@ -111,7 +132,9 @@ def build(cfg, master, days, plans, rng):
             expiry, _ = master.choose_expiry(m["master"], m["root"], day, m["min_days_to_expiry"], m["near_expiry"])
             if m["kind"] == "index":
                 fut = master.nearest_future(m["master"], m["root"], day)["symbol"]
-                base = BASE[m["spot"]] * (1 + rng.uniform(-0.01, 0.01))
+                if not expiry:
+                    expiry = sorted(r["expiry"] for r in master.rows(m["master"], m["root"]) if r["type"] == "CE")[-1]
+                base = base_price(master, m, expiry) * (1 + rng.uniform(-0.01, 0.01))
                 c = path(day, "idx", "09:15", 375, base, p, rng)
                 fb.days[(day, m["spot"])] = c
                 fb.days[(day, fut)] = [[x[0], x[1] + 40, x[2] + 40, x[3] + 40, x[4] + 40, x[5]] for x in c]
@@ -122,7 +145,7 @@ def build(cfg, master, days, plans, rng):
                 if not expiry:
                     continue
                 und = master.future_for_expiry(m["master"], m["root"], expiry, day)["symbol"]
-                base = BASE[m["root"]] * (1 + rng.uniform(-0.01, 0.01))
+                base = base_price(master, m, expiry) * (1 + rng.uniform(-0.01, 0.01))
                 pre = path(day, "pre", "09:00", 540, base, "flat", rng)
                 eve = path(day, "idx", "18:00", 340, pre[-1][4], p, rng)
                 fb.days[(day, und)] = pre + eve
@@ -152,7 +175,7 @@ def replay(engine, cfg, day, stop_at=None):
         t += timedelta(minutes=1)
 
 
-def main(out_path=None, verbose=True, seed=6):
+def main(out_path=None, verbose=True, seed=4):
     rng = random.Random(seed)
     with open(os.path.join(ROOT, "config.yaml"), encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
@@ -176,13 +199,13 @@ def main(out_path=None, verbose=True, seed=6):
     names = ["TATASTEEL", "INFY", "SBIN", "LT", "MARUTI", "ITC", "BEL", "TITAN"]
     plans = {}
     for day in days:
-        plans[day] = {m: rng.choice(menu) for m in ("NIFTY", "SENSEX", "BANKNIFTY", "CRUDE", "GOLD")}
+        plans[day] = {m["id"]: rng.choice(menu) for m in cfg["markets"]}
         plans[day]["stocks"] = {n: (rng.choice(menu[:22]), rng.choice([-2.1, -1.4, 1.3, 1.9, 0.5]),
                                     rng.choice([2.4, 3.1, 1.2])) for n in rng.sample(names, 4)}
     fb = build(cfg, master, days, plans, rng)
     alerts = []
     feed = {"status": {"bot": "your_signal_bot"}, "trades": []}
-    engine = Engine(cfg, fb, master, alerts.append, feed)
+    engine = Engine(cfg, fb, master, alerts.append, feed, news=FakeNews())
     for day in days[:-1]:
         replay(engine, cfg, day)
     replay(engine, cfg, days[-1], stop_at=at(days[-1], "10:52"))  # leave the last day mid-session

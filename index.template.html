@@ -140,7 +140,63 @@ details.log{margin-top:40px} details.log summary{cursor:pointer;font:700 1.1rem 
 .login .card{max-width:440px}
 .big{display:block;width:100%;margin-top:14px;padding:14px;border-radius:12px;border:0;background:var(--ink);color:var(--paper);font-weight:600;font-size:1.05rem;text-align:center;text-decoration:none}
 .big.alt{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.news{list-style:none;margin:0;padding:0}
+.news li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 14px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.news li:last-child{border-bottom:0}
+.news .who{font-weight:600}
+.news .tag{font:500 .76rem var(--body);padding:2px 9px;border-radius:999px;background:var(--sunk);color:var(--muted);margin-left:8px;white-space:nowrap}
+.news .tag.Results{background:var(--live-soft);color:var(--live)}
+.news .hl{grid-column:1/-1;font-size:.95rem}
+.news .hl a{color:inherit;text-decoration-color:var(--line);text-underline-offset:3px}
+.news .src{grid-column:1/-1;font-size:.82rem;color:var(--muted)}
+.news .mv{font:600 .95rem var(--body);font-variant-numeric:tabular-nums;text-align:right}
+.alarm{margin-top:14px;padding:12px 14px;border-radius:10px;background:var(--loss-soft);border:1px solid var(--loss);font-size:.95rem}
+.bt-verdict{font:600 clamp(1.05rem,2.6vw,1.3rem)/1.45 var(--display);margin:0 0 16px;max-width:62ch}
+.bt-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 18px}
+.bt-stats div{font-size:.84rem;color:var(--muted)}
+.bt-stats b{display:block;font:700 1.5rem var(--display);color:var(--ink);font-variant-numeric:tabular-nums}
+.bt-stats small{display:block;font-size:.78rem}
+.bt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;margin-top:14px}
+.bt-grid>.card{min-width:0}
+.bt-meter{position:relative;height:14px;border-radius:7px;background:var(--sunk);margin:18px 0 6px}
+.bt-meter .band{position:absolute;top:0;height:100%;background:var(--line);border-radius:7px}
+.bt-meter .pin{position:absolute;top:-4px;width:6px;height:22px;border-radius:3px;transform:translateX(-3px)}
+.bt-meter-lab{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.dl{margin-top:14px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 16px}
+details.assume{margin-top:14px} details.assume summary{cursor:pointer;font:600 .98rem var(--body)}
+details.assume ul{margin:10px 0 0;padding-left:20px;font-size:.92rem;color:var(--muted)} details.assume li{margin:5px 0}
 footer{margin-top:44px;font-size:.84rem;color:var(--muted)}
+
+/* strategy tabs */
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:16px -18px 0;padding:8px 18px 10px;position:sticky;top:0;z-index:6;background:var(--paper);border-bottom:1px solid var(--line);scrollbar-width:thin}
+.tab{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-size:.9rem;white-space:nowrap}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.tab .n{margin-left:7px;font-size:.78rem;padding:1px 7px;border-radius:999px;background:var(--live-soft);color:var(--live);font-variant-numeric:tabular-nums}
+.vchip{display:inline-block;font:600 .76rem var(--body);padding:2px 10px;border-radius:999px;white-space:nowrap}
+.vchip.good{background:var(--gain-soft);color:var(--gain)} .vchip.mixed{background:var(--live-soft);color:var(--live)}
+.vchip.bad{background:var(--loss-soft);color:var(--loss)} .vchip.few{background:var(--sunk);color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
+.two>.card{min-width:0}
+.card h3{font-size:1.05rem;margin:0 0 6px}
+.rules{margin:8px 0 0;padding-left:20px} .rules li{margin:6px 0}
+table.cmp td:first-child,table.cmp th:first-child{position:sticky;left:0;background:var(--surface)}
+table.cmp td:first-child small{display:block;color:var(--muted);font-size:.78rem;white-space:normal;max-width:240px}
+table.cmp tbody tr{cursor:pointer} table.cmp tbody tr:hover td{background:var(--sunk)}
+.hb{display:grid;grid-template-columns:minmax(110px,170px) 1fr;gap:4px 12px;align-items:center;margin:9px 0}
+.hb-name{font-size:.9rem}
+.hb-track{position:relative;height:22px}
+.hb-zero{position:absolute;top:0;bottom:0;width:1px;background:var(--muted)}
+.hb-bar{position:absolute;height:9px;border-radius:2px}
+.hb-bar.g{top:1px;background:var(--accent);opacity:.55} .hb-bar.n{top:12px}
+.hb-val{grid-column:2;font-size:.78rem;color:var(--muted);margin-top:-2px;font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.84rem;color:var(--muted);margin:4px 0 6px}
+.legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:6px}
+.says{margin:0;padding-left:20px} .says li{margin:7px 0}
+.mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px 16px;margin-top:12px}
+.mini div{font-size:.82rem;color:var(--muted)} .mini b{display:block;color:var(--ink);font:600 1.15rem var(--body);font-variant-numeric:tabular-nums}
+.tag-s{font:600 .74rem var(--body);padding:2px 8px;border-radius:6px;background:var(--sunk);color:var(--muted);margin-right:8px}
+.halves{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.halves div{background:var(--sunk);border-radius:10px;padding:10px 12px;font-size:.84rem;color:var(--muted)} .halves b{display:block;font:700 1.2rem var(--display);color:var(--ink)}
 </style>
 </head>
 <body>
@@ -158,7 +214,14 @@ footer{margin-top:44px;font-size:.84rem;color:var(--muted)}
 <script>
 const DEMO = /*__DEMO__*/null;
 const LIVE = location.hostname.endsWith("github.io");
-const state = { feed: null, book: "All", period: "all", open: new Set(), shown: 25, error: null };
+const BT_DEMO = /*__BT__*/null;
+const STRATS = /*__STRATS__*/[];
+const SB_DEMO = /*__SB__*/null;
+const SL_DEMO = /*__SL__*/null;
+const TABS = ["ov", ...STRATS.map(s => s.id), "desk"];
+const startTab = decodeURIComponent(location.hash.slice(1));
+const state = { feed: null, bt: null, btAt: 0, book: "All", period: "all", open: new Set(), shown: 25, error: null,
+  tab: TABS.includes(startTab) ? startTab : "ov", sb: null, sbAt: 0, sl: null, sshown: 25, slError: false };
 
 const inr = (x, d = 2) => Number(x).toLocaleString("en-IN", { maximumFractionDigits: d, minimumFractionDigits: 0 });
 const rupee = x => (x < 0 ? "−" : "") + "₹" + inr(Math.abs(x), Math.abs(x) >= 1000 ? 0 : 2);
@@ -171,7 +234,33 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const dayText = d => { const dt = new Date(d + "T00:00:00"); return `${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dt.getDay()]}, ${+d.slice(8)} ${MONTHS[+d.slice(5, 7) - 1]}`; };
 const clock24 = t => { const [h, m] = t.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "pm" : "am"}`; };
 
+async function loadBt() {
+  if (!LIVE) { state.bt = BT_DEMO; return; }
+  if (Date.now() - state.btAt < 15 * 60e3) return;
+  state.btAt = Date.now();
+  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/data/backtest.json?t=${Math.floor(Date.now() / 6e5)}`);
+    if (r.ok) state.bt = await r.json();
+  } catch (e) { /* the section simply stays empty */ }
+}
+
+async function loadStrat() {
+  if (!LIVE) { state.sb = SB_DEMO; state.sl = SL_DEMO; return; }
+  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  const base = `https://raw.githubusercontent.com/${owner}/${repo}/data/`;
+  if (Date.now() - state.sbAt > 15 * 60e3) {
+    state.sbAt = Date.now();
+    try { const r = await fetch(`${base}strategies_backtest.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) state.sb = await r.json(); } catch (e) { /* stays empty */ }
+  }
+  if (state.tab !== "desk") {                       // the live file is large, so only fetch it when it is being looked at
+    try { const r = await fetch(`${base}strategies.json?t=${Math.floor(Date.now() / 6e4)}`, { cache: "no-store" }); if (r.ok) { state.sl = await r.json(); state.slError = false; } } catch (e) { state.slError = true; }
+  }
+}
+
 async function load() {
+  await loadBt();
+  await loadStrat();
   if (!LIVE) { state.feed = DEMO; return; }
   const owner = location.hostname.split(".")[0];
   const repo = location.pathname.split("/").filter(Boolean)[0] || "";
@@ -216,7 +305,7 @@ function ladder(t) {
     <div class="mark" style="left:${Math.max(0, Math.min(100, pn))}%;background:${markColor}"></div>
     <div class="lab first" style="left:0">Stop<b>${inr(stop)}</b></div>
     <div class="lab" style="left:${Math.max(22, Math.min(78, pe))}%">Entry<b>${inr(entry)}</b></div>
-    <div class="lab last" style="left:100%">Target<b>${inr(target)}</b></div>
+    <div class="lab last" style="left:100%">${esc(t.target_label || "Target")}<b>${inr(target)}</b></div>
   </div>`;
 }
 
@@ -268,6 +357,14 @@ function stats(tr) {
     pf: gl ? gw / gl : null, avgR: c.length ? c.reduce((s, t) => s + (t.r || 0), 0) / c.length : 0, dd, curve };
 }
 
+const EXIT_NAMES = { TARGET: "Target reached", TRAIL: "Target, then trailed", EARLY: "Early exit (pattern broke)", STOP: "Stop-loss", TIME: "Time exit", OTHER: "Other" };
+function exitType(t) {
+  if (t.exit_type) return t.exit_type;
+  const r = (t.exit_reason || "").toLowerCase();
+  return r.startsWith("target") ? "TARGET" : r.startsWith("early") ? "EARLY" : r.startsWith("stop") ? "STOP"
+    : r.startsWith("time") ? "TIME" : (r.startsWith("trailing") || r.startsWith("rest closed")) ? "TRAIL" : "OTHER";
+}
+
 function curveSvg(pts) {
   if (pts.length < 2) return `<div class="empty">The profit line appears after the first closed trade.</div>`;
   const W = 600, H = 190, pad = 8, min = Math.min(...pts), max = Math.max(...pts), span = (max - min) || 1;
@@ -292,6 +389,9 @@ function record(tr) {
   tr.filter(t => t.status === "CLOSED").forEach(t => { (by[t.book === "Stocks" ? "Stocks" : t.name] ||= []).push(t); });
   const rows = Object.entries(by).map(([k, v]) => { const m = stats(v); return `<tr><td>${esc(k)}</td><td>${m.n}</td><td>${m.w}</td><td>${m.l}</td><td>${m.rate === null ? "" : m.rate.toFixed(0) + "%"}</td><td class="${cls(m.total)}">${signed(m.total)}</td></tr>`; }).join("");
   const decided = s.w + s.l;
+  const ends = {};
+  tr.filter(t => t.status === "CLOSED").forEach(t => { (ends[exitType(t)] ||= []).push(t); });
+  const endRows = Object.keys(EXIT_NAMES).filter(k => ends[k]).map(k => { const m = stats(ends[k]); return `<tr><td>${EXIT_NAMES[k]}</td><td>${m.n}</td><td>${m.w}</td><td>${m.l}</td><td class="${cls(m.total)}">${signed(m.total)}</td></tr>`; }).join("");
   return filters + `<div class="record">
     <div class="card">
       <div class="muted">Win rate</div>
@@ -313,7 +413,12 @@ function record(tr) {
       <div class="curve-head"><div class="muted">Running total, trade by trade</div><div class="total num ${cls(s.total)}">${signed(s.total)}</div></div>
       ${curveSvg(s.curve)}
       <div class="scroll"><table><thead><tr><th>Market</th><th>Trades</th><th>Won</th><th>Lost</th><th>Win rate</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>
-    </div></div>`;
+    </div></div>
+    <div class="card" style="margin-top:14px">
+      <div class="muted">How the trades ended</div>
+      <div class="scroll"><table><thead><tr><th>Ending</th><th>Trades</th><th>Won</th><th>Lost</th><th>Result</th></tr></thead><tbody>${endRows}</tbody></table></div>
+      <p class="note">Compare the early exits with the stop-loss row to judge whether leaving early is saving money or cutting winners short.</p>
+    </div>`;
 }
 
 function tradeRow(t) {
@@ -355,52 +460,384 @@ function tradeLog(tr) {
   return html;
 }
 
-function render() {
-  const app = document.getElementById("app"), pulse = document.getElementById("pulse"), banner = document.getElementById("banner");
-  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Sample data.</b> These trades are made up by a test run to show how the page looks. Your real trades appear once the tool is set up and running.</div>`;
+function newsBlock(items) {
+  if (!items || !items.length) return `<div class="empty">No Nifty 200 stock has shown up in today’s headlines yet. The scan runs every 20 minutes from 8:40 am.</div>`;
+  return `<div class="card" style="padding:0"><ul class="news">${items.slice(0, 14).map(n => `<li>
+    <span><span class="who">${esc(n.name)}</span><span class="tag ${esc(n.tag)}">${esc(n.tag)}</span></span>
+    <span class="mv ${cls(n.chg || 0)}">${n.chg == null ? "" : (n.chg > 0 ? "+" : "−") + Math.abs(n.chg).toFixed(2) + "%"}</span>
+    <span class="hl">${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title)}</span>
+    <span class="src">${esc(n.source)}, ${hhmm(n.t)}</span></li>`).join("")}</ul></div>
+    <p class="note">Headlines only, from free news feeds. The percentage is the stock’s move at the 9:30 am scan. A stock in the news still has to pass the scan and every rule before it becomes a trade.</p>`;
+}
+
+function inHours() {
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+  const g = k => p.find(x => x.type === k).value, m = +g("hour") * 60 + +g("minute");
+  return !["Sat", "Sun"].includes(g("weekday")) && ((m >= 525 && m <= 908) || (m >= 1050 && m <= 1358));
+}
+
+const pct = x => x == null ? "n/a" : x.toFixed(0) + "%";
+function btTable(rows, label) {
+  if (!rows || !rows.length) return "";
+  return `<div class="scroll"><table><thead><tr><th>${label}</th><th>Trades</th><th>Win rate</th><th>Net result</th></tr></thead><tbody>${rows.map(g =>
+    `<tr><td>${esc(g.name)}</td><td>${g.n}</td><td>${pct(g.win_rate)}</td><td class="${cls(g.pnl)}">${signed(g.pnl)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+const EXIT_PLAIN = { TARGET: "Target reached", TRAIL: "Target, then trailed", EARLY: "Early exit (pattern broke)", RULE: "Strategy exit rule", STOP: "Stop-loss", TIME: "Time exit", OTHER: "Other" };
+
+function backtestBlock(b) {
+  if (!b) return `<div class="empty">No backtest has been run yet. Open your GitHub page, go to <b>Actions</b>, choose <b>Backtest</b>, press <b>Run workflow</b>, and keep the choice on <b>quick</b>. The result appears here about three minutes later.</div>`;
+  const m = b.variants[0].summary, L = b.luck;
+  const when = `${dayText(b.period.from)} to ${dayText(b.period.to)}`;
+  const lr = m.win_rate_range || [null, null];
+  const luck = L ? (() => {
+    const lo = Math.min(L.gross_per_trade_low, L.real_gross_per_trade) - 15, hi = Math.max(L.gross_per_trade_high, L.real_gross_per_trade) + 15, span = (hi - lo) || 1;
+    const x = v => ((v - lo) / span * 100).toFixed(1);
+    const word = L.read === "inside" ? "inside the range luck alone produced, so no sign of a real edge" : L.read === "above" ? "above everything luck produced, which is hopeful but not proof" : "below what luck produced, so no sign of an edge";
+    return `<div class="card"><h3>Luck check</h3>
+      <p class="muted" style="margin:6px 0 0">The same rules were run on the same prices, with the order of the moves inside each day shuffled. That removes any real pattern. Whatever the rules earn on shuffled prices is what luck, or a flaw in the test itself, can produce. A real edge has to beat it.</p>
+      <div class="bt-meter" role="img" aria-label="Average result per trade before costs: real prices ${L.real_gross_per_trade} rupees, shuffled prices ${L.gross_per_trade_low} to ${L.gross_per_trade_high}">
+        <div class="band" style="left:${x(L.gross_per_trade_low)}%;width:${x(L.gross_per_trade_high) - x(L.gross_per_trade_low)}%"></div>
+        <div class="pin" style="left:${x(L.real_gross_per_trade)}%;background:var(--ink)"></div></div>
+      <div class="bt-meter-lab"><span>${rupee(lo)}</span><span>Average result per trade, before costs</span><span>${rupee(hi)}</span></div>
+      <p style="margin:12px 0 0"><b>Real prices:</b> ${signed(L.real_gross_per_trade)} per trade. <b>Shuffled prices (grey band, ${L.runs} runs):</b> ${signed(L.gross_per_trade_low)} to ${signed(L.gross_per_trade_high)}. The real result is ${word}.</p>
+      <p class="note">On the shuffled prices the tool took about ${L.avg_trades} trades and still lost ${rupee(Math.abs(L.avg_net))} after costs on average. Option prices in this test are estimated, and the estimate is slightly generous to option buyers: on shuffled prices options earned ${signed(L.option_per_trade)} per trade before costs, stocks ${signed(L.stock_per_trade)}.</p></div>`;
+  })() : "";
+  const variants = `<div class="card"><h3>Does changing the settings help?</h3><div class="scroll"><table><thead><tr><th>Version</th><th>Trades</th><th>Win rate</th><th>Before costs</th><th>After costs</th></tr></thead><tbody>${b.variants.map(v => `<tr><td title="${esc(v.desc)}">${esc(v.name)}</td><td>${v.summary.n}</td><td>${pct(v.summary.win_rate)}</td><td class="${cls(v.summary.gross_pnl)}">${signed(v.summary.gross_pnl)}</td><td class="${cls(v.summary.pnl)}">${signed(v.summary.pnl)}</td></tr>`).join("")}</tbody></table></div>
+    ${b.variants.map(v => `<p class="note"><b>${esc(v.name)}:</b> ${esc(v.desc)}</p>`).join("")}</div>`;
+  const u = b.underlying;
+  return `<div class="card">
+    <p class="bt-verdict">${esc(b.verdict)}</p>
+    <div class="bt-stats">
+      <div>Net result after costs<b class="${cls(m.pnl)}">${signed(m.pnl)}</b><small>${m.n} trades over ${b.period.days} trading days</small></div>
+      <div>Win rate<b>${pct(m.win_rate)}</b><small>could be ${pct(lr[0])} to ${pct(lr[1])}</small></div>
+      <div>Rupees won per rupee lost<b>${m.profit_factor == null ? "n/a" : m.profit_factor.toFixed(2)}</b><small>above 1 means ahead</small></div>
+      <div>Deepest dip from a peak<b>${rupee(m.max_drawdown)}</b><small>worst losing streak: ${m.losing_streak}</small></div>
+    </div>
+    <p class="note">Prices from ${esc(b.source)}, ${when}. ${b.universe.stocks} stocks and ${b.universe.indices.length} indices were replayed with exactly the rules used live. Run on ${dayText(b.generated.slice(0, 10))}.</p>
+  </div>
+  <div class="bt-grid">${luck}${variants}</div>
+  <div class="bt-grid">
+    <div class="card curve"><div class="curve-head"><div class="muted">Running total after costs, trade by trade</div><div class="total num ${cls(m.pnl)}">${signed(m.pnl)}</div></div>${curveSvg([0, ...b.curve])}</div>
+    <div class="card"><h3>By market</h3>${btTable(b.by_market, "Market")}</div>
+    <div class="card"><h3>How the trades ended</h3><div class="scroll"><table><thead><tr><th>Ending</th><th>Trades</th><th>Win rate</th><th>Net result</th></tr></thead><tbody>${b.by_exit.map(g => `<tr><td>${EXIT_PLAIN[g.name] || g.name}</td><td>${g.n}</td><td>${pct(g.win_rate)}</td><td class="${cls(g.pnl)}">${signed(g.pnl)}</td></tr>`).join("")}</tbody></table></div></div>
+    <div class="card"><h3>Buying calls or puts, and by month</h3>${btTable(b.by_side, "Direction")}${btTable(b.by_month, "Month")}</div>
+  </div>
+  ${u ? `<p class="note">Check that does not depend on any option price estimate: across ${u.n} index trades, the index itself had moved the way the trade wanted in ${u.hit_rate}% of them by the time the trade ended, with an average move of ${u.avg_pct >= 0 ? "+" : "−"}${Math.abs(u.avg_pct).toFixed(3)}%.</p>` : ""}
+  <details class="assume card"><summary>What this test assumes</summary><ul>${b.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}${(b.notes || []).map(a => `<li>${esc(a)}</li>`).join("")}</ul></details>
+  <button class="dl" id="btcsv">Download every backtest trade (spreadsheet file)</button>`;
+}
+
+function renderDeskTab() {
+  const pulse = document.getElementById("pulse"), banner = document.getElementById("banner");
+  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview.</b> ${state.sb ? "The strategy tabs use <b>real prices</b>: the backtests are real runs on the last 60 trading days, and their live panels replay a real session. " : ""}The <b>Options desk</b> tab shows made-up sample trades to show how the page looks. Your own live trades appear once the tool is set up and running.</div>`;
   if (!state.feed) {
     pulse.innerHTML = `<span class="dot"></span><span>Not connected</span>`;
-    app.innerHTML = state.error === "none-yet"
+    return state.error === "none-yet"
       ? `<p class="lead">Nothing to show yet.</p><p class="sublead">The engine has not run for the first time. Open your GitHub page, go to Actions, choose Trade engine, and press Run workflow. This page fills in a minute after it starts.</p>`
       : `<p class="lead">Could not reach the trade data.</p><p class="sublead">Check your internet connection. This page tries again by itself every 90 seconds.</p>`;
-    return;
   }
   const st = state.feed.status || {}, all = state.feed.trades || [];
   const open = all.filter(t => t.status === "OPEN");
   const tiles = st.tiles || [];
-  const fresh = st.updated && (!LIVE || Date.now() - new Date(st.updated).getTime() < 8 * 60e3);
+  const seen = st.heartbeat || st.updated;
+  const fresh = seen && (!LIVE || Date.now() - new Date(seen).getTime() < 7 * 60e3);
   const running = st.running && fresh;
-  pulse.innerHTML = `<span class="dot ${running ? "on" : ""}"></span><span>${running ? "Watching now" : "Resting"}${st.updated ? `, last checked ${hhmm(st.updated)}${st.day && st.day.date !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) && LIVE ? " on " + dayText(st.day.date) : ""}` : ""}</span>`;
+  const waitingLogin = running && st.phase === "login";
+  const missing = LIVE && !running && inHours();
+  pulse.innerHTML = `<span class="dot ${running ? "on" : ""}"></span><span>${waitingLogin ? "Waiting for Fyers login" : running ? "Watching now" : missing ? "Not checking in" : "Resting"}${seen ? `, last check-in ${hhmm(seen)}${LIVE && seen.slice(0, 10) !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) ? " on " + dayText(seen.slice(0, 10)) : ""}` : ""}</span>`;
+  if (LIVE) banner.innerHTML = waitingLogin ? `<div class="banner"><b>Waiting for your Fyers login.</b> Open your Telegram bot, tap the login link, and paste the code back. The tool cannot watch the market until then.</div>`
+    : missing ? `<div class="alarm"><b>The engine has not checked in${seen ? " since " + hhmm(seen) : ""}.</b> A backup start is attempted every 10 minutes during market hours, so it should restart by itself. If this message is still here after 20 minutes, start it from the Actions tab with Run workflow.</div>` : "";
   const today = st.day ? all.filter(t => t.date === st.day.date) : [];
   const closedToday = today.filter(t => t.status === "CLOSED");
   const todayPnl = closedToday.reduce((s, t) => s + t.pnl, 0);
   const lead = open.length ? `${open.length} trade${open.length > 1 ? "s" : ""} open right now.`
-    : running ? "No open trade. Watching for a setup." : "Markets are resting. Nothing open.";
+    : waitingLogin ? "Waiting for your Fyers login." : running ? "No open trade. Watching for a setup."
+    : missing ? "The engine is not checking in." : "Markets are resting. Nothing open.";
   const sub = `${today.length ? `${today.length} trade${today.length > 1 ? "s" : ""} triggered today` : "No trade triggered today"}${closedToday.length ? `, ${closedToday.length} closed for ${signed(todayPnl)}` : ""}. ${st.day && st.day.skip ? "New trades are paused for today." : ""}`;
   const tr = filtered();
   const log = (st.day && st.day.log || []).slice().reverse();
-  app.innerHTML = `
+  return `
     <p class="lead">${lead}</p><p class="sublead">${sub}</p>
     ${open.length ? `<h2>Open trades</h2>${open.map(openCard).join("")}` : ""}
     <h2>Today’s markets</h2>
     ${tiles.length ? `<div class="tiles">${tiles.map(tile).join("")}</div>` : `<div class="empty">The market list appears when the engine starts its next session.</div>`}
+    <h2>Stocks in the news</h2>${newsBlock(st.news)}
     <h2>The tool’s record</h2>${record(tr)}
+    <h2>Backtest: the same rules on past prices</h2>${backtestBlock(state.bt)}
     <h2>Every trade it triggered</h2>${tradeLog(tr)}
     <details class="log"><summary>Today’s activity log</summary>
       ${log.length ? `<ol class="timeline">${log.map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>` : `<p class="muted">Nothing logged yet today.</p>`}
     </details>`;
 }
 
+/* ───────────── strategy tabs ───────────── */
+const HOW = { STOP: "Stop-loss hit", TARGET: "Target reached", RULE: "Strategy exit rule", TIME: "Time exit" };
+const VERDICT = { good: "Promising", mixed: "Unproven", bad: "No edge so far", few: "Too few trades" };
+const sMeta = id => STRATS.find(s => s.id === id) || { id, name: id, rules: [], window: ["09:15", "15:15"], exit_by: "15:15" };
+const sbOf = id => state.sb && state.sb.strategies.find(s => s.id === id);
+const num1 = (x, d = 2) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d);
+
+function fromBt(cols, r, sid) {
+  const o = {}; cols.forEach((c, i) => { o[c] = r[i]; });
+  return { sid, id: `bt|${sid}|${o.date}|${o.name}|${o.in}|${o.entry}`, date: o.date, name: o.name, dir: o.dir, inT: o.in, outT: o.out,
+    entry: o.entry, exit: o.exit, stop: o.stop, target: o.target, qty: o.qty, risk: o.risk, gross: o.gross, cost: o.cost, net: o.net, r: o.r,
+    how: o.how, regime: o.regime, why: o.why, status: "CLOSED", result: o.net > 0 ? "WIN" : o.net < 0 ? "LOSS" : "FLAT" };
+}
+function fromLive(t) {
+  return { sid: t.strategy, id: t.id, date: t.date, name: t.name, dir: t.dir, inT: t.entry_t.slice(11, 16), outT: t.exit_t ? t.exit_t.slice(11, 16) : "",
+    entry: t.entry, exit: t.exit, stop: t.stop, target: t.target, qty: t.qty, risk: t.risk, gross: t.gross, cost: t.cost, net: t.net, r: t.net_r,
+    how: t.exit_type, regime: t.regime, why: t.why, status: t.status, result: t.result, last: t.last, open: t.open_pnl, reason: t.exit_reason, late: t.late };
+}
+const liveRows = id => ((state.sl && state.sl.trades) || []).filter(t => !id || t.strategy === id).map(fromLive);
+
+function sstats(rows) {
+  const c = rows.filter(t => t.status === "CLOSED"), w = c.filter(t => t.net > 0), l = c.filter(t => t.net < 0);
+  const sum = (a, k) => a.reduce((s, t) => s + (t[k] || 0), 0);
+  const gw = sum(w, "net"), gl = Math.abs(sum(l, "net"));
+  let eq = 0, peak = 0, dd = 0; c.forEach(t => { eq += t.net; peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); });
+  return { n: c.length, w: w.length, l: l.length, rate: w.length + l.length ? w.length / (w.length + l.length) * 100 : null, net: eq, gross: sum(c, "gross"),
+    pf: gl ? gw / gl : null, avgR: c.length ? sum(c, "r") / c.length : 0, dd };
+}
+// closed live trades kept in detail, plus the running totals of older days
+function liveRecord(id) {
+  const s = sstats(liveRows(id)), a = (state.sl && state.sl.archive && state.sl.archive[id]) || null;
+  if (!a) return s;
+  const n = s.n + a.n, w = s.w + a.wins, l = s.l + a.losses;
+  return { ...s, n, w, l, rate: w + l ? w / (w + l) * 100 : null, net: s.net + a.net, gross: s.gross + a.gross, avgR: n ? (s.avgR * s.n + a.r) / n : 0 };
+}
+
+function tabBar() {
+  const today = (state.sl && state.sl.today) || {};
+  const items = [["ov", "All strategies", 0], ...STRATS.map(s => [s.id, s.name, (today[s.id] || {}).open || 0]), ["desk", "Options desk", 0]];
+  return `<nav class="tabs" role="tablist" aria-label="Strategies">${items.map(([id, label, n]) =>
+    `<button class="tab" role="tab" data-tab="${id}" aria-selected="${state.tab === id}">${esc(label)}${n ? `<span class="n" title="${n} open now">${n}</span>` : ""}</button>`).join("")}</nav>`;
+}
+
+function hbars(list) {
+  const vals = list.flatMap(x => [x.gross, x.net, 0]), mn = Math.min(...vals), mx = Math.max(...vals), span = (mx - mn) || 1;
+  const pos = v => (v - mn) / span * 100, z = pos(0);
+  const bar = (v, cl) => { const p = pos(v); return `<i class="hb-bar ${cl}" style="left:${Math.min(p, z).toFixed(2)}%;width:${Math.abs(p - z).toFixed(2)}%;${cl === "n" ? `background:${v >= 0 ? "var(--gain)" : "var(--loss)"}` : ""}"></i>`; };
+  return `<div class="legend"><span><i style="background:var(--accent);opacity:.55"></i>Before costs</span><span><i style="background:var(--loss)"></i>After costs</span></div>` +
+    list.map(x => `<div class="hb" role="img" aria-label="${esc(x.name)}: ${signed(x.gross)} before costs, ${signed(x.net)} after costs"><div class="hb-name">${esc(x.name)}</div>
+      <div class="hb-track"><i class="hb-zero" style="left:${z.toFixed(2)}%"></i>${bar(x.gross, "g")}${bar(x.net, "n")}</div>
+      <div class="hb-val">${signed(x.gross)} before costs, ${signed(x.net)} after</div></div>`).join("");
+}
+
+function sLadder(t) {
+  const risk = Math.abs(t.entry - t.stop), target = t.target ?? t.entry + t.dir * 3 * risk;
+  return ladder({ stop_underlying: t.stop, target_underlying: target, underlying_entry: t.entry, underlying_last: t.status === "OPEN" ? (t.last ?? t.entry) : t.exit,
+    status: t.status, result: t.result, target_label: t.target == null ? "No target (3R mark)" : "Target" });
+}
+
+function sRow(t, showStrat) {
+  const isOpen = state.open.has(t.id), pnl = t.status === "OPEN" ? (t.open ?? 0) : t.net, pill = t.status === "OPEN" ? "OPEN" : t.result;
+  const head = `${t.dir === 1 ? "BUY" : "SELL"} ${inr(t.qty)} ${esc(t.name)}`;
+  const sub = t.status === "OPEN" ? `In at ${clock24(t.inT)}, ₹${inr(t.entry)}. Stop ₹${inr(t.stop)}${t.target ? `, target ₹${inr(t.target)}` : ", no fixed target"}`
+    : `${clock24(t.inT)} at ₹${inr(t.entry)} to ${clock24(t.outT)} at ₹${inr(t.exit)}. ${esc(t.reason || HOW[t.how] || t.how)}`;
+  let detail = "";
+  if (isOpen) {
+    detail = `<div class="detail">
+      <div class="muted" style="font-size:.84rem;margin-top:14px">Where price stands between the stop and the target</div>${sLadder(t)}
+      <div class="facts">
+        <div>Entry price<b>₹${inr(t.entry)}</b></div>
+        <div>${t.status === "OPEN" ? "Price now" : "Exit price"}<b>₹${inr(t.status === "OPEN" ? (t.last ?? t.entry) : t.exit)}</b></div>
+        <div>Quantity<b>${inr(t.qty)}</b></div><div>Planned risk<b>${rupee(t.risk)}</b></div>
+        ${t.status === "CLOSED" ? `<div>Before costs<b class="${cls(t.gross)}">${signed(t.gross)}</b></div><div>Costs<b>${rupee(t.cost)}</b></div><div>After costs<b class="${cls(t.net)}">${signed(t.net)}</b></div>` : ""}
+      </div>
+      ${t.regime ? `<p class="subhead">Market condition when it triggered</p><div>${esc(t.regime)}</div>` : ""}
+      ${t.why ? `<p class="subhead">Why this trade was triggered</p><ul class="why">${t.why.map(r => `<li>${esc(r)}</li>`).join("")}</ul>`
+        : `<p class="note">The reasons are kept for the most recent trades only, to keep this page light.</p>`}
+      ${t.late ? `<p class="note">This signal was found after the fact (the desk was restarted), so no alert was sent for it.</p>` : ""}
+    </div>`;
+  }
+  return `<div class="row"><button data-trade="${esc(t.id)}" aria-expanded="${isOpen}">
+      <span class="pill ${pill}">${pill === "WIN" ? "Won" : pill === "LOSS" ? "Lost" : pill === "OPEN" ? "Open" : "Flat"}</span>
+      <span class="what">${showStrat ? `<span class="tag-s">${esc(sMeta(t.sid).name)}</span>` : ""}${head}<small>${sub}</small></span>
+      <span class="res ${cls(pnl)}">${signed(pnl)}<small>${t.status === "CLOSED" ? num1(t.r) + "R after costs" : "so far"}</small></span>
+    </button>${detail}</div>`;
+}
+
+function rowList(rows, newestFirst, showStrat) {
+  if (!rows.length) return "";
+  const list = newestFirst ? [...rows].reverse() : rows, shown = list.slice(0, state.sshown);
+  let html = "", last = "";
+  shown.forEach(t => { if (t.date !== last) { html += `<div class="day-label">${dayText(t.date)}</div>`; last = t.date; } html += sRow(t, showStrat); });
+  if (list.length > shown.length) html += `<button class="more" data-smore="1">Show ${Math.min(25, list.length - shown.length)} more of ${list.length - shown.length} older trades</button>`;
+  return html;
+}
+
+function liveMini(x) {
+  return `<div class="mini"><div>Triggered today<b>${x.signals}</b></div><div>Open now<b>${x.open}</b></div><div>Closed<b>${x.closed}</b></div>
+    <div>Won<b>${x.wins}</b></div><div>Result so far, after costs<b class="${cls(x.net)}">${signed(x.net)}</b></div></div>`;
+}
+
+function deskStatus() {
+  const sl = state.sl;
+  if (!sl || !sl.status || !sl.status.cycle_at) return `<div class="empty">The live strategy desk has not reported yet. It starts with the engine on trading days, and checks every 5-minute candle from 9:20 am.</div>`;
+  const s = sl.status;
+  return `<p class="note" style="margin:0 0 12px">Last check ${hhmm(s.cycle_at)}, covering the candle that closed at ${clock24(s.bar_end.slice(11, 16))}. ${s.scanned} of ${s.symbols} shares and indices had price data.${s.error ? ` <b class="loss">Problem: ${esc(s.error)}</b>` : ""}${sl.demo ? ` <b>${esc(sl.demo)}</b>` : ""}</p>`;
+}
+
+function liveBlock(id) {
+  const sl = state.sl;
+  if (!sl) return `<div class="empty">${state.slError ? "Could not read the live strategy data. It will try again shortly." : "No live data yet. The strategy desk starts with the engine on trading days."}</div>`;
+  const rows = liveRows(id), today = rows.filter(t => t.date === sl.date), open = today.filter(t => t.status === "OPEN");
+  const x = (sl.today || {})[id] || { signals: 0, open: 0, closed: 0, wins: 0, net: 0 };
+  const rec = liveRecord(id);
+  return `${deskStatus()}<div class="card">${liveMini(x)}</div>
+    ${open.length ? `<p class="subhead" style="margin-top:18px">Open right now (${open.length})</p>${open.slice(0, 12).map(t => sRow(t)).join("")}${open.length > 12 ? `<p class="note">and ${open.length - 12} more.</p>` : ""}` : ""}
+    <p class="subhead" style="margin-top:18px">Everything it triggered${sl.date ? " on " + dayText(sl.date) : ""} and the days before</p>
+    ${rows.length ? rowList(rows, true) : `<div class="empty">No trade has passed this strategy's rules yet.</div>`}
+    <div class="card" style="margin-top:14px"><h3>Live record so far</h3>
+      ${rec.n ? `<div class="mini"><div>Closed trades<b>${rec.n}</b></div><div>Win rate<b>${rec.rate === null ? "n/a" : rec.rate.toFixed(0) + "%"}</b></div>
+        <div>Before costs<b class="${cls(rec.gross)}">${signed(rec.gross)}</b></div><div>After costs<b class="${cls(rec.net)}">${signed(rec.net)}</b></div>
+        <div>Per trade<b>${num1(rec.avgR)}R</b></div></div>
+        ${rec.n < 30 ? `<p class="note">Fewer than 30 closed trades, so this will still swing a lot. The live record is the fair test of a strategy, because nothing in it was known in advance.</p>` : ""}`
+      : `<p class="muted" style="margin:6px 0 0">Nothing has closed yet. As trades end, this becomes the strategy's honest forward test.</p>`}</div>`;
+}
+
+function btBlock(id) {
+  const b = sbOf(id);
+  if (!b) return `<div class="empty">No backtest is available yet. Open your GitHub page, go to <b>Actions</b>, choose <b>Strategy backtest</b> and press <b>Run workflow</b>. It takes a few minutes and the result appears here.</div>`;
+  const m = b.summary, sb = state.sb;
+  if (!m.n) return `<div class="empty">${esc(b.verdict)}</div>`;
+  const lr = m.win_rate_range || [null, null], h = b.halves;
+  const half = (x, label) => `<div>${label}<b class="${cls(x.pnl || 0)}">${x.n ? signed(x.pnl) : "n/a"}</b>${x.n || 0} trades, ${x.n ? pct(x.win_rate) + " won" : ""}</div>`;
+  return `<div class="card">
+      <p style="margin:0 0 10px"><span class="vchip ${b.level}">${VERDICT[b.level]}</span></p>
+      <p class="bt-verdict">${esc(b.verdict)}</p>
+      <div class="bt-stats">
+        <div>After costs<b class="${cls(m.pnl)}">${signed(m.pnl)}</b><small>${m.n} trades over ${sb.period.days} sessions</small></div>
+        <div>Before costs<b class="${cls(m.gross_pnl)}">${signed(m.gross_pnl)}</b><small>costs took ${rupee(m.cost_total)}</small></div>
+        <div>Win rate<b>${pct(m.win_rate)}</b><small>could be ${pct(lr[0])} to ${pct(lr[1])}</small></div>
+        <div>Per trade<b>${num1(m.avg_r)}R</b><small>${num1(m.gross_r)}R before costs</small></div>
+        <div>Rupees won per rupee lost<b>${m.profit_factor == null ? "n/a" : m.profit_factor.toFixed(2)}</b><small>above 1 means ahead</small></div>
+        <div>Deepest dip from a peak<b>${rupee(m.max_drawdown)}</b><small>worst losing streak ${m.losing_streak}</small></div>
+      </div>
+      <div class="halves">${half(h[0], "First half of the period")}${half(h[1], "Second half of the period")}</div>
+      <p class="note">A strategy that is real should be profitable in both halves. Typical trade: risk ${rupee(m.avg_risk)}, costs ${rupee(m.avg_cost)}. R means a result compared with the amount risked.</p>
+    </div>
+    <div class="bt-grid">
+      <div class="card curve"><div class="curve-head"><div class="muted">Running total after costs, trade by trade</div><div class="total num ${cls(m.pnl)}">${signed(m.pnl)}</div></div>${curveSvg([0, ...b.curve])}</div>
+      <div class="card"><h3>By market</h3>${btTable(b.by_market, "Market")}<h3 style="margin-top:14px">Buy or sell</h3>${btTable(b.by_side, "Direction")}</div>
+      <div class="card"><h3>How the trades ended</h3><div class="scroll"><table><thead><tr><th>Ending</th><th>Trades</th><th>Win rate</th><th>Net result</th></tr></thead><tbody>${b.by_exit.map(g => `<tr><td>${EXIT_PLAIN[g.name] || g.name}</td><td>${g.n}</td><td>${pct(g.win_rate)}</td><td class="${cls(g.pnl)}">${signed(g.pnl)}</td></tr>`).join("")}</tbody></table></div></div>
+      <div class="card"><h3>By month</h3>${btTable(b.by_month, "Month")}</div>
+    </div>`;
+}
+
+function btTrades(id) {
+  const b = sbOf(id);
+  if (!b || !b.trades.length) return "";
+  const rows = b.trades.map(r => fromBt(state.sb.cols, r, id));
+  return `<p class="note" style="margin-top:0">The latest ${rows.length} of ${b.trades_total} backtest trades. Tap one to see why it was triggered.</p>${rowList(rows, true)}
+    <button class="dl" data-csv="${id}">Download these trades (spreadsheet file)</button>`;
+}
+
+function strategyTab(id) {
+  const m = sMeta(id);
+  return `<p class="lead">${esc(m.name)}</p>
+    <p class="sublead">${esc(m.source)}. A signal can fire when a 5-minute candle closes between ${clock24(m.window[0])} and ${clock24(m.window[1])}. Every trade is closed by ${clock24(m.exit_by)}. Paper trades only; nothing is ordered.</p>
+    <div class="two" style="margin-top:22px">
+      <div class="card"><h3>When it should work</h3><p style="margin:0">${esc(m.best_for)}</p><h3 style="margin-top:16px">What can go wrong</h3><p style="margin:0">${esc(m.risk)}</p></div>
+      <div class="card"><h3>The rules</h3><ol class="rules">${m.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ol></div>
+    </div>
+    <h2>Live: the trades it triggers</h2>${liveBlock(id)}
+    <h2>Backtest: the same rules on past prices</h2>${btBlock(id)}
+    <h2>Backtest trades</h2>${btTrades(id)}`;
+}
+
+function overviewTab() {
+  const sb = state.sb;
+  const head = `<p class="lead">Ten strategies, one scoreboard.</p>
+    <p class="sublead">Every strategy trades the same Nifty 200 shares and five indices at the same time, on the same costs and the same risk per trade, so the results can be compared fairly.</p>`;
+  if (!sb) return head + `<div class="empty" style="margin-top:22px">No backtest result yet. Open your GitHub page, go to <b>Actions</b>, choose <b>Strategy backtest</b> and press <b>Run workflow</b>. It takes a few minutes. It also runs by itself every weekday evening.</div>` + liveOverview();
+  const rows = sb.strategies.map(s => ({ s, m: s.summary, L: liveRecord(s.id), T: ((state.sl && state.sl.today) || {})[s.id] })).filter(r => r.m.n);
+  if (!rows.length) return head + `<div class="empty" style="margin-top:22px">The backtest ran but no strategy triggered a trade in the period.</div>` + liveOverview();
+  const sum = k => rows.reduce((a, r) => a + (r.m[k] || 0), 0);
+  const aheadG = rows.filter(r => r.m.gross_pnl > 0).length, aheadN = rows.filter(r => r.m.pnl > 0).length;
+  const best = [...rows].sort((a, b) => b.m.avg_r - a.m.avg_r)[0];
+  const tr = rows.reduce((a, r) => a + r.m.n, 0), risk = rows.reduce((a, r) => a + r.m.avg_risk * r.m.n, 0) / tr, cost = sum("cost_total") / tr;
+  const good = rows.filter(r => r.s.level === "good");
+  const says = [
+    `${aheadG} of ${rows.length} strategies made money before costs; ${aheadN} made money after costs.`,
+    `Together they made ${signed(sum("gross_pnl"))} before costs and paid ${rupee(sum("cost_total"))} in costs, which left ${signed(sum("pnl"))}.`,
+    `A typical trade risks about ${rupee(risk)} and costs about ${rupee(cost)} to make, so costs eat ${(cost / risk * 100).toFixed(0)}% of the risk before the market has moved at all.`,
+    best ? `Closest to breaking even after costs: <b>${esc(best.s.name)}</b>, at ${num1(best.m.avg_r)}R per trade (${num1(best.m.gross_r)}R before costs).` : "",
+    good.length ? `Passed the tougher tests (profitable in both halves and not explained by luck): <b>${good.map(r => esc(r.s.name)).join(", ")}</b>. A longer history and the live record must still confirm it.`
+      : `None passed the tougher tests: profitable after costs in both halves of the period, with a result too large to be luck.`,
+  ].filter(Boolean);
+  const table = `<div class="card" style="padding:6px 0"><div class="scroll"><table class="cmp"><thead><tr><th>Strategy</th><th>Trades</th><th>Win rate</th><th>Before costs</th><th>After costs</th><th>Per trade</th><th>Verdict</th><th>Live today</th></tr></thead><tbody>${rows.map(r => `
+    <tr data-tab="${r.s.id}"><td><b>${esc(r.s.name)}</b><small>${esc(r.s.best_for)}</small></td><td>${r.m.n}</td><td>${pct(r.m.win_rate)}</td>
+    <td class="${cls(r.m.gross_pnl)}">${signed(r.m.gross_pnl)}</td><td class="${cls(r.m.pnl)}">${signed(r.m.pnl)}</td><td>${num1(r.m.avg_r)}R</td>
+    <td><span class="vchip ${r.s.level}">${VERDICT[r.s.level]}</span></td><td>${r.T ? `${r.T.signals} <span class="muted">(${r.T.open} open)</span>` : "n/a"}</td></tr>`).join("")}</tbody></table></div></div>`;
+  return head + `<h2>What the backtest says</h2>
+    <div class="card"><ul class="says">${says.map(s => `<li>${s}</li>`).join("")}</ul>
+    <p class="note">Prices from ${esc(sb.source)}, ${dayText(sb.period.from)} to ${dayText(sb.period.to)} (${sb.period.days} sessions), ${sb.universe.stocks} shares and ${sb.universe.indices.length} indices. Run on ${dayText(sb.generated.slice(0, 10))}.</p></div>
+    <h2>Result by strategy</h2>${table}<p class="note">Tap a row to open that strategy.</p>
+    <h2>Before and after costs</h2><div class="card">${hbars(rows.map(r => ({ name: r.s.name, gross: r.m.gross_pnl, net: r.m.pnl })).sort((a, b) => b.net - a.net))}</div>
+    ${liveOverview()}
+    <details class="assume card"><summary>What these tests assume</summary><ul>${sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details>`;
+}
+
+function liveOverview() {
+  const sl = state.sl;
+  const rows = liveRows(), today = sl ? rows.filter(t => t.date === sl.date) : [], open = today.filter(t => t.status === "OPEN");
+  if (!sl) return `<h2>Live now</h2><div class="empty">${state.slError ? "Could not read the live strategy data. It will try again shortly." : "No live data yet. The strategy desk starts with the engine on trading days."}</div>`;
+  const net = Object.values(sl.today || {}).reduce((a, x) => a + x.net, 0);
+  return `<h2>Live now</h2>${deskStatus()}
+    <div class="card"><div class="mini"><div>Triggered today<b>${today.length}</b></div><div>Open now<b>${open.length}</b></div>
+      <div>Closed<b>${today.length - open.length}</b></div><div>All strategies, so far<b class="${cls(net)}">${signed(net)}</b></div></div></div>
+    ${open.length ? `<p class="subhead" style="margin-top:18px">Open right now</p>${open.slice(0, 10).map(t => sRow(t, true)).join("")}${open.length > 10 ? `<p class="note">and ${open.length - 10} more. Open a strategy's tab to see them all.</p>` : ""}` : ""}
+    <p class="subhead" style="margin-top:18px">Latest triggers</p>${today.length ? today.slice(-12).reverse().map(t => sRow(t, true)).join("") : `<div class="empty">Nothing has triggered yet today.</div>`}`;
+}
+
+function downloadSt(id) {
+  const b = sbOf(id); if (!b) return;
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const head = ["Date", "Market", "Direction", "In", "Out", "Entry price", "Exit price", "Stop", "Target", "Quantity", "Planned risk", "Before costs", "Costs", "After costs", "R", "How it ended", "Market condition"];
+  const rows = b.trades.map(t => [t[0], t[1], t[2] === 1 ? "Buy" : "Sell", t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10], t[11], t[12], t[13], t[14], t[15], t[16]].map(q).join(","));
+  const url = URL.createObjectURL(new Blob([[head.map(q).join(","), ...rows].join("\n")], { type: "text/csv" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `signal-desk-${id}-backtest.csv` });
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+function render() {
+  const desk = renderDeskTab();
+  document.getElementById("app").innerHTML = tabBar() + (state.tab === "desk" ? desk : state.tab === "ov" ? overviewTab() : strategyTab(state.tab));
+  const sel = document.querySelector('.tab[aria-selected="true"]');
+  if (sel && sel.scrollIntoView && !state.tabSeen) { state.tabSeen = true; sel.scrollIntoView({ inline: "center", block: "nearest" }); }
+}
+
+window.addEventListener("hashchange", () => { const t = decodeURIComponent(location.hash.slice(1)); if (TABS.includes(t) && t !== state.tab) { state.tab = t; state.sshown = 25; render(); scrollTo(0, 0); } });
+
 document.addEventListener("click", e => {
-  const b = e.target.closest("button");
+  const b = e.target.closest("button, tr[data-tab]");
   if (!b) return;
+  if (b.dataset.tab) {
+    state.tab = b.dataset.tab; state.sshown = 25; history.replaceState(null, "", "#" + state.tab);
+    render(); scrollTo(0, 0);
+    if (LIVE && !state.sl && state.tab !== "desk") loadStrat().then(render);
+    return;
+  }
+  if (b.dataset.smore) { state.sshown += 25; const y = scrollY; render(); scrollTo(0, y); return; }
+  if (b.dataset.csv) { downloadSt(b.dataset.csv); return; }
   if (b.dataset.trade) { const id = b.dataset.trade; state.open.has(id) ? state.open.delete(id) : state.open.add(id); }
   else if (b.dataset.book) { state.book = b.dataset.book; state.shown = 25; }
   else if (b.dataset.period) { state.period = b.dataset.period; state.shown = 25; }
   else if (b.id === "more") state.shown += 25;
+  else if (b.id === "btcsv") { downloadBt(); return; }
   else return;
   const y = scrollY; render(); scrollTo(0, y);
 });
+
+function downloadBt() {
+  const head = ["Date", "Market", "Direction", "Trade", "In", "Out", "Entry price", "Exit price", "Result before costs", "Costs", "Result after costs", "R", "How it ended"];
+  const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = state.bt.trades.map(t => [t[0], t[1], t[2] === 1 ? "Buy" : "Sell", t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10], t[11], t[12]].map(q).join(","));
+  const url = URL.createObjectURL(new Blob([[head.map(q).join(","), ...rows].join("\n")], { type: "text/csv" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: "signal-desk-backtest-trades.csv" });
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 
 // After a Fyers login the browser lands here with a login code. Help the user hand it to the bot.
 function loginHelper() {

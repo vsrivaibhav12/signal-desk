@@ -1,9 +1,17 @@
-"""Starts the engine, keeps it running through the session, and handles login."""
+"""Starts the engine, keeps it running through the session, and handles login.
+
+GitHub's timer starts a run every 10 minutes during market hours. Only one run
+does the work: it writes a "heartbeat" to the data folder every two minutes.
+Any other run that starts sees a fresh heartbeat and leaves at once. If the
+heartbeat goes stale (the working run died), the next run takes over and
+carries on from the saved state. That is what keeps the tool awake.
+"""
 import os
 import re
 import sys
 import time
-from datetime import timedelta
+import traceback
+from datetime import datetime, timedelta
 
 import requests
 import yaml
@@ -11,13 +19,19 @@ import yaml
 from . import clock
 from .clock import at, clock_text
 from .core import Engine
-from .fyers import AuthError, Fyers, FyersError
+from .fyers import AuthError, Fyers
 from .store import Store
+from .strategies.desk import StrategyDesk
 from .symbols import Master
 from .telegram import Telegram
 
-RUN_BUDGET = 5 * 3600 + 5 * 60  # GitHub stops a run at 6 hours, so hand over before that
+RUN_BUDGET = 5 * 3600 + 5 * 60   # GitHub stops a run at 6 hours, so hand over before that
+BEAT_EVERY = 110                 # seconds between heartbeats
+STALE_AFTER = 300                # a heartbeat older than this means the other run is dead
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENGINE_FILES = {"feed.json", "secure.bin", "strategies.json"}
+RUN_ID = os.environ.get("GITHUB_RUN_ID", "local")
+BY_TIMER = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
 
 
 def load_config():
@@ -31,6 +45,9 @@ def sessions(cfg, day):
     units = [m for m in cfg["markets"] if m.get("enabled", True)]
     if cfg["stocks"].get("enabled"):
         units.append(cfg["stocks"])
+    sc = cfg.get("strategies") or {}
+    if sc.get("enabled", True):                       # the strategy desk watches shares until its own exit time
+        units.append({"range": ["09:15", "09:30"], "exit_by": sc.get("exit_by", "15:15")})
     for u in units:
         groups["day" if u["range"][0] < "15:00" else "evening"].append(u)
     out = []
@@ -65,6 +82,18 @@ def find_code(text):
     return text if len(text) > 80 and " " not in text else None
 
 
+def alive_elsewhere(status, now, me=None):
+    """True when a different run is doing the work and checked in recently."""
+    me = me or RUN_ID
+    if not status or not status.get("running") or status.get("run_id") in (None, me):
+        return False
+    try:
+        age = (now - datetime.fromisoformat(status["heartbeat"])).total_seconds()
+    except (KeyError, ValueError, TypeError):
+        return False
+    return age < STALE_AFTER
+
+
 class Session:
     def __init__(self):
         self.cfg = load_config()
@@ -82,6 +111,23 @@ class Session:
         self.url = dashboard_url(self.cfg)
         self.started = time.time()
         self.engine = None
+        self.feed = self.store.load_feed()
+        self.last_beat = 0
+
+    # ── heartbeat: proves this run is alive, and lets only one run work ──
+    def beat(self, running=True, force=False):
+        if not force and time.time() - self.last_beat < BEAT_EVERY and not (self.engine and self.engine.dirty):
+            return
+        if alive_elsewhere(self.store.remote_status(), clock.now()):
+            print("Another run has taken over. Leaving quietly.")
+            sys.exit(0)
+        st = self.feed["status"]
+        st.update({"run_id": RUN_ID, "running": running, "heartbeat": clock.now().isoformat(timespec="seconds")})
+        self.store.save_feed(self.feed)
+        self.store.publish(own=ENGINE_FILES)
+        if self.engine:
+            self.engine.dirty = False
+        self.last_beat = time.time()
 
     # ── who owns the bot ─────────────────────────────────────
     def claim_owner(self, until):
@@ -89,6 +135,7 @@ class Session:
             return True
         print(f"Waiting for you to open your Telegram bot (@{self.tg.me()}) and tap Start ...")
         while clock.now() < until:
+            self.beat()
             for chat, text, _ in self.tg.poll(wait=20):
                 if text.lower().startswith("/start"):
                     self.tg.chat_id = self.secure["chat_id"] = chat
@@ -119,8 +166,11 @@ class Session:
                "2. You will land on your dashboard showing a <b>Copy login code</b> button. Tap it.\n"
                "3. Come back here and paste the code as a message to me.")
         self.tg.send(ask)
+        self.feed["status"]["phase"] = "login"
+        self.beat(force=True)
         asked = time.time()
         while clock.now() < until:
+            self.beat()
             for chat, text, _ in self.tg.poll(wait=20):
                 if chat != self.tg.chat_id:
                     continue
@@ -140,12 +190,13 @@ class Session:
                 if refresh:
                     self.secure.update({"refresh_token": refresh, "refresh_date": today})
                 self.store.save_secure(self.secure)
-                self.store.publish()
+                self.feed["status"]["phase"] = "watching"
+                self.beat(force=True)
                 extra = ("I will log in by myself for about the next two weeks."
                          if self.pin and refresh else "I will ask again tomorrow morning.")
                 self.tg.send(f"✅ Logged in to Fyers. {extra}")
                 return True
-            if time.time() - asked > 20 * 60:
+            if time.time() - asked > 15 * 60:
                 self.tg.send("⏳ Still waiting for your Fyers login. I cannot watch the market until then.\n" + link)
                 asked = time.time()
         return False
@@ -164,12 +215,19 @@ class Session:
             elif word == "resume":
                 self.engine.set_skip(now, False)
                 self.tg.send("▶️ New trades are allowed again today.")
+            elif word == "strategies":
+                self.tg.send(self.engine_desk_text())
             elif word == "status":
-                lines = [f"• {t['name']}: {t.get('note') or 'waiting'}" for t in self.engine.feed["status"].get("tiles", [])]
+                lines = [f"• {t['name']}: {t.get('note') or 'waiting'}" for t in self.feed["status"].get("tiles", [])]
                 self.tg.send("<b>Right now</b>\n" + "\n".join(lines) + f"\n\nDashboard: {self.url}")
             else:
                 self.tg.send("You can send me:\n• status: what I am watching right now\n"
+                             "• strategies: how each strategy is doing today\n"
                              "• skip: no new trades today\n• resume: allow trades again")
+
+    def engine_desk_text(self):
+        d = getattr(self, "desk", None)
+        return d.summary_text(clock.now().date().isoformat()) if d else "The strategy desk has not started yet."
 
     def hand_over(self):
         """Start a fresh run to continue the session before GitHub's 6-hour limit."""
@@ -184,53 +242,92 @@ class Session:
     # ── main loop ────────────────────────────────────────────
     def run(self):
         now = clock.now()
+        before = dict(self.feed["status"])
+        if alive_elsewhere(before, now):
+            print("The engine is already running in another run and is healthy. Nothing to do.")
+            if not BY_TIMER and self.tg.chat_id:
+                self.tg.send(f"✅ I am already awake and watching. My last check-in was at "
+                             f"{clock_text(datetime.fromisoformat(before['heartbeat']))}. No need to start me.")
+            return
         sess = current_session(self.cfg, now)
+        if not sess and BY_TIMER:
+            print("Outside market hours. Nothing to do.")
+            return
         until = sess[2] if sess else now + timedelta(minutes=25)
+        self.feed["status"].update({"bot": self.tg.me(), "dashboard": self.url, "phase": "starting"})
+        self.beat(force=True)          # claim the work
+        time.sleep(6)
+        self.beat(force=True)          # and make sure no other run claimed it at the same moment
         if not self.claim_owner(until):
+            self.beat(running=False, force=True)
             sys.exit(f"Nobody tapped Start on the Telegram bot @{self.tg.me()}. Open the bot, tap Start, and run again.")
         if not self.login(until):
             self.tg.send("I could not log in to Fyers in time, so I am stopping for this session.")
+            self.beat(running=False, force=True)
             sys.exit("Fyers login was not completed.")
-        feed = self.store.load_feed()
-        feed["status"]["bot"] = self.tg.me()
-        feed["status"]["dashboard"] = self.url
+        feed = self.feed
         self.engine = Engine(self.cfg, self.fy, Master(), self.tg.send, feed)
+        self.desk = StrategyDesk(self.cfg, self.fy, self.tg.send, os.path.join(ROOT, "_data"), self.engine.universe,
+                                 [m for m in self.cfg["markets"] if m.get("kind") == "index"],
+                                 heartbeat=self.beat)
         if not sess:
             nxt = next((s for s in sessions(self.cfg, now.date()) if s[1] > now), None)
             when = f"today at {clock_text(nxt[1])}" if nxt and now.weekday() < 5 else "on the next trading day"
             self.tg.send(f"✅ Setup check passed. Fyers and Telegram are both working.\n"
                          f"Markets are outside my working hours right now. I will start by myself {when}.\n"
                          f"Dashboard: {self.url}")
-            self.store.save_feed(feed)
-            self.store.publish()
+            feed["status"]["phase"] = "resting"
+            self.beat(running=False, force=True)
             return
         name, _, end = sess
-        self.tg.send(f"🟢 Watching the {'morning' if name == 'day' else 'evening'} markets until {clock_text(end)}.")
-        last_push = 0
+        today = now.date().isoformat()
+        label = "morning" if name == "day" else "evening"
+        same_session = before.get("session") == f"{today}-{name}"
+        if same_session and before.get("handover"):
+            pass                                   # a planned hand-over: carry on silently
+        elif same_session:
+            self.tg.send(f"🔄 I had stopped and have restarted myself. Carrying on with the {label} markets "
+                         f"from where I left off. Open trades are being followed again.")
+        else:
+            self.tg.send(f"🟢 Watching the {label} markets until {clock_text(end)}.")
+        feed["status"].update({"session": f"{today}-{name}", "handover": False, "phase": "watching"})
+        auth_fails, last_error = 0, None
         while True:
             now = clock.now()
             if now > end:
-                self.tg.send(self.engine.summary(now))
-                feed["status"]["running"] = False
-                break
+                if feed["status"].get("summary_sent") != f"{today}-{name}":
+                    self.tg.send(self.engine.summary(now))
+                    feed["status"]["summary_sent"] = f"{today}-{name}"
+                feed["status"]["phase"] = "resting"
+                self.beat(running=False, force=True)
+                return
             try:
                 self.engine.tick(now)
-            except AuthError:
-                if not self.login(end):
-                    break
-                continue
-            except FyersError as e:
-                print("Fyers problem this minute:", e)
-            feed["status"]["running"] = True
-            if self.engine.dirty or time.time() - last_push > 300:
-                self.store.save_feed(feed)
-                self.store.publish()
-                self.engine.dirty = False
-                last_push = time.time()
+                self.desk.tick(now)
+                auth_fails = 0
+            except AuthError as e:
+                auth_fails += 1
+                print("Fyers login problem:", e)
+                if auth_fails <= 2:
+                    if not self.login(end):
+                        break
+                elif auth_fails == 3:
+                    self.tg.send("⚠️ Fyers keeps turning down my price requests even after logging in. "
+                                 "I will keep trying every minute.")
+            except Exception as e:                 # one bad minute must never stop the engine
+                traceback.print_exc()
+                if str(e) != last_error:
+                    last_error = str(e)
+                    self.tg.send(f"⚠️ I hit a problem this minute and will keep going.\nDetails: {str(e)[:200]}")
+            if self.desk.dirty:
+                self.desk.save()
+                self.desk.dirty = False
+                self.engine.dirty = True
+            self.beat()
             if time.time() - self.started > RUN_BUDGET:
                 print("Handing over to a fresh run.")
-                self.store.save_feed(feed)
-                self.store.publish()
+                feed["status"]["handover"] = True
+                self.beat(running=False, force=True)
                 self.hand_over()
                 return
             # wait until 6 seconds past the next minute, listening for your messages meanwhile
@@ -243,8 +340,7 @@ class Session:
                     self.commands(wait=min(int(left) - 1, 25))
                 else:
                     time.sleep(left)
-        self.store.save_feed(feed)
-        self.store.publish()
+        self.beat(running=False, force=True)
 
 
 if __name__ == "__main__":

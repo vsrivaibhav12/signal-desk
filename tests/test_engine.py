@@ -11,10 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine import clock  # noqa: E402
 from engine.clock import at  # noqa: E402
 from engine.core import Engine  # noqa: E402
-from engine.run import find_code, sessions  # noqa: E402
+from engine.run import alive_elsewhere, find_code, sessions  # noqa: E402
 from engine.store import Store  # noqa: E402
 from engine.symbols import Master  # noqa: E402
-from tests.simulate import ROOT, build, replay  # noqa: E402
+from tests.simulate import ROOT, FakeNews, build, replay  # noqa: E402
 
 
 def master():
@@ -33,7 +33,7 @@ def run_day(cfg, plan, day, seed=3, stop_at=None):
     m = master()
     fb = build(cfg, m, [day], {day: plan}, random.Random(seed))
     alerts, feed = [], {"status": {}, "trades": []}
-    eng = Engine(cfg, fb, m, alerts.append, feed)
+    eng = Engine(cfg, fb, m, alerts.append, feed, news=FakeNews())
     replay(eng, cfg, day, stop_at)
     clock.set_fake(None)
     return feed, alerts, eng
@@ -60,6 +60,7 @@ def main():
     cfg = copy.deepcopy(base)
     cfg["stocks"]["enabled"] = False
     cfg["markets"] = only(["NIFTY"])
+    cfg["early_exit"]["enabled"] = False     # the older checks below test the plain stop and target
 
     # 2. wide opening range is skipped
     feed, alerts, _ = run_day(cfg, {"NIFTY": "wide"}, day)
@@ -111,10 +112,12 @@ def main():
 
     # 7. losses stop the day; never more than two trades per market per day
     cfgall = copy.deepcopy(base)
+    cfgall["general"].update({"max_trades_per_day": 2, "stop_after_losses": 1})
+    ids = [x["id"] for x in base["markets"]]
     worst = 0
     for seed in range(1, 25):
         feed, _, _ = run_day(cfgall, {k: random.Random(seed).choice(["fail_up", "fail_down", "up", "down"])
-                                      for k in ("NIFTY", "SENSEX", "BANKNIFTY", "CRUDE", "GOLD")}, day, seed)
+                                      for k in ids}, day, seed)
         per = {}
         for t in feed["trades"]:
             per.setdefault(t["unit"], []).append(t)
@@ -125,7 +128,56 @@ def main():
             for t in ts_:
                 assert t["status"] == "CLOSED", "trade left open at the end of the day"
                 assert t["entry_time"][11:16] <= ("11:31" if t["book"] != "Commodity options" else "20:31")
-    print(f"ok  discipline over 24 mixed days: max {worst} trades per market, none after a loss, all closed by exit time")
+    print(f"ok  with limits switched on (2 a day, stop after a loss): max {worst} per market, none after a loss")
+
+    # 7b. limits off (the new default): trades continue after a loss, each needs a fresh breakout
+    most, after_loss, early, kinds = 0, 0, 0, set()
+    for seed in range(1, 25):
+        feed, _, _ = run_day(copy.deepcopy(base), {k: random.Random(seed + 50).choice(["fail_up", "fail_down", "up", "down"])
+                                                   for k in ids}, day, seed)
+        per = {}
+        for t in feed["trades"]:
+            per.setdefault(t["unit"], []).append(t)
+            assert t["status"] == "CLOSED" and t["exit_type"] in ("STOP", "TARGET", "EARLY", "TRAIL", "TIME")
+            kinds.add(t["exit_type"])
+            early += t["exit_type"] == "EARLY"
+        for ts_ in per.values():
+            most = max(most, len(ts_))
+            after_loss += any(a["result"] == "LOSS" for a in ts_[:-1])
+            for a, b in zip(ts_, ts_[1:]):
+                assert b["entry_time"] >= a["exit_time"], "two trades open at once in one market"
+    assert after_loss > 0 and early > 0
+    print(f"ok  limits off: up to {most} trades in a market in a day, trading continues after a loss, "
+          f"never two at once; {early} early exits seen; exit kinds {sorted(kinds)}")
+
+    # 7c. news reaches the watchlist, the alert and the trade's reasons
+    cfgn = copy.deepcopy(base)
+    cfgn["markets"] = only(["NIFTY"])
+    hit = False
+    for seed in range(1, 40):
+        plan = {"NIFTY": "up", "stocks": {"TATASTEEL": ("up", 1.9, 3.0)}}
+        feed, alerts, _ = run_day(cfgn, plan, day, seed)
+        assert any("Stocks in the news today" in a for a in alerts)
+        assert feed["status"]["news"] and feed["status"]["news"][0]["symbol"]
+        for t in feed["trades"]:
+            if t["unit"] == "TATASTEEL":
+                assert t["news"] and any("in the news today" in r for r in t["reasons"])
+                hit = True
+        if hit:
+            break
+    assert hit
+    print("ok  news: morning brief sent, headline attached to the watchlist stock and shown in the trade's reasons")
+
+    # 7d. keep-awake logic: who is allowed to do the work
+    from engine import clock as ck
+    now = ck.now()
+    iso = lambda secs: (now - timedelta(seconds=secs)).isoformat(timespec="seconds")
+    assert alive_elsewhere({"running": True, "run_id": "A", "heartbeat": iso(60)}, now, me="B")
+    assert not alive_elsewhere({"running": True, "run_id": "A", "heartbeat": iso(400)}, now, me="B"), "stale must be taken over"
+    assert not alive_elsewhere({"running": False, "run_id": "A", "heartbeat": iso(10)}, now, me="B"), "hand-over must pass"
+    assert not alive_elsewhere({"running": True, "run_id": "B", "heartbeat": iso(10)}, now, me="B")
+    assert not alive_elsewhere({}, now, me="B")
+    print("ok  keep-awake: a healthy run blocks duplicates, a stopped or handed-over run is taken over")
 
     # 8. crude sits out Wednesdays
     wed = day
@@ -146,7 +198,7 @@ def main():
     assert st.load_secure() == {"refresh_token": "r"}
     assert Store("/tmp/sd_store_test", "wrong").load_secure() == {}
     names = [(n, a.strftime("%H:%M"), b.strftime("%H:%M")) for n, a, b in sessions(base, day)]
-    assert names == [("day", "08:30", "15:08"), ("evening", "17:15", "22:38")], names
+    assert names == [("day", "08:30", "15:23"), ("evening", "17:15", "22:38")], names   # day ends after the strategy desk's 3:15 exit
     print("ok  login code parsing, locked token file, session hours", names)
     print("\nALL CHECKS PASSED")
 

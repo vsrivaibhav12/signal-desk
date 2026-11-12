@@ -1,0 +1,66 @@
+name: Strategy backtest
+
+# Tests all ten strategies on past prices. It runs by itself every weekday evening after the market closes,
+# and you can run it by hand from the Actions tab at any time. It runs on its own computer, so it works
+# alongside the live Trade engine without slowing it down.
+#   auto  = your Fyers prices if a login is saved (up to the days you ask for), otherwise free Yahoo prices (about 60 days)
+#   yahoo = free prices only, never uses your login
+#   fyers = Fyers only; stops with an error if no login is saved
+on:
+  schedule:
+    - cron: "30 12 * * 1-5"      # 6:00 pm India time
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "auto, yahoo or fyers"
+        type: choice
+        options: [auto, yahoo, fyers]
+        default: auto
+      days:
+        description: "Calendar days of history to ask Fyers for (about 250 = one year of trading)"
+        default: "250"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strategy-backtest
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open the data folder
+        run: |
+          git config --global user.name "signal-desk"
+          git config --global user.email "signal-desk@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" data > /dev/null; then
+            git clone --quiet --depth 3 --branch data --single-branch "$REMOTE" _data
+          else
+            mkdir _data && cd _data && git init --quiet -b data && git remote add origin "$REMOTE"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install --quiet -r requirements.txt
+
+      - name: Run the strategy backtest
+        env:
+          FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
+          FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
+          FYERS_PIN: ${{ secrets.FYERS_PIN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+          SOURCE: ${{ inputs.source || 'auto' }}
+          DAYS: ${{ inputs.days || '250' }}
+        run: python -m engine.strategies --source "$SOURCE" --days "$DAYS"
