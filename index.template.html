@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Signal Desk 4.0.0</title>
+<title>Signal Desk 4.1.0</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -134,6 +134,26 @@ th:first-child,td:first-child{text-align:left}
 .more{margin-top:10px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 16px}
 .empty{padding:22px;border:1px dashed var(--line);border-radius:12px;color:var(--muted)}
 details.log{margin-top:40px} details.log summary{cursor:pointer;font:700 1.1rem var(--display)}
+
+/* always-on news impact radar */
+.impact-toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:12px 0}
+.impact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.impact-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.impact-head{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.impact-title{font:600 1rem var(--body);line-height:1.35;margin:7px 0 8px}
+.impact-meta{font-size:.78rem;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.impact-score{font:700 1.4rem var(--display);white-space:nowrap}
+.impact-paths{display:grid;gap:7px;margin:12px 0}
+.impact-path{display:grid;grid-template-columns:minmax(80px,1fr) auto;gap:8px;align-items:start;padding:8px 10px;background:var(--sunk);border-radius:9px;font-size:.86rem}
+.impact-path small{display:block;color:var(--muted);grid-column:1/-1;font-size:.82rem;line-height:1.35}
+.impact-tag{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-size:.74rem;color:var(--muted);white-space:nowrap}
+.impact-disclaimer{border-left:3px solid var(--live);background:var(--live-soft);padding:10px 12px;border-radius:0 9px 9px 0;font-size:.84rem;color:var(--ink);margin:12px 0}
+.impact-details{margin-top:10px}.impact-details summary{cursor:pointer;color:var(--accent);font-size:.87rem;font-weight:600}
+.impact-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;font-size:.84rem}
+.impact-detail-grid ul{margin:5px 0;padding-left:18px;color:var(--muted)}
+.impact-status{display:flex;gap:8px;flex-wrap:wrap;font-size:.82rem;color:var(--muted)}
+.bias-bullish{color:var(--gain)} .bias-bearish{color:var(--loss)} .bias-mixed{color:var(--live)}
+@media(max-width:560px){.impact-detail-grid{grid-template-columns:1fr}.impact-grid{grid-template-columns:1fr}}
 
 /* login helper */
 .login{position:fixed;inset:0;background:var(--paper);z-index:20;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -392,7 +412,7 @@ body.compact .rgrid{gap:7px}
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand">Signal Desk <span class="brand-version">4.0.0</span></div>
+    <div class="brand">Signal Desk <span class="brand-version">4.1.0</span></div>
     <div class="top-right"><div class="pulse" id="pulse"><span class="dot"></span><span>Loading</span></div><div class="top-actions"><button class="chip" data-theme-toggle="1" id="themeToggle" aria-label="Change dashboard theme">Theme: Auto</button><button class="chip" data-compact-toggle="1" id="compactToggle" aria-pressed="false">Compact: Off</button></div></div>
   </header>
   <div id="banner"></div>
@@ -405,6 +425,7 @@ body.compact .rgrid{gap:7px}
 
 <script>
 const DEMO = /*__DEMO__*/null;
+const INTEL_DEMO = /*__INTEL__*/null;
 const LIVE = location.hostname.endsWith("github.io") ||
   (location.protocol.startsWith("http") && !["localhost", "127.0.0.1", "::1"].includes(location.hostname) && !location.hostname.endsWith(".local"));
 // Set to "github-username/repository-name" when using a custom domain or a user-site root URL.
@@ -435,7 +456,7 @@ const OPT = { id: "options", name: "Options desk", source: "Original rulebook",
 const SOURCES = [OPT, ...STRATS];
 const srcMeta = id => SOURCES.find(s => s.id === id) || { id, name: id, rules: [], window: ["09:15", "15:15"], exit_by: "15:15" };
 const hashSheet = () => { const m = location.hash.match(/^#s=([\w]+)/); return m && SOURCES.some(s => s.id === m[1]) ? m[1] : null; };
-const state = { feed: null, bt: null, btAt: 0, sb: null, sbAt: 0, sl: null, slAt: 0, slError: false, error: null,
+const state = { feed: null, intel: null, intelAt: 0, supervisor: null, supervisorAt: 0, impactFilter: "all", bt: null, btAt: 0, sb: null, sbAt: 0, sl: null, slAt: 0, slError: false, error: null,
   open: new Set(), openGroups: new Set(), lshown: 25, sshown: 25, openAll: false, sheet: hashSheet(), sheetFrom: null,
   logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "", charts: {}, det: new Set(), loadedAt: 0, loading: false, showEnded: false,
   wlQ: "", wlFilter: "all", wlSort: "priority", optFilter: "all", theme: (() => { try { return localStorage.getItem("sd_theme") || "auto"; } catch (_) { return "auto"; } })(),
@@ -531,7 +552,29 @@ async function loadFeed() {
   if (!state.feed) state.error = missing ? "none-yet" : "unreachable";
 }
 
-async function load() { await Promise.all([loadBt(), loadStrat(), loadFeed()]); }
+async function loadIntel() {
+  if (!LIVE) { state.intel = INTEL_DEMO; return; }
+  const base = dataBase();
+  if (!base || Date.now() - state.intelAt < 60e3) return;
+  state.intelAt = Date.now();
+  try {
+    const r = await fetch(`${base}intelligence.json?t=${Date.now()}`, { cache: "no-store" });
+    if (r.ok) { const j = await r.json(); if (j.schema === 1) state.intel = j; }
+  } catch (_) { /* keep the last successful impact radar */ }
+}
+
+async function loadSupervisor() {
+  if (!LIVE) { state.supervisor = null; return; }
+  const base = dataBase();
+  if (!base || Date.now() - state.supervisorAt < 60e3) return;
+  state.supervisorAt = Date.now();
+  try {
+    const r = await fetch(`${base}supervisor.json?t=${Date.now()}`, { cache: "no-store" });
+    if (r.ok) { const j = await r.json(); if (j.schema === 1) state.supervisor = j; }
+  } catch (_) { /* missing supervisor status is shown as not installed/offline */ }
+}
+
+async function load() { await Promise.all([loadBt(), loadStrat(), loadFeed(), loadIntel(), loadSupervisor()]); }
 
 function ladder(t) {
   const stop = t.stop_underlying, target = t.target_underlying, entry = t.underlying_entry;
@@ -584,7 +627,7 @@ function curveSvg(pts) {
 
 
 function newsBlock(items) {
-  if (!items || !items.length) return `<div class="empty">No Nifty 200 stock has shown up in today’s headlines yet. The scan runs every 20 minutes from 8:40 am.</div>`;
+  if (!items || !items.length) return `<div class="empty">No Nifty 200 stock has shown up in today’s headlines yet. The legacy stock-headline scan is separate from the 24/7 Impact Radar.</div>`;
   return `<div class="card" style="padding:0"><ul class="news">${items.slice(0, 14).map(n => `<li>
     <span><span class="who">${esc(n.name)}</span><span class="tag ${esc(n.tag)}">${esc(n.tag)}</span></span>
     <span class="mv ${cls(n.chg || 0)}">${n.chg == null ? "" : (n.chg > 0 ? "+" : "−") + Math.abs(n.chg).toFixed(2) + "%"}</span>
@@ -1044,12 +1087,35 @@ function renderHeader() {
   const out = { running: false, waitingLogin: false, missing: false };
   banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview only.</b> This bundled dashboard uses sample records for layout testing. Its historical strategy snapshot may predate this release's next-candle execution model; rerun the backtest after setup before evaluating results. The options desk's live trades are synthetic examples.</div>`;
   const st = state.feed && state.feed.status;
-  if (!st) { pulse.innerHTML = `<span class="dot"></span><span>Not connected</span>`; return out; }
-  const seen = st.heartbeat || st.updated, fresh = seen && (!LIVE || Date.now() - new Date(seen).getTime() < 7 * 60e3);
-  out.running = !!(st.running && fresh); out.waitingLogin = out.running && st.phase === "login"; out.missing = LIVE && !out.running && inHours();
-  pulse.innerHTML = `<span class="dot ${out.running ? "on" : ""}"></span><span>${out.waitingLogin ? "Waiting for Fyers login" : out.running ? "Watching now" : out.missing ? "Not checking in" : "Resting"}${seen ? `, last check-in ${hhmm(seen)}${LIVE && seen.slice(0, 10) !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) ? " on " + dayText(seen.slice(0, 10)) : ""}` : ""}</span>`;
-  if (LIVE) banner.innerHTML = out.waitingLogin ? `<div class="banner"><b>Waiting for your Fyers login.</b> Open your Telegram bot, tap the login link, and paste the code back. The tool cannot watch the market until then.</div>`
-    : out.missing ? `<div class="alarm"><b>The engine has not checked in${seen ? " since " + hhmm(seen) : ""}.</b> A backup start is attempted every 10 minutes during market hours, so it should restart by itself. If this message is still here after 20 minutes, start it from the Actions tab with Run workflow.</div>` : "";
+  const intel = state.intel && state.intel.status || {};
+  const sup = state.supervisor && state.supervisor.status || {};
+  const seen = st && (st.heartbeat || st.updated);
+  const ageMs = seen ? Date.now() - new Date(seen).getTime() : Infinity;
+  const fresh = seen && (!LIVE || (ageMs >= -60e3 && ageMs < 7 * 60e3));
+  const newsBeat = intel.heartbeat ? Date.now() - new Date(intel.heartbeat).getTime() : Infinity;
+  const supervisorBeat = sup.heartbeat ? Date.now() - new Date(sup.heartbeat).getTime() : Infinity;
+  const newsOnline = LIVE && intel.running && intel.worker_mode === "continuous" && newsBeat >= -60e3 && newsBeat < 10 * 60e3;
+  const supervisorOnline = LIVE && sup.running && sup.worker_mode === "continuous" && supervisorBeat >= -60e3 && supervisorBeat < 4 * 60e3;
+  const commodity = st && st.brokers && st.brokers.commodity;
+  const waitingCommodity = commodity && commodity.status === "login_required";
+  const intentionallyResting = st && (st.phase === "resting" || st.phase === "secondary_login_required");
+  out.running = !!(st && st.running && fresh);
+  out.waitingLogin = !!(st && st.phase === "login" || waitingCommodity);
+  const supervisorWatching = sup.phase === "watching" || sup.phase === "starting" || sup.phase === "recovering";
+  const expectedButMissing = supervisorOnline && supervisorWatching && !out.running && ageMs > 10 * 60e3;
+  out.missing = LIVE && (expectedButMissing || (!supervisorOnline && !newsOnline && !out.running && !out.waitingLogin && !intentionallyResting && inHours() && ageMs > 10 * 60e3));
+  let label;
+  if (out.waitingLogin) label = waitingCommodity ? "Fyers MCX login needed · Kotak remains separate" : "Waiting for Fyers login";
+  else if (newsOnline && supervisorOnline) label = out.running ? "24/7 services online · market scan active" : sup.phase === "resting" ? "24/7 services online · news radar active, markets resting" : "24/7 services online · trading supervisor active";
+  else if (newsOnline) label = "News radar online · trading supervisor unavailable";
+  else if (supervisorOnline) label = "Trading supervisor online · news radar unavailable";
+  else if (out.running) label = "Market scan active · scheduled mode";
+  else if (out.missing) label = "Not checking in";
+  else label = intentionallyResting || sup.phase === "resting" ? "Markets resting" : "Scheduled / not connected";
+  const pulseOn = newsOnline || supervisorOnline || out.running;
+  pulse.innerHTML = `<span class="dot ${pulseOn ? "on" : ""}"></span><span>${label}${seen ? ` · engine last check-in ${hhmm(seen)}${LIVE && seen.slice(0, 10) !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) ? " on " + dayText(seen.slice(0, 10)) : ""}` : ""}</span>`;
+  if (LIVE) banner.innerHTML = out.waitingLogin ? `<div class="banner"><b>${waitingCommodity ? "Waiting for your Fyers MCX login." : "Waiting for your Fyers login."}</b> Open your Telegram bot, tap the login link, and paste the code back. Kotak NSE/BSE scanning remains independent of the MCX login.</div>`
+    : out.missing ? `<div class="alarm"><b>${expectedButMissing ? "Trading supervisor is online but the market engine has missed its heartbeat." : "Neither the news worker nor the trading supervisor has checked in recently."}</b> Check the service status and the latest Actions / system journal logs.</div>` : "";
   return out;
 }
 
@@ -1332,7 +1398,7 @@ function closeSheet() {
   if (state.sheetFrom && document.contains(state.sheetFrom)) state.sheetFrom.focus();
 }
 
-const NAV = [["overview", "Overview"], ["take", "Share ideas"], ["options", "Calls & puts"], ["watchlist", "Watchlist"], ["market", "Market"], ["mine", "My trades"], ["more", "Research & logs"]];
+const NAV = [["overview", "Overview"], ["impact", "Impact radar"], ["take", "Share ideas"], ["options", "Calls & puts"], ["watchlist", "Watchlist"], ["market", "Market"], ["mine", "My trades"], ["more", "Research & logs"]];
 
 function freshness() {
   const el = $("fresh"), sl = state.sl && state.sl.status;
@@ -1340,7 +1406,9 @@ function freshness() {
   if (!LIVE) { el.innerHTML = `<span class="muted">Preview data, so it does not refresh.</span>`; return; }
   const bar = sl && sl.bar_end ? clock24(sl.bar_end.slice(11, 16)) : null;
   const age = sl && sl.cycle_at ? (Date.now() - new Date(sl.cycle_at).getTime()) / 60e3 : null;
-  const stale = age != null && age > 9 && inHours();
+  const supervisorStatus = state.supervisor && state.supervisor.status || {};
+  const knownResting = supervisorStatus.running && supervisorStatus.phase === "resting";
+  const stale = age != null && age > 9 && inHours() && !knownResting;
   el.innerHTML = `${bar ? `Prices as of the <b>${bar}</b> candle · ` : ""}page updated <b>${hhmm(new Date(state.loadedAt + 19800e3).toISOString())}</b> · refreshes every 2 minutes (next in <span id="cd">2:00</span>) · <button class="chip" data-refresh="1" ${state.loading ? "disabled" : ""}>${state.loading ? "Refreshing…" : "Refresh now"}</button>
     ${stale ? `<span class="loss"> Strategy data is ${Math.round(age)} minutes old.</span>` : ""}`;
 }
@@ -1355,6 +1423,50 @@ async function refresh() {
   state.loading = true; freshness();
   try { await load(); state.loadedAt = Date.now(); } finally { state.loading = false; }
   render();
+}
+
+// ── Always-on news impact radar: event -> possible transmission -> market confirmation ──
+function impactSection() {
+  const I = state.intel, events = (I && I.events) || [], status = (I && I.status) || {};
+  const now = Date.now(), last = status.last_scan ? new Date(status.last_scan).getTime() : 0;
+  const ageMin = last ? Math.max(0, Math.round((now - last) / 60000)) : null;
+  const stale = ageMin == null || ageMin > 15;
+  const filtered = events.filter(e => {
+    const impacts = e.impacts || [];
+    if (state.impactFilter === "all") return true;
+    if (state.impactFilter === "commodities") return impacts.some(p => ["CRUDE", "NATGAS", "GOLD", "SILVER"].includes(p.asset));
+    if (state.impactFilter === "equities") return impacts.some(p => p.asset && !["CRUDE", "NATGAS", "GOLD", "SILVER", "NIFTY", "BANKNIFTY"].includes(p.asset));
+    if (state.impactFilter === "indices") return impacts.some(p => ["NIFTY", "BANKNIFTY"].includes(p.asset));
+    return true;
+  });
+  const bias = x => `<b class="bias-${esc(x || "mixed")}">${esc((x || "unknown").toUpperCase())}</b>`;
+  const cards = filtered.slice(0, 24).map(e => {
+    const paths = (e.impacts || []).slice(0, 8);
+    const linked = safeHttpUrl(e.link);
+    const title = linked ? `<a href="${esc(linked)}" target="_blank" rel="noopener noreferrer">${esc(e.title)}</a>` : esc(e.title);
+    const method = e.analysis_method === "ai+rules" ? "AI + rules" : "Rules-based";
+    return `<article class="impact-card">
+      <div class="impact-head"><span class="impact-tag">${esc(e.category || "Market news")}</span><span class="impact-score">${Number(e.impact_score || 0)}<small class="muted" style="font:400 .72rem var(--body)"> / 100</small></span></div>
+      <h3 class="impact-title">${title}</h3>
+      <div class="impact-meta"><span>${esc(e.source || "News")}</span><span>·</span><span>${e.published_at ? esc(hhmm(e.published_at)) : "Time unknown"}</span><span>·</span><span>${Number(e.evidence_count || 1)} source signal(s)</span></div>
+      <p style="margin:10px 0 8px;font-size:.9rem">${esc(e.summary || "Headline captured; assessment unavailable.")}</p>
+      <div class="impact-status"><span class="impact-tag">${esc((e.severity || "low").toUpperCase())} relevance</span><span class="impact-tag">${esc((e.confidence || "low").toUpperCase())} mapping confidence</span><span class="impact-tag">${esc(e.horizon || "unknown horizon")}</span><span class="impact-tag">${method}</span></div>
+      ${paths.length ? `<div class="impact-paths">${paths.map(p => `<div class="impact-path"><span><b>${esc(p.label || p.asset)}</b></span><span>${bias(p.bias)}</span><small>${esc(p.why || "Conditional relationship; wait for market confirmation.")}</small></div>`).join("")}</div>` : `<p class="note">No specific Indian instrument mapping is sufficiently supported yet.</p>`}
+      <details class="impact-details"><summary>What would confirm or invalidate this?</summary><div class="impact-detail-grid"><div><b>Watch for</b><ul>${(e.confirm || []).slice(0,5).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div><div><b>What weakens the thesis</b><ul>${(e.invalidate || []).slice(0,5).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div></div><p class="note">${esc(e.confidence_note || "Confidence is not a price-move probability.")}</p></details>
+      <p class="note">Market confirmation: <b>${esc((e.market_confirmation || "not_checked").replaceAll("_", " "))}</b> · Decision: context only, not a trade signal.</p>
+    </article>`;
+  }).join("");
+  const filters = [["all","All"],["commodities","Commodities"],["equities","Equities"],["indices","Indices"]];
+  const updated = last ? `${ageMin} min ago` : "not received";
+  const worker = status.worker_mode === "continuous" && status.running ? "24/7 worker online" : status.worker_mode === "scheduled" ? "Scheduled fallback" : "Worker not confirmed";
+  const statusLine = `<div class="impact-status"><span class="vchip ${stale ? "warn" : "good"}">${stale ? "Scanner stale / not checked in" : "Scanner healthy"}</span><span>${esc(worker)}</span><span>Last scan: ${updated}</span><span>Mode: ${esc(status.analysis_mode || "waiting")}</span><span>${events.length} retained events</span><span>New this cycle: ${Number(status.new_events || 0)}</span></div>${status.last_error ? `<p class="note loss">Last service error: ${esc(status.last_error)}</p>` : ""}`;
+  const blank = !events.length ? `<div class="empty">${I ? "No relevant headlines have been retained yet. The service will keep checking RSS feeds, even when Indian markets are closed." : "The 24/7 News Impact service has not published its first scan yet. Start the Signal Desk Intelligence service to populate this panel."}</div>` : "";
+  return `<section id="impact"><div class="sec-head"><h2>Impact Radar</h2><span class="muted" style="font-size:.88rem">News → transmission path → instruments → confirmation</span></div>
+    ${statusLine}
+    <div class="impact-disclaimer"><b>Important:</b> Impact score ranks headline relevance, not the probability of a price move. Direction is a conditional hypothesis. No event becomes a trade without independent market-data, liquidity and strategy checks.</div>
+    <div class="filters" role="group" aria-label="Filter impact radar">${filters.map(([id,label]) => `<button class="chip" data-ifilter="${id}" aria-pressed="${state.impactFilter === id}">${label}</button>`).join("")}</div>
+    ${blank}<div class="impact-grid">${cards}</div>
+    ${I && I.disclaimer ? `<p class="note">${esc(I.disclaimer)}</p>` : ""}</section>`;
 }
 
 // ── Results and watchlist: who reports, and what the tool is watching because of it ──
@@ -1601,7 +1713,7 @@ function render() {
   const genuine = ((state.sl && state.sl.movers && state.sl.movers.list) || []).filter(m => m.genuine).length;
   $("app").innerHTML = `<nav class="jump" aria-label="Sections">${NAV.map(([id, l]) => `<button class="chip" data-jump="${id}">${l}</button>`).join("")}</nav>
     ${overviewSection(lead, takeOpen, optIdeas, open, watchOpen.length, mineOpen, hd)}
-    ${marketSection()}${takeSection(takeOpen, takeEnded, watchOpen.length)}${optionsSection()}${resultsSection(rows)}
+    ${impactSection()}${marketSection()}${takeSection(takeOpen, takeEnded, watchOpen.length)}${optionsSection()}${resultsSection(rows)}
     ${mineSection(rows)}${moversSection(rows)}
     <section id="more"><div class="sec-head"><h2>Research &amp; logs</h2><span class="muted" style="font-size:.88rem">Deeper evidence and diagnostics, when you need them</span></div>
       ${det("daily", "Daily research: base-and-breakout over ten years", state.dr ? `${state.dr.period.shares} shares` : "not run yet", () => dailyBlock())}
@@ -1634,6 +1746,7 @@ document.addEventListener("click", e => {
   if (b.dataset.jump) { const el = $(b.dataset.jump); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   if (b.dataset.themeToggle) { state.theme = state.theme === "auto" ? "dark" : state.theme === "dark" ? "light" : "auto"; try { localStorage.setItem("sd_theme", state.theme); } catch (_) {} applyPreferences(); return; }
   if (b.dataset.compactToggle) { state.compact = !state.compact; try { localStorage.setItem("sd_compact", state.compact ? "1" : "0"); } catch (_) {} applyPreferences(); return; }
+  if (b.dataset.ifilter) { state.impactFilter = b.dataset.ifilter; rerender(); return; }
   if (b.dataset.wlf) { state.wlFilter = b.dataset.wlf; rerender(); return; }
   if (b.dataset.optf) { state.optFilter = b.dataset.optf; rerender(); return; }
   if (b.dataset.group) { const k = b.dataset.group; state.openGroups.has(k) ? state.openGroups.delete(k) : state.openGroups.add(k); rerender(); return; }

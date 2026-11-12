@@ -1,3 +1,25 @@
+# Signal Desk 4.1.0 — continuous news intelligence and dual-broker routing
+
+Released 12 November 2026.
+
+- **24/7 News Impact service:** adds `engine/intelligence.py`, a separate daemon that polls seven configured RSS topic groups every five minutes, including evenings, weekends and exchange holidays. It persists/deduplicates events, source evidence, a 21-day event history, health and next-scan metadata, and publishes `intelligence.json` to the shared `data` branch.
+- **Macro transmission mapping:** deterministic rules cover Middle East/energy supply risk, central-bank/rates/FX, China/industrial metals and Indian monsoon/agriculture. Example pathways include Iran/Strait of Hormuz escalation → conditional crude/gold/LNG risk and first-/second-order effects on Indian upstream producers, refiners, airlines and shipping.
+- **Company-specific news:** known Indian company names/tickers can map to positive, negative or mixed corporate catalysts (for example, a named company order win or regulatory probe). Unmapped headlines stay unclassified instead of inventing instruments.
+- **Optional structured AI analysis:** when `OPENAI_API_KEY` is present and `news_intelligence.ai.enabled` is true, a small bounded number of new headlines per scan can receive Responses API JSON-schema interpretation. Only catalogued asset IDs are accepted. Without the key, deterministic rules continue. AI can refine explanatory mapping; it cannot supply numerical probabilities, trade instructions or override hard risk gates.
+- **News-to-stock discovery:** fresh, high-relevance mapped equities in the current Nifty 200 universe can enter the strategy desk's in-play list with an event-specific reason. Normal stock candle, participation, market context, cost, strategy-conflict and portfolio-risk checks remain mandatory; news never produces a TAKE on its own.
+- **Impact Radar dashboard:** adds a filterable all/commodities/equities/indices view with headline, sources, impact relevance score, mapping confidence, horizon, affected instruments, causal explanations, confirmation/invalidation conditions, service heartbeat and errors. It explicitly states that impact score is not price probability.
+- **Dual-broker routing:** adds `broker.commodity_feed: fyers`. Kotak remains the primary provider for NSE/BSE; `MCX:` price requests and `MCX_COM` contract-master lookups route to Fyers. Broker statistics are aggregated. A missing or unauthenticated Fyers secondary feed disables only MCX, not Kotak's equity/index scanner. Each configured commodity is enabled independently only after its Fyers futures contract returns a usable quote and recent valid five-minute history.
+- **Fyers instrumentation:** quote/history calls are counted by method, failures and rate-limit responses. MCX preflight now requires a positive live price on a current contract; there is no hard-coded expired-contract fallback.
+- **Persistent worker deployment:** adds hardened systemd units and Windows Task Scheduler guidance for both the 24/7 news worker and the 24/7 trading supervisor. The supervisor sleeps between configured market sessions and suppresses GitHub runner hand-over when running as the persistent host. GitHub Actions remains a best-effort recovery/fallback path.
+- **Shared data safety:** `Store.publish` now serialises publishers on the same host, supports preservation of files owned by the other persistent service, uses process-local GitHub token configuration and excludes runtime locks/temporary files from the public data branch.
+- **Always-on dashboard status:** reads `supervisor.json` and `intelligence.json` separately, distinguishes news-worker health from trading-session status, and no longer labels an expected out-of-session rest as a missed engine heartbeat.
+- **Dashboard heartbeat fix:** normal resting states and a fresh recent heartbeat no longer trigger an immediate red “not checking in” banner. A genuine missed-heartbeat window is required; secondary Fyers login is surfaced separately.
+- **Test coverage:** added multi-broker routing/contract-master tests, per-commodity Fyers quote/history preflight tests, macro/company event mapping, event deduplication, safe conditional classification and watchlist promotion tests.
+
+**Operational boundary:** both persistent daemons can remain alive continuously; actual equity/index/MCX strategy scans remain bounded by their exchange sessions. The release was verified offline; it has not been authenticated against the user's Kotak/Fyers accounts or deployed on an always-on host from this build environment.
+
+---
+
 # Signal Desk 4.0.0: decision cockpit, hardened data and prospective options research
 
 Released 12 November 2026.

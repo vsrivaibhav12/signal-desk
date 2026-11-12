@@ -1,11 +1,11 @@
-"""Starts the engine, keeps it running through the session, and handles login.
+"""Runs the market engine inside configured exchange sessions and handles login.
 
-GitHub's timer starts a run every 10 minutes during market hours. Only one run
-does the work: it writes a "heartbeat" to the data folder every two minutes.
-Any other run that starts sees a fresh heartbeat and leaves at once. If the
-heartbeat goes stale (the working run died), the next run takes over and
-carries on from the saved state. That is what keeps the tool awake.
+The preferred 4.1 deployment calls this Session from engine.supervisor, a
+persistent process that remains alive between sessions. GitHub Actions still
+provides a scheduled/manual recovery path. Only one engine run owns a session;
+heartbeats and the shared data branch coordinate hand-over and recovery.
 """
+import json
 import os
 import secrets
 import re
@@ -23,11 +23,12 @@ from .core import Engine
 from . import brokers
 from .alerts import Alerts
 from .leaders import Leaders
+from .intelligence import equity_catalysts
 from .results import Results
 from .tradingcal import TradingCalendar
 from .schema import SCHEMA
 from .watch import Watch
-from .errors import AuthError
+from .errors import AuthError, BrokerError
 from .fyers import Fyers
 from .store import Store
 from .strategies.desk import StrategyDesk
@@ -108,15 +109,30 @@ class Session:
         env = os.environ
         self.kind = brokers.primary(self.cfg)
         self.label = brokers.label(self.kind)
-        need = brokers.required_secrets(self.kind) + ["TELEGRAM_BOT_TOKEN"]
+        need = brokers.required_secrets_for_config(self.cfg) + ["TELEGRAM_BOT_TOKEN"]
         missing = [k for k in need if not env.get(k)]
         if missing:
             sys.exit("Setup is not finished. These secrets are missing in GitHub: " + ", ".join(missing))
-        self.notes = brokers.adjust_config(self.cfg, self.kind)
+        self.notes = brokers.adjust_config(self.cfg, self.kind, secondary=brokers.commodity_feed(self.cfg))
         self.pin = env.get("FYERS_PIN", "").strip()
         self.tg = Telegram(env["TELEGRAM_BOT_TOKEN"])
-        self.store = Store(os.path.join(ROOT, "_data"), brokers.secret_material(env) + env["TELEGRAM_BOT_TOKEN"])
+        data_dir = os.path.join(ROOT, "_data")
+        current_material = brokers.secret_material(env) + env["TELEGRAM_BOT_TOKEN"]
+        self.store = Store(data_dir, current_material)
         self.secure = self.store.load_secure()
+        if not self.secure:
+            # 4.0 installs that only had Kotak may have encrypted secure.bin with
+            # the Kotak key. When Fyers is added for MCX, migrate it in place so
+            # the Telegram pairing is not lost.
+            for candidate in (env.get("KOTAK_CONSUMER_KEY", "").strip(), env.get("FYERS_SECRET_KEY", "").strip()):
+                if not candidate or candidate == brokers.secret_material(env):
+                    continue
+                legacy = Store(data_dir, candidate + env["TELEGRAM_BOT_TOKEN"])
+                recovered = legacy.load_secure()
+                if recovered:
+                    self.secure = recovered
+                    self.store.save_secure(recovered)
+                    break
         configured_chat = env.get("TELEGRAM_CHAT_ID", "").strip()
         if configured_chat:
             try:
@@ -125,6 +141,9 @@ class Session:
                 sys.exit("TELEGRAM_CHAT_ID must be a numeric Telegram chat ID.")
         self.tg.chat_id = configured_chat or self.secure.get("chat_id")
         self.fy, self.master = brokers.build(self.cfg, env)
+        self.secondary_fyers = getattr(self.fy, "secondary", None)
+        self.commodity_markets = [m for m in self.cfg.get("markets", []) if m.get("kind") == "commodity" and m.get("enabled", True)]
+        self.secondary_fyers_pending = False
         self.url = dashboard_url(self.cfg)
         self.started = time.time()
         self.engine = None
@@ -144,7 +163,8 @@ class Session:
         st = self.feed["status"]
         st.update({"run_id": RUN_ID, "running": running, "heartbeat": clock.now().isoformat(timespec="seconds")})
         self.store.save_feed(self.feed)
-        self.store.publish(own=ENGINE_FILES, own_prefix=("chartlive_",))
+        preserve = ("intelligence.json", "supervisor.json") if os.environ.get("SIGNAL_DESK_SHARED_DATA") == "1" else ()
+        self.store.publish(own=ENGINE_FILES, own_prefix=("chartlive_",), preserve_local=preserve)
         if self.engine:
             self.engine.dirty = False
         self.last_beat = time.time()
@@ -185,9 +205,194 @@ class Session:
         return False
 
     # ── Fyers login ──────────────────────────────────────────
+    def _secondary_symbols(self):
+        """Resolve the nearest Fyers MCX future for every configured commodity."""
+        day = clock.now().date()
+        symbols = {}
+        for market in self.commodity_markets:
+            try:
+                future = self.master.nearest_future("MCX_COM", market["root"], day)
+                if future and future.get("symbol"):
+                    symbols[market["id"]] = future["symbol"]
+                else:
+                    symbols[market["id"]] = None
+            except Exception as exc:
+                print("Could not resolve MCX contract:", market.get("id"), type(exc).__name__)
+                symbols[market["id"]] = None
+        return symbols
+
+    def _secondary_symbol(self):
+        """First resolvable MCX future, used in concise login/error messages."""
+        return next((symbol for symbol in self._secondary_symbols().values() if symbol), None)
+
+    def _verify_secondary_fyers(self, symbol):
+        """Require both a current MCX quote and usable recent MCX candle history.
+
+        A contract-master row or a quote alone is not enough: the commodity
+        strategy needs historical candles for its opening range and VWAP.
+        """
+        client = self.secondary_fyers
+        if not client or not symbol:
+            return False, "No current MCX futures contract could be resolved from Fyers' master."
+        if not client.probe(symbol):
+            return False, f"Fyers did not return a usable quote for {symbol}."
+        today = clock.now().date()
+        try:
+            candles = client.history(symbol, "5", today - timedelta(days=10), today)
+        except (BrokerError, requests.RequestException) as exc:
+            return False, f"Fyers MCX history request failed for {symbol}: {type(exc).__name__}."
+        valid = []
+        for row in candles or []:
+            if not isinstance(row, (list, tuple)) or len(row) < 6:
+                continue
+            try:
+                stamp = int(float(row[0]))
+                if stamp > 10_000_000_000:
+                    stamp //= 1000
+                o, h, low, close = (float(row[i]) for i in range(1, 5))
+                volume = float(row[5] or 0)
+                if stamp <= 0 or min(o, h, low, close) <= 0 or h < max(o, low, close) or low > min(o, h, close):
+                    continue
+                if volume < 0:
+                    continue
+                valid.append((stamp, o, h, low, close, volume))
+            except (TypeError, ValueError, OverflowError):
+                continue
+        if len(valid) < 2:
+            return False, f"Fyers returned fewer than two valid 5-minute candles for {symbol}."
+        latest = clock.from_ts(max(row[0] for row in valid))
+        if latest.date() < today - timedelta(days=7):
+            return False, f"Fyers MCX history for {symbol} is stale (last candle {latest:%Y-%m-%d %H:%M IST})."
+        return True, {"symbol": symbol, "last_candle": latest.isoformat(timespec="seconds"),
+                      "valid_candles": len(valid)}
+
+    def _verify_secondary_fyers_markets(self):
+        """Verify each configured MCX market independently; one bad contract must not hide others."""
+        results = {}
+        symbols = self._secondary_symbols()
+        for market in self.commodity_markets:
+            market_id = market["id"]
+            symbol = symbols.get(market_id)
+            if not symbol:
+                results[market_id] = {"ok": False, "detail": "No current futures contract in Fyers master."}
+                continue
+            ready, evidence = self._verify_secondary_fyers(symbol)
+            results[market_id] = {"ok": ready, "detail": evidence if not ready else None,
+                                  "history_check": evidence if ready else None, "symbol": symbol}
+        return results
+
+    def _enable_verified_secondary_markets(self, results):
+        enabled = []
+        for market in self.commodity_markets:
+            result = results.get(market["id"], {})
+            market["enabled"] = bool(result.get("ok"))
+            if market["enabled"]:
+                enabled.append(market["id"])
+        failed = {key: value.get("detail") for key, value in results.items() if not value.get("ok")}
+        self.feed["status"]["brokers"] = {
+            "primary": {"name": "Kotak Neo", "status": "connected"},
+            "commodity": {"name": "Fyers", "status": "connected" if enabled else "unavailable",
+                          "enabled_markets": enabled, "unavailable_markets": failed,
+                          "status_detail": "Per-market MCX quote and 5-minute history preflight"},
+        }
+        return enabled
+
+    def _disable_secondary_markets(self, reason):
+        for market in self.commodity_markets:
+            market["enabled"] = False
+        self.secondary_fyers_pending = True
+        self.feed["status"]["brokers"] = {
+            "primary": {"name": self.label, "status": "connected"},
+            "commodity": {"name": "Fyers", "status": "login_required", "detail": reason},
+        }
+        self.feed["status"]["phase"] = "secondary_login_required"
+        if self.secondary_fyers and self.secondary_fyers.app_id and self.secondary_fyers.secret:
+            link = self.secondary_fyers.login_url(self.url)
+            self.tg.send("🔑 <b>Fyers MCX data login needed</b>\n"
+                         "Kotak remains connected for NSE/BSE. MCX contracts are temporarily paused until Fyers market-data access is verified.\n\n"
+                         "1. Open this link and log in to Fyers:\n" + link + "\n\n"
+                         "2. Tap <b>Copy login code</b> on the dashboard page.\n"
+                         "3. Paste that code into this Telegram chat.\n\n"
+                         "The NSE/BSE scanner will continue while MCX waits for login.")
+        else:
+            self.tg.send("⚠️ <b>MCX feed not configured yet</b>\n"
+                         "Kotak remains connected for NSE/BSE. Add FYERS_APP_ID and FYERS_SECRET_KEY to your repository secrets; "
+                         "then restart the Trade engine to connect Crude Oil, Gold, Silver and Natural Gas.")
+        self.beat(force=True)
+
+    def _prepare_secondary_fyers(self):
+        """Authenticate the optional MCX feed without stopping Kotak equity/index scanning."""
+        if not self.secondary_fyers or not self.commodity_markets:
+            return True
+        client = self.secondary_fyers
+        if not client.app_id or not client.secret:
+            self._disable_secondary_markets("Add FYERS_APP_ID and FYERS_SECRET_KEY as repository secrets to enable MCX routing.")
+            return False
+        today = clock.now().date().isoformat()
+        client.token = self.secure.get("access_token")
+        if client.token:
+            results = self._verify_secondary_fyers_markets()
+            enabled = self._enable_verified_secondary_markets(results)
+            if enabled:
+                return True
+        refresh = self.secure.get("refresh_token")
+        if refresh and self.pin:
+            try:
+                client.token = client.refresh(refresh, self.pin)
+                results = self._verify_secondary_fyers_markets()
+                enabled = self._enable_verified_secondary_markets(results)
+                if enabled:
+                    self.secure.update({"access_token": client.token, "access_date": today})
+                    self.store.save_secure(self.secure)
+                    return True
+            except (AuthError, BrokerError, requests.RequestException) as exc:
+                print("Fyers secondary refresh/preflight failed:", type(exc).__name__)
+        self._disable_secondary_markets("Fyers login or MCX quote/history permission has not been verified.")
+        return False
+
+    def _accept_secondary_fyers_code(self, text):
+        if not (self.secondary_fyers and self.secondary_fyers_pending):
+            return False
+        code = find_code(text)
+        if not code:
+            return False
+        try:
+            access, refresh = self.secondary_fyers.exchange_code(code)
+            self.secondary_fyers.token = access
+            results = self._verify_secondary_fyers_markets()
+            enabled = self._enable_verified_secondary_markets(results)
+            if not enabled:
+                details = "; ".join(f"{k}: {v.get('detail')}" for k, v in results.items())
+                raise AuthError("Fyers login succeeded, but no MCX market passed quote/history preflight. " + details)
+            self.secure.update({"access_token": access, "access_date": clock.now().date().isoformat()})
+            if refresh:
+                self.secure.update({"refresh_token": refresh, "refresh_date": clock.now().date().isoformat()})
+            self.store.save_secure(self.secure)
+            self.secondary_fyers_pending = False
+            self.feed["status"]["phase"] = "watching"
+            self.beat(force=True)
+            enabled_names = ", ".join(m["name"] for m in self.commodity_markets if m.get("enabled"))
+            unavailable_names = ", ".join(m["name"] for m in self.commodity_markets if not m.get("enabled"))
+            note = f"✅ Fyers MCX feed verified for: {enabled_names}. The scanner will begin from its next scheduled scan."
+            if unavailable_names:
+                note += f"\nNot enabled (quote/history preflight failed): {unavailable_names}."
+            self.tg.send(note)
+            return True
+        except (AuthError, BrokerError, requests.RequestException) as exc:
+            self.tg.send(f"Fyers MCX login was not accepted or the MCX data check failed: {str(exc)[:220]}\nPlease try a fresh login link.")
+            return True
+
     def login(self, until):
         if self.kind == "kotak":
-            return self.check_prices(until)
+            if not self.check_prices(until):
+                return False
+            current = current_session(self.cfg, clock.now())
+            if self.secondary_fyers and current and current[0] == "evening":
+                self._prepare_secondary_fyers()
+            else:
+                self.feed["status"]["brokers"] = {"primary": {"name": "Kotak Neo", "status": "connected"},
+                                                     "commodity": {"name": "Fyers", "status": "not_required" if not self.secondary_fyers else "outside_session"}}
+            return True
         today = clock.now().date().isoformat()
         self.fy.token = self.secure.get("access_token")
         if self.fy.token and self.fy.probe():
@@ -233,8 +438,8 @@ class Session:
                 self.store.save_secure(self.secure)
                 self.feed["status"]["phase"] = "watching"
                 self.beat(force=True)
-                extra = ("I will log in by myself for about the next two weeks."
-                         if self.pin and refresh else "I will ask again tomorrow morning.")
+                extra = ("I will log in by myself for about the next two weeks." if self.pin and refresh
+                         else "I will ask again tomorrow morning.")
                 self.tg.send(f"✅ Logged in to Fyers. {extra}")
                 return True
             if time.time() - asked > 15 * 60:
@@ -246,6 +451,8 @@ class Session:
     def commands(self, wait):
         for chat, text, sent in self.tg.poll(wait=wait):
             if chat != self.tg.chat_id or sent < self.started - 60:
+                continue
+            if self._accept_secondary_fyers_code(text):
                 continue
             word = text.lower().strip("/ ")
             now = clock.now()
@@ -266,11 +473,38 @@ class Session:
                              "• strategies: how each strategy is doing today\n"
                              "• skip: no new trades today\n• resume: allow trades again")
 
-    def catalysts(self):
-        """Names of shares with news that can move them today (results, orders, deals, broker calls)."""
+    def catalyst_details(self):
+        """Recent news-linked shares promoted for normal strategy checks, never direct trades."""
         if not self.engine:
             return []
-        return [i["symbol"] for i in (self.engine.day.get("news") or []) if i.get("tag") in ("Results", "Order win", "Deal", "Broker view")]
+        out = []
+        seen = set()
+        for item in (self.engine.day.get("news") or []):
+            if item.get("tag") in ("Results", "Order win", "Deal", "Broker view"):
+                symbol = str(item.get("symbol") or "").upper()
+                if symbol and symbol not in seen:
+                    out.append({"symbol": symbol, "why": f"News catalyst · {item.get('tag')}: {item.get('title', 'headline')}"})
+                    seen.add(symbol)
+        try:
+            with open(os.path.join(ROOT, "_data", "intelligence.json"), encoding="utf-8") as f:
+                intel = json.load(f)
+            news_cfg = self.cfg.get("news_intelligence") or {}
+            impacts = equity_catalysts(
+                intel, self.engine.universe, now=clock.now(),
+                min_score=int(news_cfg.get("watchlist_min_impact_score", 65)),
+                max_age_hours=int(news_cfg.get("watchlist_max_age_hours", 36)),
+            )
+            for item in impacts:
+                if item["symbol"] not in seen:
+                    out.append(item)
+                    seen.add(item["symbol"])
+        except (OSError, ValueError, TypeError) as exc:
+            print("News impact watchlist unavailable:", type(exc).__name__)
+        return out[:20]
+
+    def catalysts(self):
+        """Names of shares with recent results, company news or macro-linked event impacts."""
+        return [x["symbol"] for x in self.catalyst_details()]
 
     def refresh_results(self, now):
         try:                                                      # both run in the background; neither can hold up the engine
@@ -317,6 +551,11 @@ class Session:
 
     def hand_over(self):
         """Start a fresh run to continue the session before GitHub's 6-hour limit."""
+        # A persistent local supervisor relaunches Session itself. Dispatching
+        # another Actions runner would create two trading engines on one session.
+        if os.environ.get("SIGNAL_DESK_SUPERVISOR") == "1":
+            print("Persistent supervisor will restart the session locally; GitHub hand-over skipped.")
+            return
         repo, token = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_TOKEN")
         if not (repo and token):
             return
@@ -364,7 +603,7 @@ class Session:
         self.desk = StrategyDesk(self.cfg, self.fy, self.tg.send, data_dir, self.engine.universe,
                                  [m for m in self.cfg["markets"] if m.get("kind") == "index"],
                                  results=self.results, watch=self.watch, master=self.master, alerts=self.alerts,
-                                 catalysts=self.catalysts, leaders=self.leaders,
+                                 catalysts=self.catalyst_details, leaders=self.leaders,
                                  heartbeat=self.beat, options_trades=lambda: self.feed["trades"],
                                  flush=lambda: (self.desk.save(), setattr(self.desk, "dirty", False), self.beat(force=True)))
         if not sess:
@@ -408,7 +647,13 @@ class Session:
             except AuthError as e:
                 auth_fails += 1
                 print(f"{self.label} problem:", e)
-                if auth_fails <= 2:
+                if self.kind == "kotak" and self.secondary_fyers:
+                    if self.fy.probe():
+                        self._disable_secondary_markets("Fyers session expired or rejected an MCX request; Kotak remains active.")
+                    elif not self.login(end):
+                        break
+                    auth_fails = 0
+                elif auth_fails <= 2:
                     if not self.login(end):
                         break
                 elif auth_fails == 3:

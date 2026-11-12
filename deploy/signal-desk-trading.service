@@ -1,0 +1,28 @@
+[Unit]
+Description=Signal Desk Continuous Trading Supervisor
+Wants=network-online.target
+After=network-online.target signal-desk-intelligence.service
+
+[Service]
+Type=simple
+User=signaldesk
+Group=signaldesk
+WorkingDirectory=/opt/signal-desk
+EnvironmentFile=/etc/signal-desk.env
+Environment=PYTHONUNBUFFERED=1
+Environment=SIGNAL_DESK_SHARED_DATA=1
+Environment=SIGNAL_DESK_SUPERVISOR=1
+ExecStart=/opt/signal-desk/.venv/bin/python -m engine.supervisor --daemon
+Restart=always
+RestartSec=20
+TimeoutStopSec=45
+KillSignal=SIGTERM
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/signal-desk/_data
+
+[Install]
+WantedBy=multi-user.target

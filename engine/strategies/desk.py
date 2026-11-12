@@ -264,10 +264,17 @@ class StrategyDesk:
                     play[sym] = w["why"]
                     if sym not in hot:
                         hot.append(sym)
-        for name in list(self.catalysts())[:10]:
+        for item in list(self.catalysts())[:20]:
+            # Older callers may provide a symbol string. The 4.1 intelligence
+            # service supplies a structured reason tied to a particular event.
+            if isinstance(item, dict):
+                name = str(item.get("symbol") or "").upper()
+                why = str(item.get("why") or "In the news")
+            else:
+                name, why = str(item).upper(), "In the news"
             sym = self.by_name.get(name)
             if sym:
-                play.setdefault(sym, "In the news")
+                play.setdefault(sym, why)
                 if sym not in hot:
                     hot.append(sym)
         if self.watch is not None:

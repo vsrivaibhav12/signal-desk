@@ -1,46 +1,53 @@
-# Signal Desk 4.0.0 — hardened paper-trading research platform
+# Signal Desk 4.1.0 — multi-broker paper-trading and market-intelligence platform
 
-**4.0.0 is a dashboard and data-integrity release.** It introduces the trader-first decision cockpit, stricter quote/candle/option validation, stale-data gates, and a prospective live options quote tape. See [the 4.0.0 release notes](RELEASE_NOTES.md) and [the upgrade guide](UPGRADE_4.0.0.md).
+**4.1.0 adds two persistent 24/7 services, dual-broker market-data routing and an event-driven Impact Radar.** Kotak Neo remains the primary NSE/BSE provider; Fyers can be configured as the dedicated MCX feed. The News Impact Radar runs independently of exchange sessions, maps macro and company headlines to conditional instrument pathways, and can promote relevant Nifty 200 equities into the ordinary strategy watchlist. See [4.1.0 release notes](RELEASE_NOTES.md), [upgrade guide](UPGRADE_4.1.0.md) and [news-intelligence guide](docs/NEWS_INTELLIGENCE.md).
 
-Signal Desk combines two read-only/paper-trading engines:
+Signal Desk combines two persistent services, session-aware market engines and its research workflows:
 
-1. **Rulebook engine** — opening-range logic for index, commodity and stock options, plus cash stocks. Kotak Neo (or Fyers) is used for market data; the application does not submit broker orders.
-2. **Strategy desk** — three researched intraday strategies on a results- and volume-driven watchlist, plus a call and put scanner for the indices, with five-minute signal replay, trade simulation, scoring, charts and Telegram notifications.
+1. **News Intelligence (24/7):** polls configured RSS searches every five minutes, classifies macro/corporate events using deterministic rules and optionally structured AI analysis, maps affected commodities/indices/Indian equities, and publishes an Impact Radar. It never generates a trade by itself.
+2. **Trading Supervisor (24/7 process):** stays alive continuously, starts the existing market engine during configured NSE/BSE/MCX sessions, and sleeps between sessions. The scanners do not poll closed markets or invent prices when an exchange is shut.
+3. **Market engines (exchange sessions):** a rulebook engine for index, commodity and stock-option paper trades, plus a strategy desk for the researched stock strategies. Kotak Neo and Fyers are read-only data providers; no broker orders are submitted.
+4. **Research:** historical bhavcopy data, point-in-time result replay, strategy/backtest experiments, prospective option quote capture, charts and paper-trade evaluation.
 
-The release hardens timestamp, quote, candle and option-contract validation; position sizing; next-candle execution assumptions; per-book risk limits; shared cross-engine exposure controls; prospective options quote capture; trade archival; and safe Git publishing. The redesigned dashboard foregrounds market context, data confidence, candidates and open risk, while keeping research detail and logs accessible in secondary panels.
+The default broker routing is Kotak Neo for NSE/BSE and Fyers as an optional MCX secondary feed. Without verified Fyers MCX access, commodity markets remain disabled while Kotak equity/index scanning continues. Fyers login is checked per configured commodity: each MCX contract must return a usable quote and recent valid five-minute futures candles before that market is enabled.
 
-> **Research/paper-trading software only.** It does not place orders and is not evidence of a profitable strategy. Historical results are sensitive to data quality, execution assumptions and estimated costs. The options backtest estimates premiums with a model rather than replaying historical option-chain quotes. The new option quote tape only captures observations prospectively from 4.0.0 onward; it does not backfill history. Do not connect real capital based only on these reports.
+> **Research/paper-trading software only.** It does not place orders and is not evidence of a profitable strategy. Impact scores rank headline relevance; they are not price-move probabilities. Confidence labels describe the confidence in an instrument mapping, not the probability of a price move. News impacts are conditional hypotheses that need source verification and independent market confirmation. Historical option premiums are not fully replayed from past option chains; the quote tape is prospective only. Do not connect real capital based only on these reports.
 
 ## Start here
 
-- Read **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for GitHub Actions, Kotak Neo read-only prices, Telegram pairing and dashboard setup.
-- Review **[RELEASE_NOTES.md](RELEASE_NOTES.md)** for the hardening changes and known limitations.
+- Read **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for the existing GitHub Actions setup, Kotak/Fyers configuration and dashboard.
+- Read **[docs/NEWS_INTELLIGENCE.md](docs/NEWS_INTELLIGENCE.md)** and **[deploy/README.md](deploy/README.md)** to deploy both persistent workers on a Linux VPS or always-on office PC.
+- Review **[RELEASE_NOTES.md](RELEASE_NOTES.md)** and **[UPGRADE_4.1.0.md](UPGRADE_4.1.0.md)** before replacing source files.
 - Runtime settings are in **`config.yaml`**.
 
 ## Main capabilities
 
 | Area | What it does |
 |---|---|
-| Market data | Kotak Neo quotes/history through the official SDK (Fyers optional), and Yahoo Finance historical data |
-| Rulebook | Opening range, market direction, option selection, stops, targets, partial exits and time exits |
-| Strategy research | Three strategies, indicators, decision grading, trade simulation and charts |
-| Execution modelling | Next-five-minute-candle-open entry by default; optional signal-close reference model |
-| Risk management | Position sizing, per-engine limits and a shared cross-engine position/risk/daily-loss ceiling |
-| Data integrity | Exchange/receipt timestamps are distinguished; malformed or stale quotes/candles are rejected; mandatory missing option inputs fail closed |
-| Options research capture | Prospective bid/ask, depth, OI and quote-time observations are saved for future historical premium analysis; no historical backfill |
-| Portfolio research | Aggregate approval/rejection, P&L, profit factor, drawdown, chronological diagnostics and stability blocks |
-| Dashboard | Redesigned interactive decision cockpit, market pulse, data-health gates, searchable/filterable watchlist and options, trade detail sheets, searchable/exportable logs, theme and compact controls |
-| Notifications | Telegram alerts, gated pairing and explicit stale-quote warnings |
-| Automation | GitHub Actions for intraday polling and scheduled backtests |
+| 24/7 news intelligence | Seven RSS query groups, five-minute polling, event deduplication, source evidence, macro transmission rules, company-specific catalysts, optional OpenAI structured analysis and Telegram alerts |
+| News-to-watchlist | High-relevance event-linked Nifty 200 equities can be promoted with a reason; the standard candle freshness, volume, market, liquidity, strategy and risk gates still apply |
+| Broker routing | Kotak Neo for NSE/BSE and optional Fyers secondary for MCX; exact instrument prefix determines provider, with no silent fallback |
+| Equity/index markets | Kotak-based quotes/history and option strategy scanning during exchange sessions |
+| MCX markets | Fyers quotes/history and current MCX contract master for Crude Oil, Gold, Silver and Natural Gas, after login and market-data preflight |
+| Research | Three intraday strategies, daily relative strength/breadth, historical replay, results watchlist, archetype/playbook research and trade lifecycle tracking |
+| Data integrity | Exchange/receipt timestamps are separated; stale, malformed and materially future-dated prices/candles are rejected; mandatory unknown data fails closed |
+| Options research capture | Prospective bid/ask, depth, OI and quote-time observations saved for future option-premium research |
+| Dashboard | Decision cockpit, Impact Radar, broker status, market context, data health, filtered candidates/options, open risk, trades and research logs |
+| Automation | 24/7 systemd/Task Scheduler trading supervisor and news worker; GitHub Actions for recovery/research and best-effort news fallback |
+
+## Always-on means the services stay alive; market scans remain session-aware
+
+For a genuinely continuously running installation, deploy both `engine.intelligence --daemon` and `engine.supervisor --daemon` using the two systemd units or Windows Task Scheduler tasks in `deploy/README.md`. The news worker polls through evenings, weekends and holidays. The trading supervisor stays alive but invokes the price/strategy engine only in configured exchange sessions, sleeping between sessions. GitHub Actions remains a recovery and best-effort fallback path, not the primary daemon; scheduled Actions can be delayed or dropped.
 
 ## Research limitations to keep in view
 
-- The live intraday replay still uses today's Nifty 200 membership for historical dates. The daily bhavcopy research has a separate point-in-time liquidity universe; do not conflate the two.
-- Historical news is not replayed point-in-time. Results-calendar events are included where historical data is available.
-- Sector rotation is not implemented because the project does not yet have reliable point-in-time sector classifications.
-- The historical options backtest remains an underlying/premium proxy. The prospective `options_tape.jsonl` captures real observed quote fields from this release onward, subject to broker data availability; it cannot recreate expired contracts' historical premiums, Greeks or IV.
+- The live intraday replay still uses today's Nifty 200 membership for historical dates. The daily bhavcopy research has a separate point-in-time liquidity universe.
+- Historical news is not yet replayed point-in-time. New event impacts are captured prospectively; results-calendar events are included where historical data is available.
+- Sector rotation is not fully implemented because reliable point-in-time sector classifications are unavailable in the current dataset.
+- The historical options backtest remains an underlying/premium proxy. `options_tape.jsonl` captures real observed quote fields prospectively; it cannot recreate expired contracts' historical premiums, Greeks or implied volatility.
+- News impact `confidence` is not calibrated against historical event outcomes. Do not interpret it as an estimated probability. A calibrated probability requires an event dataset, explicit outcome definition and out-of-sample validation.
 - Portfolio covariance, sector concentration, option-Greek exposure, dynamic broker margin and order-book impact are not yet fully modelled.
-- The previous holdout has been consumed. New strategy changes need a new untouched period or prospective paper-trading evidence.
+- The previous strategy holdout has been consumed. New strategy changes need a new untouched period or prospective paper-trading evidence.
 
 ## Local checks
 

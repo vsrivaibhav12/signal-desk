@@ -77,6 +77,33 @@ if live:                                   # sample content for the new sections
          "idea": {"contract": "SENSEX26NOV80100PE", "side": "PE", "strike": 80100, "lot": 20, "expiry": "2026-11-19", "premium": 310.0, "stop": 232.5,
                   "target": 426.2, "risk_per_lot": 1550, "capital_per_lot": 6200, "cost_ratio": 0.15}, "warnings": []}]}
 page = page.replace("/*__SL__*/null", js(live))
+intel_demo = {
+    "schema": 1,
+    "status": {"running": False, "worker_mode": "preview", "last_scan": "2026-11-12T18:55:00+05:30",
+               "analysis_mode": "Rules-based demo", "new_events": 1, "next_scan_seconds": 300,
+               "source_health": {"queries": 7, "queries_with_results": 5, "query_errors_or_empty": 2,
+                                  "headlines_received": 18, "unique_headlines": 12}},
+    "events": [{
+        "id": "demo-iran-energy", "title": "[DEMO] Iran conflict escalation raises Strait of Hormuz shipping risk",
+        "source": "Illustrative sample", "source_domains": ["demo.example"], "evidence_count": 1,
+        "published_at": "2026-11-12T18:40:00+05:30", "category": "Geopolitics / energy supply",
+        "impact_score": 85, "severity": "high", "overall_bias": "conditional",
+        "summary": "Conflict escalation can add a geopolitical risk premium, but a sustained crude move generally needs evidence of supply, export or transit disruption. The asset-level direction remains conditional and needs price/volume confirmation.",
+        "confidence": "low", "confidence_note": "Confidence in the relevance mapping only; not a probability of a price move.",
+        "horizon": "intraday to 2 weeks", "analysis_method": "rules", "market_confirmation": "not_checked",
+        "decision_status": "CONTEXT_ONLY", "probability": None,
+        "impacts": [
+            {"asset": "CRUDE", "label": "MCX Crude Oil", "bias": "bullish", "why": "A conflict near major oil export or shipping routes can add a geopolitical risk premium; actual supply disruption matters more than rhetoric."},
+            {"asset": "GOLD", "label": "MCX Gold", "bias": "bullish", "why": "Escalation can increase safe-haven demand, while the US dollar and real yields can offset it."},
+            {"asset": "IOC", "label": "Indian Oil Corporation", "bias": "mixed", "why": "Higher crude raises input costs; inventory effects and retail-price pass-through can offset or reverse the impact."},
+        ],
+        "confirm": ["Verified disruption to oil exports or transit", "MCX crude holds a breakout with abnormal volume", "Related energy instruments confirm the move"],
+        "invalidate": ["Diplomatic de-escalation or reopening of disrupted routes", "No sustained change in physical supply or freight", "Crude fails to confirm after liquidity returns"],
+        "link": ""
+    }],
+    "disclaimer": "Impact scores rank headline relevance; they are not a calibrated probability estimate. Directional effects are conditional hypotheses until corroborated by market data."
+}
 blob = js(feed)
-open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8").write(page.replace("/*__DEMO__*/null", blob))
+page = page.replace("/*__DEMO__*/null", blob).replace("/*__INTEL__*/null", js(intel_demo))
+open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8").write(page)
 print("index.html written,", len(blob) // 1024, "KB of sample data,", len(feed["trades"]), "sample trades")

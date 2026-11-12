@@ -4,3 +4,4 @@ __pycache__/
 tests/.master_cache/
 dist/
 .claude/
+/deploy/signal-desk.env

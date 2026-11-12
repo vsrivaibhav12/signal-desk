@@ -1,0 +1,77 @@
+name: News intelligence fallback
+
+# Best-effort backup for the persistent daemon. GitHub schedules are not a 24/7
+# daemon: they can be delayed or dropped. The VPS/office-PC service is primary.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run even if a recent continuous-worker heartbeat exists"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signal-desk-intelligence-fallback
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install --quiet -r requirements.txt
+      - name: Open the shared data branch
+        run: |
+          git config --global user.name "signal-desk"
+          git config --global user.email "signal-desk@users.noreply.github.com"
+          REMOTE="https://github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" data >/dev/null; then
+            git clone --quiet --depth 3 --branch data --single-branch "$REMOTE" _data
+          else
+            mkdir _data && cd _data && git init --quiet -b data && git remote add origin "$REMOTE"
+          fi
+      - name: Skip when the persistent worker is healthy
+        id: heartbeat
+        if: ${{ inputs.force != true }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          skip = 'false'
+          p = Path('_data/intelligence.json')
+          try:
+              state = json.loads(p.read_text())
+              status = state.get('status') or {}
+              stamp = datetime.fromisoformat(status.get('heartbeat', '').replace('Z', '+00:00'))
+              if stamp.tzinfo is None:
+                  stamp = stamp.replace(tzinfo=timezone.utc)
+              age = (datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)).total_seconds()
+              if status.get('worker_mode') == 'continuous' and status.get('running') and 0 <= age < 480:
+                  print(f'Persistent news worker heartbeat is {age:.0f}s old; fallback skipped.')
+                  skip = 'true'
+          except Exception as exc:
+              print('No fresh continuous-worker heartbeat; fallback will scan:', type(exc).__name__)
+          print(f'skip={skip}')
+          PY
+      - name: Scan and publish news impacts
+        if: ${{ steps.heartbeat.outputs.skip != 'true' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PYTHONUNBUFFERED: "1"
+        run: python -m engine.intelligence --once

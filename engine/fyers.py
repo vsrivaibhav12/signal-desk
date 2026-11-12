@@ -2,6 +2,7 @@
 import hashlib
 import time
 import urllib.parse
+from datetime import datetime
 
 import requests
 
@@ -11,6 +12,7 @@ AUTH_CODES = {-8, -15, -16, -17}
 
 
 from .errors import AuthError, BrokerError  # noqa: E402  (shared with the Kotak adapter)
+from .clock import IST
 
 
 class FyersError(BrokerError):
@@ -23,6 +25,10 @@ class Fyers:
         self.secret = secret
         self.token = None
         self._calls = []
+        self.since = time.time()
+        self.stats = {"history": {"calls": 0, "ok": 0, "error": 0, "refused": 0, "ms": 0},
+                      "quotes": {"calls": 0, "ok": 0, "error": 0, "refused": 0, "ms": 0},
+                      "other": {"calls": 0, "ok": 0, "error": 0, "refused": 0, "ms": 0}}
 
     # ── login ────────────────────────────────────────────────
     def _hash(self):
@@ -59,10 +65,28 @@ class Fyers:
             time.sleep(0.15 - (now - self._calls[-1]))
         self._calls.append(time.monotonic())
 
+    def _record(self, kind, outcome, elapsed):
+        row = self.stats.setdefault(kind, {"calls": 0, "ok": 0, "error": 0, "refused": 0, "ms": 0})
+        row["calls"] += 1
+        row[outcome] += 1
+        row["ms"] += int(elapsed * 1000)
+
+    def stats_snapshot(self):
+        by = {name: {"calls": row["calls"], "ok": row["ok"], "errors": row["error"],
+                     "refused": row["refused"],
+                     "avg_ms": round(row["ms"] / row["calls"]) if row["calls"] else 0}
+              for name, row in sorted(self.stats.items()) if row["calls"]}
+        return {"since": datetime.fromtimestamp(self.since, IST).isoformat(timespec="seconds"),
+                "total": sum(row["calls"] for row in self.stats.values()), "by_method": by,
+                "history_rate": 0, "cooling": 0}
+
     def _get(self, url, params=None):
+        kind = url.rstrip("/").split("/")[-1]
+        kind = kind if kind in ("history", "quotes") else "other"
         last = None
         for attempt in range(3):
             self._throttle()
+            started = time.monotonic()
             try:
                 r = requests.get(url, params=params, timeout=15, headers={
                     "Authorization": f"{self.app_id}:{self.token}", "version": "3"})
@@ -71,25 +95,39 @@ class Fyers:
                 except ValueError:
                     j = {}
                 if r.status_code == 401 or j.get("code") in AUTH_CODES:
+                    self._record(kind, "error", time.monotonic() - started)
                     raise AuthError(j.get("message", "login expired"))
                 if r.status_code == 429 or r.status_code >= 500:
+                    self._record(kind, "refused", time.monotonic() - started)
                     last = FyersError(f"Fyers busy ({r.status_code})")
                     time.sleep(2 + 3 * attempt)
                     continue
                 if j.get("s") not in ("ok", "no_data"):
+                    self._record(kind, "error", time.monotonic() - started)
                     raise FyersError(j.get("message") or f"Fyers error {r.status_code}")
+                self._record(kind, "ok", time.monotonic() - started)
                 return j
             except requests.RequestException as e:
+                self._record(kind, "error", time.monotonic() - started)
                 last = FyersError(f"network problem: {type(e).__name__}")
                 time.sleep(2 + 3 * attempt)
         raise last
 
-    def probe(self):
+    def probe(self, symbol="NSE:NIFTY50-INDEX"):
+        """Check a known symbol on the account's permitted market-data segment."""
         if not self.token:
             return False
         try:
-            self._get(f"{DATA}/quotes", {"symbols": "NSE:NIFTY50-INDEX"})
-            return True
+            j = self._get(f"{DATA}/quotes", {"symbols": symbol})
+            rows = j.get("d") or []
+            for row in rows:
+                value = row.get("v") or {}
+                try:
+                    if value.get("lp") is not None and float(value["lp"]) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+            return False
         except BrokerError:
             return False
 

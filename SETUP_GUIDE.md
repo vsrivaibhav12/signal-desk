@@ -34,16 +34,17 @@ If **Trade engine** is missing, the `.github` folder did not upload. Fix: click 
 
 ---
 
-## Upgrading an existing installation to 4.0.0
+## Upgrading an existing installation to 4.1.0
 
-1. Download and unzip the 4.0.0 release. Replace the source files on your repository's default branch with the contents of the new release, including the `.github` folder. Do not delete the repository or recreate it.
-2. Keep your existing GitHub Actions secrets and variables. They are stored in repository settings and are not part of the source ZIP.
-3. Keep the existing `data` branch. It contains the Telegram pairing file and persisted trading/research records. The new release adds `options_tape.jsonl` to that branch when complete live option quote observations become available.
+1. Download and unzip the 4.1.0 release. Replace the source files on your repository's default branch with the contents of the new release, including `.github`, `deploy` and `docs`. Do not delete or recreate the repository.
+2. Keep your existing GitHub Actions secrets and variables. Add `FYERS_APP_ID`, `FYERS_SECRET_KEY` and optionally `FYERS_PIN` for the secondary MCX feed. Keep `KOTAK_CONSUMER_KEY` as primary for NSE/BSE.
+3. Keep the existing `data` branch. It contains the Telegram pairing file and persisted trading/research records, including the prospective options quote tape. 4.1 adds `intelligence.json` for the Impact Radar.
 4. Keep GitHub Pages pointed at the same default branch and root folder. The new `index.html`/dashboard template ships with the release.
-5. Run **Kotak check** from Actions before enabling the Trade engine. This build was tested offline; it was not authenticated against your broker account from the build environment.
-6. Open the dashboard and check the **Data health** panel. The first screen shows market posture, data confidence, candidates and open risk. Use the watchlist and options filters, watchlist search/sort, trade detail sheet and trade-log filters when needed. Auto/Dark/Light theme and Compact mode are available in the header.
+5. Run **Kotak check** and **Trade engine**. During an MCX session, complete Fyers login through Telegram; commodity contracts remain paused until a current MCX quote is verified. Kotak NSE/BSE scanning remains independent.
+6. Run **News intelligence fallback** once from Actions and confirm a fresh Impact Radar scan. For the full always-on installation, deploy both persistent services (`engine.intelligence --daemon` and `engine.supervisor --daemon`) on an always-on Linux VPS or office PC using `docs/NEWS_INTELLIGENCE.md` and `deploy/README.md`. GitHub scheduled workflows are recovery/fallback only, not daemons.
+7. Optionally add `OPENAI_API_KEY` for AI-assisted explanations. The rules-based scanner works without it.
 
-The 4.0.0 dashboard preview generated in this release uses clearly labelled synthetic sample records. A live GitHub Pages dashboard reads the `data` branch after the first successful workflow run.
+The bundled dashboard preview uses clearly labelled synthetic sample records, including an illustrative Iran/energy event. A live GitHub Pages dashboard reads the `data` branch after the first successful workflow run.
 
 ---
 
@@ -71,7 +72,7 @@ The tool reads prices from **Kotak Neo**. It only reads. It never places an orde
 
 That is all. Do not type your Kotak password, MPIN or TOTP anywhere in this tool.
 
-> **Prefer Fyers?** Set `broker: primary: fyers` in `config.yaml`, create a Fyers data-only app (fyers.in/web/api-dashboard/user-apps, **Create App**, Market Data permission, Redirect URL = your dashboard address) and add the `FYERS_APP_ID` and `FYERS_SECRET_KEY` secrets instead. Fyers needs a login through Telegram each day, and it is the only one of the two that provides commodity (MCX) price history.
+> **For MCX commodities, keep Kotak as primary and add Fyers as the secondary feed.** The supplied 4.1 config sets `broker.primary: kotak` and `broker.commodity_feed: fyers`. Create a Fyers data-only app at `fyers.in/web/api-dashboard/user-apps`, choose Market Data permission, enable the MCX commodity segment for your account, and set its Redirect URL to your dashboard address. Add `FYERS_APP_ID` and `FYERS_SECRET_KEY` as repository secrets. The engine checks a current MCX future before enabling Crude Oil, Gold, Silver and Natural Gas. It does not silently fall back to Kotak for MCX history.
 
 ---
 
@@ -82,16 +83,18 @@ That is all. Do not type your Kotak password, MPIN or TOTP anywhere in this tool
 
 | Name | What to paste |
 |---|---|
-| `KOTAK_CONSUMER_KEY` | The Consumer Key from Part 4 |
+| `KOTAK_CONSUMER_KEY` | Kotak Neo Consumer Key (primary NSE/BSE data feed) |
+| `FYERS_APP_ID` | Fyers app ID (secondary MCX market-data feed) |
+| `FYERS_SECRET_KEY` | Fyers app secret; required with the app ID |
+| `FYERS_PIN` | Optional Fyers PIN used for automatic refresh-token renewal |
 | `TELEGRAM_BOT_TOKEN` | The token from Part 1 |
-| `TELEGRAM_PAIRING_CODE` | A long random one-time pairing secret (required for the first bot connection unless you provide `TELEGRAM_CHAT_ID`) |
-| `TELEGRAM_CHAT_ID` | Optional numeric chat ID; use this instead of pairing if you already know the bot chat ID |
+| `TELEGRAM_PAIRING_CODE` | A long random one-time pairing secret (unless you provide `TELEGRAM_CHAT_ID`) |
+| `TELEGRAM_CHAT_ID` | Optional numeric chat ID; use instead of pairing if already known |
+| `OPENAI_API_KEY` | Optional; enables bounded AI-assisted event explanations; omit for deterministic rules-only mode |
 
-(Only if you chose Fyers: `FYERS_APP_ID`, `FYERS_SECRET_KEY` and optionally `FYERS_PIN`.)
+**Important credential rule:** keep `FYERS_SECRET_KEY` once you add it. Signal Desk encrypts its private Telegram/Fyers session file using the active broker secret plus the Telegram bot token. When you add Fyers, the new version attempts to migrate the existing file from the previous Kotak key. Removing the Fyers secret later can make that migrated file unreadable and require Telegram pairing again. Never put keys in `config.yaml` or commit them to Git.
 
-**Switching from Fyers to Kotak Neo:** keep your `FYERS_SECRET_KEY` secret in place for now. It is also the key that locks the tool's private file, so removing it would make the tool forget your Telegram link (you would pair again). Everything else about Fyers can be deleted.
-
-**About Telegram pairing:** create a long random value (at least 32 characters) and save it as the `TELEGRAM_PAIRING_CODE` secret. Do not paste it into the repository or share it. On first run, message your bot `/start YOUR_PAIRING_CODE` (replace the words with the secret). The tool accepts only that exact command to bind the chat. As an alternative, you can set `TELEGRAM_CHAT_ID` to your numeric Telegram chat ID and skip pairing. Once paired, the bot stores the chat ID in its encrypted credential file. That file is locked with a key made from your secrets, so if you ever regenerate your Kotak Consumer Key (and have no `FYERS_SECRET_KEY` secret), set `TELEGRAM_CHAT_ID` first, or you will need to pair again.
+**About Telegram pairing:** create a long random value (at least 32 characters) and save it as `TELEGRAM_PAIRING_CODE`. On first run, message your bot `/start YOUR_PAIRING_CODE`. Alternatively, set `TELEGRAM_CHAT_ID` to your numeric chat ID. The news worker can reuse this saved chat destination when it can decrypt the pairing file, or you can set `TELEGRAM_CHAT_ID` explicitly in its environment.
 
 ---
 
@@ -101,23 +104,39 @@ In the Actions tab choose **Leaders** and press **Run workflow**. It downloads N
 
 ---
 
+## Part 5c: Turn on the 24/7 News Impact Radar
+
+The **News intelligence fallback** workflow appears in Actions after you upload 4.1.0. Run it once. It fetches the configured RSS topics, maps relevant events to Indian instruments and publishes `intelligence.json` to the existing `data` branch. The Impact Radar in the dashboard will show the latest scan, mapped instruments, conditional direction, confirmation cues and invalidation cues.
+
+For the always-on installation, deploy **both** services on one always-on Linux VPS or office PC:
+
+- News worker: `python -m engine.intelligence --daemon` — polls every five minutes through nights, weekends and holidays.
+- Trading supervisor: `python -m engine.supervisor --daemon` — stays alive continuously and starts the trading engine only during configured exchange sessions.
+
+Follow [`docs/NEWS_INTELLIGENCE.md`](docs/NEWS_INTELLIGENCE.md) and [`deploy/README.md`](deploy/README.md). Both services need `GITHUB_TOKEN` with Contents read/write access to publish the dashboard. The `data` branch and `_data` working directory must be shared between these services; the release serialises publishers and protects their respective files. `OPENAI_API_KEY` is optional; deterministic rules continue without it. GitHub Actions is a best-effort recovery path, not the always-on host.
+
+**How it treats news:** for example, an Iran / Strait of Hormuz escalation headline can create conditional crude, gold and natural-gas scenarios, plus possible second-order effects on Indian oil producers, refiners, airlines and shipping. This is not a statement that crude will rise. `Impact score` is headline relevance, not a price-move probability; `confidence` describes confidence in the mapping. The scanner lists what would confirm or weaken the scenario. A high-relevance mapped share may enter the strategy watchlist, but it still must pass every normal price, volume, liquidity, strategy and risk check.
+
+The news service never places orders and never trades when exchanges are closed. Market price scans remain tied to NSE/MCX sessions.
+
+---
+
 ## Part 6: Check the connection, then first run (5 minutes)
 
-1. Click the **Actions** tab, click **Kotak check** on the left, then **Run workflow**. After about two minutes open the run and read the last lines. Each line says PASS or FAIL. This tests your own account: the Consumer Key, the share and index names, prices, 5-minute history, futures and an option. It sends nothing and places no order. If any line says FAIL, copy the lines and send them to me.
-2. Click **Trade engine** on the left, then **Run workflow**, then the green **Run workflow** button.
-3. Within a minute your Telegram bot messages you:
-   - First it waits for the secure Telegram pairing command. Send `/start YOUR_PAIRING_CODE` to your bot.
-   - Then it sends "Connected". There is no price login to do.
-4. Setup is finished. If Kotak does not accept the key, the bot says so in plain words.
+1. Click **Kotak check** and run it. This validates the Kotak NSE/BSE feed; it does not validate MCX.
+2. Click **Trade engine** and run it. The first run pairs Telegram if needed.
+3. During the evening MCX window, the engine sends a Fyers login link if its saved token is not valid. Log in, tap **Copy login code**, and paste that code into the same Telegram chat. The bot tests a current MCX future before enabling commodity markets.
+4. Confirm the dashboard **Broker status** shows Kotak connected and Fyers MCX connected. If Fyers is not connected, NSE/BSE continues, but MCX remains paused. Review the Fyers/MCX preflight log rather than assuming the Kotak check covered it.
 
-From now on it starts by itself on weekdays, before the morning markets and again before the evening ones. GitHub knocks every 10 minutes during market hours: if the tool is awake the knock does nothing, and if it has stopped the knock restarts it from where it left off.
+With GitHub Actions only, scheduled workflows provide best-effort starts during market hours. With the persistent deployment, the trading supervisor itself stays running and starts market scans at the configured sessions, without relying on scheduled runner starts. The News Impact worker remains active outside market sessions.
 
 ---
 
 ## Daily use
 
 - **You do nothing to start it.** Alerts arrive in Telegram. The dashboard keeps the full record.
-- **There is no daily login with Kotak Neo.** If you chose Fyers instead, the bot asks for a Fyers login from time to time and tells you how.
+- **Kotak Neo remains the primary NSE/BSE feed.** Fyers is used only for the MCX secondary feed and may need re-authentication. If Fyers is waiting for login, Kotak equity/index scanning continues while commodities remain paused.
+- **Always-on services:** with both persistent daemons deployed, the news worker runs 24/7 and the trading supervisor remains alive 24/7 while scanning only during configured exchange sessions. Without them, the GitHub workflows are best-effort scheduled jobs.
 - **Words you can send the bot:**
   - `status` shows what it is watching right now
   - `strategies` shows how each of the three strategies is doing today
@@ -180,7 +199,7 @@ The quick version uses a free price source and covers about the last 60 days of 
 - **Win rate "could be X% to Y%"** shows how uncertain the win rate is with that many trades. Fewer trades means a wider range.
 - **Luck check** reruns the same rules on shuffled prices, which have no real pattern. If the real result is not clearly better than that, there is no sign of a real edge yet.
 - **Does changing the settings help?** compares the current settings with no early exit, and with the old daily limits.
-- The backtest covers indices and stocks. Crude oil, gold, silver and natural gas are left out, because expired commodity contracts have no price history to test on. Option prices are estimated, because brokers keep no history for expired options. 4.0.0 starts a prospective bid/ask/depth/OI tape; it does not backfill expired option chains.
+- The backtest covers indices and stocks. Crude oil, gold, silver and natural gas are left out of historical strategy validation because expired commodity contracts do not have a complete long-term history in the current research data. Option prices are estimated, because brokers keep no history for expired options. 4.0.0 starts a prospective bid/ask/depth/OI tape; it does not backfill expired option chains.
 
 ## How the tool fits together (four segments that depend on each other)
 
@@ -221,7 +240,7 @@ The strategy backtest's default fill is the next five-minute candle open. `signa
 
 The two engines now see one another's approved open positions when enforcing shared position-count, aggregate-risk and realised-daily-loss limits. Each engine also retains its own tighter sub-limits. This controller does not yet calculate portfolio covariance, sector exposure, options Greeks, dynamic broker margin or order-book liquidity.
 
-The strategy desk uses historical underlying candles. Index instruments are modelled using spot index series as a proxy rather than date-specific futures contracts. The options backtest estimates option premiums using a pricing model; it is not a replay of historical option-chain quotes. Fyers and Telegram connectivity must be tested in your own GitHub account. The uploaded release has been verified offline, not against your Fyers credentials or live market feed.
+The strategy desk uses historical underlying candles. Index instruments are modelled using spot index series as a proxy rather than date-specific futures contracts. The options backtest estimates option premiums using a pricing model; it is not a replay of historical option-chain quotes. Fyers MCX access and Telegram connectivity must be tested in your own account. The uploaded release has been verified offline, not against your Fyers credentials, live MCX market feed or a deployed 24/7 host. The Impact Radar is rules/AI-assisted scenario mapping, not a statistically calibrated price-probability model.
 
 ## Local preview and tests
 

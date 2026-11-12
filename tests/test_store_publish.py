@@ -90,5 +90,16 @@ check("the rival push really happened mid-publish", fired["done"])
 check("the rival's file survived our retry", rd("strategies_backtest.json") == {"bt": 2})
 check("and our own update went through too", rd("strategies.json") == {"v": 99})
 check("still one commit for the day", count() == 1)
+
+# 7. a persistent VPS shares the same checkout between trade/news/supervisor processes.
+# The engine must not refresh an intelligence file that the local news worker just wrote.
+write(eng, "intelligence.json", {"seq": 1})
+Store(eng, "x").publish(own={"feed.json", "strategies.json"}, own_prefix=("chartlive_",))
+write(eng, "intelligence.json", {"seq": 99})
+open(os.path.join(eng, "trading-supervisor.lock"), "w").write("12345")
+Store(eng, "x").publish(own={"feed.json", "strategies.json"}, own_prefix=("chartlive_",), preserve_local={"intelligence.json"})
+g(chk, "fetch", "origin", "data"); g(chk, "reset", "--hard", "FETCH_HEAD")
+check("persistent publisher preserved the other service's local intelligence file", rd("intelligence.json") == {"seq": 99})
+check("runtime lock files are excluded from the public data branch", "trading-supervisor.lock" not in g(chk, "ls-tree", "-r", "--name-only", "FETCH_HEAD").stdout.splitlines())
 shutil.rmtree(root, ignore_errors=True)
 print("\nALL PUBLISH CHECKS PASSED" if ok else "\nPUBLISH CHECKS FAILED")

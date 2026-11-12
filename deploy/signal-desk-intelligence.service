@@ -1,0 +1,27 @@
+[Unit]
+Description=Signal Desk 24/7 News Impact Intelligence
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=signaldesk
+Group=signaldesk
+WorkingDirectory=/opt/signal-desk
+EnvironmentFile=/etc/signal-desk.env
+Environment=PYTHONUNBUFFERED=1
+Environment=SIGNAL_DESK_SHARED_DATA=1
+ExecStart=/opt/signal-desk/.venv/bin/python -m engine.intelligence --daemon
+Restart=always
+RestartSec=15
+TimeoutStopSec=30
+KillSignal=SIGTERM
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/signal-desk/_data
+
+[Install]
+WantedBy=multi-user.target

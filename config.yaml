@@ -37,6 +37,7 @@ early_exit:
 #   fyers = Fyers (needs FYERS_APP_ID and FYERS_SECRET_KEY, and a login through Telegram each day).
 broker:
   primary: kotak
+  commodity_feed: fyers         # optional second feed: Fyers supplies MCX history/quotes; Kotak keeps NSE/BSE
   kotak:
     environment: prod
     # If the Kotak check (Actions tab, "Kotak check") says an index name was not found, set it here, for example:
@@ -47,9 +48,34 @@ broker:
     #   "NSE:MIDCPNIFTY-INDEX": "nse_cm|NIFTY MIDCAP SELECT"
     #   "BSE:SENSEX-INDEX": "bse_cm|SENSEX"
 
-# News: scans free headlines for Nifty 200 stocks and shows why a stock may be moving.
+# News: the legacy stock-headline scan plus the separate 24/7 News Impact service.
 news:
   enabled: true
+
+# Around-the-clock event-driven market intelligence. The service runs independently
+# of exchange sessions and never creates a trade by itself.
+news_intelligence:
+  enabled: true
+  poll_seconds: 300             # continuous scan every 5 minutes, including weekends/holidays
+  max_age_hours: 48
+  retention_days: 21
+  max_events: 180
+  telegram_min_impact_score: 82
+  watchlist_min_impact_score: 65   # event-linked equities enter the strategy desk's normal watch queue
+  watchlist_max_age_hours: 36
+  ai:
+    enabled: true               # uses OpenAI when OPENAI_API_KEY exists; otherwise deterministic rules continue
+    model: gpt-4o-mini           # configurable; API usage is billed separately by OpenAI
+    timeout_seconds: 24
+    max_new_per_scan: 4         # cost/rate guard; only unseen headlines are analysed
+  queries:
+    - {id: geopolitics-energy, query: "Iran Israel Middle East Strait of Hormuz Red Sea oil shipping conflict"}
+    - {id: oil-gas-supply, query: "OPEC crude oil production supply disruption LNG natural gas prices"}
+    - {id: metals-safe-haven, query: "gold silver copper metals safe haven central bank prices"}
+    - {id: rates-fx, query: "Federal Reserve interest rates RBI inflation rupee dollar India"}
+    - {id: china-trade, query: "China stimulus economy tariffs trade restrictions India exports"}
+    - {id: india-policy-weather, query: "India budget government policy monsoon weather agriculture"}
+    - {id: corporate-catalysts, query: "India listed companies major order earnings merger regulatory action"}
 
 # Results: which Nifty 200 companies report, read from NSE's public calendar. They go first on the watchlist, from the day
 # before their results until the day after, so the move is anticipated, not chased.
