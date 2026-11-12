@@ -168,10 +168,6 @@ details.assume ul{margin:10px 0 0;padding-left:20px;font-size:.92rem;color:var(-
 footer{margin-top:44px;font-size:.84rem;color:var(--muted)}
 
 /* strategy tabs */
-.tabs{display:flex;gap:6px;overflow-x:auto;margin:16px -18px 0;padding:8px 18px 10px;position:sticky;top:0;z-index:6;background:var(--paper);border-bottom:1px solid var(--line);scrollbar-width:thin}
-.tab{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-size:.9rem;white-space:nowrap}
-.tab[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-.tab .n{margin-left:7px;font-size:.78rem;padding:1px 7px;border-radius:999px;background:var(--live-soft);color:var(--live);font-variant-numeric:tabular-nums}
 .vchip{display:inline-block;font:600 .76rem var(--body);padding:2px 10px;border-radius:999px;white-space:nowrap}
 .vchip.good{background:var(--gain-soft);color:var(--gain)} .vchip.mixed{background:var(--live-soft);color:var(--live)}
 .vchip.bad{background:var(--loss-soft);color:var(--loss)} .vchip.few{background:var(--sunk);color:var(--muted)}
@@ -182,21 +178,34 @@ footer{margin-top:44px;font-size:.84rem;color:var(--muted)}
 table.cmp td:first-child,table.cmp th:first-child{position:sticky;left:0;background:var(--surface)}
 table.cmp td:first-child small{display:block;color:var(--muted);font-size:.78rem;white-space:normal;max-width:240px}
 table.cmp tbody tr{cursor:pointer} table.cmp tbody tr:hover td{background:var(--sunk)}
-.hb{display:grid;grid-template-columns:minmax(110px,170px) 1fr;gap:4px 12px;align-items:center;margin:9px 0}
-.hb-name{font-size:.9rem}
-.hb-track{position:relative;height:22px}
-.hb-zero{position:absolute;top:0;bottom:0;width:1px;background:var(--muted)}
-.hb-bar{position:absolute;height:9px;border-radius:2px}
-.hb-bar.g{top:1px;background:var(--accent);opacity:.55} .hb-bar.n{top:12px}
-.hb-val{grid-column:2;font-size:.78rem;color:var(--muted);margin-top:-2px;font-variant-numeric:tabular-nums}
-.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.84rem;color:var(--muted);margin:4px 0 6px}
-.legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:6px}
-.says{margin:0;padding-left:20px} .says li{margin:7px 0}
 .mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px 16px;margin-top:12px}
 .mini div{font-size:.82rem;color:var(--muted)} .mini b{display:block;color:var(--ink);font:600 1.15rem var(--body);font-variant-numeric:tabular-nums}
 .tag-s{font:600 .74rem var(--body);padding:2px 8px;border-radius:6px;background:var(--sunk);color:var(--muted);margin-right:8px}
 .halves{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 .halves div{background:var(--sunk);border-radius:10px;padding:10px 12px;font-size:.84rem;color:var(--muted)} .halves b{display:block;font:700 1.2rem var(--display);color:var(--ink)}
+
+/* one-page layout */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:22px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.kpi .k{font-size:.82rem;color:var(--muted)}
+.kpi b{display:block;font:700 1.7rem var(--display);font-variant-numeric:tabular-nums;margin-top:2px}
+.kpi small{display:block;color:var(--muted);font-size:.8rem;margin-top:2px}
+.sec-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin:40px 0 12px}
+.sec-head h2{margin:0}
+.link{background:none;border:0;padding:0;font:600 .96rem var(--body);color:var(--ink);text-align:left;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.link:hover{text-decoration-color:var(--ink)}
+.zb{display:inline-block;position:relative;width:84px;height:8px;background:var(--sunk);border-radius:4px;vertical-align:middle;margin-right:8px}
+.zb::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted)}
+.zb i{position:absolute;top:0;height:100%;border-radius:4px}
+.spark{display:block;width:84px;height:24px}
+.ctl{font:inherit;padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.veil{position:fixed;inset:0;background:rgba(8,14,32,.5);z-index:30}
+.sheet{position:fixed;top:0;right:0;bottom:0;width:min(780px,100%);background:var(--paper);z-index:31;display:flex;flex-direction:column;box-shadow:-12px 0 40px rgba(8,14,32,.3)}
+.sheet-top{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
+.sheet-title{font:700 1.35rem var(--display)}
+.sheet-body{overflow:auto;padding:4px 20px 70px;-webkit-overflow-scrolling:touch;flex:1}
+.sec{font:700 1.15rem var(--display);margin:30px 0 10px}
+.sheet .row{background:var(--surface)}
 </style>
 </head>
 <body>
@@ -210,6 +219,7 @@ table.cmp tbody tr{cursor:pointer} table.cmp tbody tr:hover td{background:var(--
   <footer>Signal Desk follows a fixed rulebook and keeps score of its own suggestions as paper trades. It never places orders. Prices can differ from what you get in your broker app, and past results do not promise future ones.</footer>
 </div>
 <div id="login"></div>
+<div id="sheet"></div>
 
 <script>
 const DEMO = /*__DEMO__*/null;
@@ -218,11 +228,25 @@ const BT_DEMO = /*__BT__*/null;
 const STRATS = /*__STRATS__*/[];
 const SB_DEMO = /*__SB__*/null;
 const SL_DEMO = /*__SL__*/null;
-const TABS = ["ov", "log", ...STRATS.map(s => s.id), "desk"];
-const startTab = decodeURIComponent(location.hash.slice(1));
-const state = { feed: null, bt: null, btAt: 0, book: "All", period: "all", open: new Set(), shown: 25, error: null,
-  tab: TABS.includes(startTab) ? startTab : "ov", sb: null, sbAt: 0, sl: null, sshown: 25, slError: false,
+
+// The original options rulebook is just one more strategy: same signal idea (a breakout from the opening range),
+// expressed as an option purchase instead of shares or futures.
+const OPT = { id: "options", name: "Options desk", source: "Original rulebook",
+  best_for: "Index, commodity and stock options on days that trend from the open.",
+  risk: "Buying options pays time decay and the bid-ask gap on every trade, and its backtest has to estimate option prices, which flatters it.",
+  rules: ["Mark the high and low of the opening range: the first 30 minutes (15 for stocks, 6:00 to 6:30 pm for commodities).",
+    "Trade only with the trend: price above both VWAP and yesterday's close for calls, below both for puts.",
+    "Enter when a 5-minute candle closes outside the range, buying the at-the-money option (next week's on expiry day).",
+    "Stop: the option falls 25 to 30%, or price closes back past the middle of the range. Target: the range height beyond the breakout.",
+    "Leave early if two candles close back inside the range or price crosses VWAP the wrong way. Everything closes by 2:45 pm."],
+  window: ["09:45", "11:30"], exit_by: "14:45" };
+const SOURCES = [OPT, ...STRATS];
+const srcMeta = id => SOURCES.find(s => s.id === id) || { id, name: id, rules: [], window: ["09:15", "15:15"], exit_by: "15:15" };
+const hashSheet = () => { const m = location.hash.match(/^#s=([\w]+)/); return m && SOURCES.some(s => s.id === m[1]) ? m[1] : null; };
+const state = { feed: null, bt: null, btAt: 0, sb: null, sbAt: 0, sl: null, slAt: 0, slError: false, error: null,
+  open: new Set(), lshown: 25, sshown: 25, openAll: false, sheet: hashSheet(), sheetFrom: null,
   logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "" };
+const $ = id => document.getElementById(id);
 
 const inr = (x, d = 2) => Number(x).toLocaleString("en-IN", { maximumFractionDigits: d, minimumFractionDigits: 0 });
 const rupee = x => (x < 0 ? "−" : "") + "₹" + inr(Math.abs(x), Math.abs(x) >= 1000 ? 0 : 2);
@@ -235,6 +259,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const dayText = d => { const dt = new Date(d + "T00:00:00"); return `${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dt.getDay()]}, ${+d.slice(8)} ${MONTHS[+d.slice(5, 7) - 1]}`; };
 const clock24 = t => { const [h, m] = t.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "pm" : "am"}`; };
 
+
 async function loadBt() {
   if (!LIVE) { state.bt = BT_DEMO; return; }
   if (Date.now() - state.btAt < 15 * 60e3) return;
@@ -246,6 +271,7 @@ async function loadBt() {
   } catch (e) { /* the section simply stays empty */ }
 }
 
+
 async function loadStrat() {
   if (!LIVE) { state.sb = SB_DEMO; state.sl = SL_DEMO; return; }
   const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
@@ -254,17 +280,15 @@ async function loadStrat() {
     state.sbAt = Date.now();
     try { const r = await fetch(`${base}strategies_backtest.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) state.sb = await r.json(); } catch (e) { /* stays empty */ }
   }
-  if (state.tab !== "desk") {                       // the live file is large, so only fetch it when it is being looked at
+  if (Date.now() - state.slAt > 170e3) {            // the live strategy file is large, so ask for it every 3 minutes
+    state.slAt = Date.now();
     try { const r = await fetch(`${base}strategies.json?t=${Math.floor(Date.now() / 6e4)}`, { cache: "no-store" }); if (r.ok) { state.sl = await r.json(); state.slError = false; } } catch (e) { state.slError = true; }
   }
 }
 
-async function load() {
-  await loadBt();
-  await loadStrat();
+async function loadFeed() {
   if (!LIVE) { state.feed = DEMO; return; }
-  const owner = location.hostname.split(".")[0];
-  const repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
   const tries = [
     [`https://api.github.com/repos/${owner}/${repo}/contents/feed.json?ref=data`, { headers: { Accept: "application/vnd.github.raw+json" }, cache: "no-store" }],
     [`https://raw.githubusercontent.com/${owner}/${repo}/data/feed.json?t=${Date.now()}`, { cache: "no-store" }],
@@ -280,15 +304,7 @@ async function load() {
   if (!state.feed) state.error = missing ? "none-yet" : "unreachable";
 }
 
-function filtered() {
-  let t = state.feed.trades || [];
-  if (state.book !== "All") t = t.filter(x => x.book === state.book);
-  if (state.period !== "all") {
-    const cut = new Date(Date.now() - (+state.period) * 864e5).toISOString().slice(0, 10);
-    t = t.filter(x => x.date >= cut);
-  }
-  return t;
-}
+async function load() { await Promise.all([loadBt(), loadStrat(), loadFeed()]); }
 
 function ladder(t) {
   const stop = t.stop_underlying, target = t.target_underlying, entry = t.underlying_entry;
@@ -310,33 +326,6 @@ function ladder(t) {
   </div>`;
 }
 
-const why = t => `<p class="subhead">Why this trade was triggered</p><ul class="why">${t.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>`;
-const levelName = t => t.kind === "option" ? `${esc(t.name)} level` : "Share price";
-
-function openCard(t) {
-  const p = t.open_pnl ?? 0;
-  const stopText = t.kind === "option"
-    ? `₹${inr(t.stop_price)} on the option, or ${esc(t.name)} closing a 5-minute candle past ${inr(t.stop_underlying)}`
-    : `${esc(t.name)} closing a 5-minute candle past ₹${inr(t.stop_underlying)}`;
-  return `<article class="card open-card">
-    <div class="open-head">
-      <div><h3>${esc(t.headline)}</h3><div class="muted">${esc(t.name)}, entered ${hhmm(t.entry_time)}${t.phase === "trail" ? ", half booked and now trailing" : ""}</div></div>
-      <div class="pnl-box"><div class="pnl-now num ${cls(p)}">${signed(p)}</div><div class="muted" style="font-size:.84rem">so far, as of ${hhmm(t.last_update)}</div></div>
-    </div>
-    <div class="muted" style="font-size:.84rem;margin-top:14px">${levelName(t)}: where it stands between the stop and the target</div>
-    ${ladder(t)}
-    <div class="facts">
-      <div>Entry price<b>₹${inr(t.entry_price)}</b></div>
-      <div>Price now<b>₹${inr(t.last_price)}</b></div>
-      <div>Quantity<b>${t.kind === "option" ? `${t.lots} lot${t.lots > 1 ? "s" : ""} (${inr(t.qty)})` : inr(t.qty) + " shares"}</b></div>
-      <div>Planned risk<b>${rupee(t.risk_amount)}</b></div>
-      <div>Exit by<b>${clock24(t.exit_by)}</b></div>
-    </div>
-    <p class="subhead">Stop-loss</p><div>${t.phase === "trail" ? `Moved to the entry price (₹${inr(t.entry_price)}) after the target was reached. The rest also exits if price closes back across the average price line.` : stopText}</div>
-    <p class="subhead">Target</p><div>${t.kind === "option" ? esc(t.name) + " at " : "₹"}${inr(t.target_underlying)}${t.phase === "trail" ? ". Reached, and half is already booked." : ""}</div>
-    ${why(t)}
-  </article>`;
-}
 
 function tile(x) {
   const levels = x.range_high ? `<div class="levels muted">Range ${inr(x.range_low)} to ${inr(x.range_high)}${x.vwap ? `<br>Average price line ${inr(x.vwap)}` : ""}${x.prev_close ? `<br>Yesterday’s close ${inr(x.prev_close)}` : ""}</div>` : "";
@@ -345,18 +334,6 @@ function tile(x) {
     <p>${esc(x.note || "Waiting")}</p>${levels}</div>`;
 }
 
-function stats(tr) {
-  const c = tr.filter(t => t.status === "CLOSED");
-  const w = c.filter(t => t.result === "WIN"), l = c.filter(t => t.result === "LOSS");
-  const sum = a => a.reduce((s, t) => s + t.pnl, 0);
-  const gw = sum(w), gl = Math.abs(sum(l));
-  let eq = 0, peak = 0, dd = 0; const curve = [0];
-  c.forEach(t => { eq += t.pnl; curve.push(eq); peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); });
-  return { n: c.length, w: w.length, l: l.length, flat: c.length - w.length - l.length,
-    rate: w.length + l.length ? w.length / (w.length + l.length) * 100 : null,
-    total: eq, avgW: w.length ? gw / w.length : 0, avgL: l.length ? gl / l.length : 0,
-    pf: gl ? gw / gl : null, avgR: c.length ? c.reduce((s, t) => s + (t.r || 0), 0) / c.length : 0, dd, curve };
-}
 
 const EXIT_NAMES = { TARGET: "Target reached", TRAIL: "Target, then trailed", EARLY: "Early exit (pattern broke)", STOP: "Stop-loss", TIME: "Time exit", OTHER: "Other" };
 function exitType(t) {
@@ -378,88 +355,6 @@ function curveSvg(pts) {
     <polyline points="${line}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
-function record(tr) {
-  const s = stats(tr);
-  const chip = (k, v, label) => `<button class="chip" data-${k}="${v}" aria-pressed="${state[k] === v}">${label}</button>`;
-  const filters = `<div class="filters" role="group" aria-label="Filter the record">
-    ${["All", "Index options", "Commodity options", "Stocks"].map(b => chip("book", b, b === "All" ? "All markets" : b)).join("")}
-    <span style="width:10px"></span>
-    ${[["all", "All time"], ["30", "Last 30 days"], ["7", "Last 7 days"]].map(([v, l]) => chip("period", v, l)).join("")}</div>`;
-  if (!s.n) return filters + `<div class="empty">No closed trades in this view yet. The record fills in as the tool’s suggestions reach their stop, target or exit time.</div>`;
-  const by = {};
-  tr.filter(t => t.status === "CLOSED").forEach(t => { (by[t.book === "Stocks" ? "Stocks" : t.name] ||= []).push(t); });
-  const rows = Object.entries(by).map(([k, v]) => { const m = stats(v); return `<tr><td>${esc(k)}</td><td>${m.n}</td><td>${m.w}</td><td>${m.l}</td><td>${m.rate === null ? "" : m.rate.toFixed(0) + "%"}</td><td class="${cls(m.total)}">${signed(m.total)}</td></tr>`; }).join("");
-  const decided = s.w + s.l;
-  const ends = {};
-  tr.filter(t => t.status === "CLOSED").forEach(t => { (ends[exitType(t)] ||= []).push(t); });
-  const endRows = Object.keys(EXIT_NAMES).filter(k => ends[k]).map(k => { const m = stats(ends[k]); return `<tr><td>${EXIT_NAMES[k]}</td><td>${m.n}</td><td>${m.w}</td><td>${m.l}</td><td class="${cls(m.total)}">${signed(m.total)}</td></tr>`; }).join("");
-  return filters + `<div class="record">
-    <div class="card">
-      <div class="muted">Win rate</div>
-      <div class="rate num">${s.rate === null ? "n/a" : s.rate.toFixed(0) + "%"}</div>
-      <div class="split" aria-hidden="true"><i class="w" style="width:${decided ? s.w / decided * 100 : 0}%"></i><i class="l" style="width:${decided ? s.l / decided * 100 : 0}%"></i></div>
-      <div><b class="gain">${s.w} won</b>, <b class="loss">${s.l} lost</b>${s.flat ? `, ${s.flat} flat` : ""} out of ${s.n} closed trades</div>
-      ${s.n < 30 ? `<p class="note">Fewer than 30 trades so far, so this number will still swing a lot.</p>` : ""}
-      <div class="stats">
-        <div>Average win<b class="gain">${rupee(s.avgW)}</b></div>
-        <div>Average loss<b class="loss">${rupee(s.avgL)}</b></div>
-        <div>Rupees won per rupee lost<b>${s.pf === null ? "n/a" : s.pf.toFixed(2)}</b></div>
-        <div>Average result per trade<b>${s.avgR >= 0 ? "+" : "−"}${Math.abs(s.avgR).toFixed(2)}R</b></div>
-        <div>Deepest dip from a peak<b>${rupee(s.dd)}</b></div>
-        <div>Trades counted<b>${s.n}</b></div>
-      </div>
-      <p class="note">R means the result compared with the planned risk: +1R is a win as big as the amount risked.</p>
-    </div>
-    <div class="card curve">
-      <div class="curve-head"><div class="muted">Running total, trade by trade</div><div class="total num ${cls(s.total)}">${signed(s.total)}</div></div>
-      ${curveSvg(s.curve)}
-      <div class="scroll"><table><thead><tr><th>Market</th><th>Trades</th><th>Won</th><th>Lost</th><th>Win rate</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>
-    </div></div>
-    <div class="card" style="margin-top:14px">
-      <div class="muted">How the trades ended</div>
-      <div class="scroll"><table><thead><tr><th>Ending</th><th>Trades</th><th>Won</th><th>Lost</th><th>Result</th></tr></thead><tbody>${endRows}</tbody></table></div>
-      <p class="note">Compare the early exits with the stop-loss row to judge whether leaving early is saving money or cutting winners short.</p>
-    </div>`;
-}
-
-function tradeRow(t) {
-  const isOpen = state.open.has(t.id);
-  const status = t.status === "OPEN" ? "OPEN" : t.result;
-  const pnl = t.status === "OPEN" ? (t.open_pnl ?? 0) : t.pnl;
-  const sub = t.status === "OPEN" ? `Entered ${hhmm(t.entry_time)} at ₹${inr(t.entry_price)}, still open`
-    : `${hhmm(t.entry_time)} at ₹${inr(t.entry_price)} to ${hhmm(t.exit_time)} at ₹${inr(t.exit_price)}. ${esc(t.exit_reason)}`;
-  let detail = "";
-  if (isOpen) {
-    detail = `<div class="detail">
-      <div class="muted" style="font-size:.84rem;margin-top:14px">${levelName(t)} between the stop and the target</div>${ladder(t)}
-      <div class="facts">
-        <div>Entry price<b>₹${inr(t.entry_price)}</b></div>
-        <div>${t.status === "OPEN" ? "Price now" : "Exit price"}<b>₹${inr(t.status === "OPEN" ? t.last_price : t.exit_price)}</b></div>
-        ${t.kind === "option" ? `<div>Option stop-loss<b>₹${inr(t.entry_price * (1 - t.stop_pct / 100))} (${t.stop_pct}% below entry)</b></div>` : ""}
-        <div>Quantity<b>${t.kind === "option" ? `${t.lots} lot${t.lots > 1 ? "s" : ""} (${inr(t.qty)})` : inr(t.qty) + " shares"}</b></div>
-        <div>Planned risk<b>${rupee(t.risk_amount)}</b></div>
-        <div>Opening range<b>${inr(t.range_low)} to ${inr(t.range_high)}</b></div>
-      </div>
-      ${why(t)}
-      <p class="subhead">What happened</p>
-      <ol class="timeline">${t.events.map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>
-    </div>`;
-  }
-  return `<div class="row"><button data-trade="${esc(t.id)}" aria-expanded="${isOpen}">
-      <span class="pill ${status}">${status === "WIN" ? "Won" : status === "LOSS" ? "Lost" : status === "OPEN" ? "Open" : "Flat"}</span>
-      <span class="what">${esc(t.headline)}<small>${sub}</small></span>
-      <span class="res ${cls(pnl)}">${signed(pnl)}<small>${t.status === "CLOSED" ? (t.r >= 0 ? "+" : "−") + Math.abs(t.r).toFixed(2) + "R" : "so far"}</small></span>
-    </button>${detail}</div>`;
-}
-
-function tradeLog(tr) {
-  if (!tr.length) return `<div class="empty">No trades in this view yet. When a setup passes every rule, it appears here with its entry, stop-loss, target and the reasons it was triggered.</div>`;
-  const list = [...tr].reverse(), shown = list.slice(0, state.shown);
-  let html = "", last = "";
-  shown.forEach(t => { if (t.date !== last) { html += `<div class="day-label">${dayText(t.date)}</div>`; last = t.date; } html += tradeRow(t); });
-  if (list.length > shown.length) html += `<button class="more" id="more">Show ${Math.min(25, list.length - shown.length)} more of ${list.length - shown.length} older trades</button>`;
-  return html;
-}
 
 function newsBlock(items) {
   if (!items || !items.length) return `<div class="empty">No Nifty 200 stock has shown up in today’s headlines yet. The scan runs every 20 minutes from 8:40 am.</div>`;
@@ -476,6 +371,7 @@ function inHours() {
   const g = k => p.find(x => x.type === k).value, m = +g("hour") * 60 + +g("minute");
   return !["Sat", "Sun"].includes(g("weekday")) && ((m >= 525 && m <= 908) || (m >= 1050 && m <= 1358));
 }
+
 
 const pct = x => x == null ? "n/a" : x.toFixed(0) + "%";
 function btTable(rows, label) {
@@ -528,55 +424,6 @@ function backtestBlock(b) {
   <button class="dl" id="btcsv">Download every backtest trade (spreadsheet file)</button>`;
 }
 
-function renderDeskTab() {
-  const pulse = document.getElementById("pulse"), banner = document.getElementById("banner");
-  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview.</b> ${state.sb ? "The strategy tabs use <b>real prices</b>: the backtests are real runs on the last 60 trading days, and their live panels replay a real session. " : ""}The <b>Options desk</b> tab shows made-up sample trades to show how the page looks. Your own live trades appear once the tool is set up and running.</div>`;
-  if (!state.feed) {
-    pulse.innerHTML = `<span class="dot"></span><span>Not connected</span>`;
-    return state.error === "none-yet"
-      ? `<p class="lead">Nothing to show yet.</p><p class="sublead">The engine has not run for the first time. Open your GitHub page, go to Actions, choose Trade engine, and press Run workflow. This page fills in a minute after it starts.</p>`
-      : `<p class="lead">Could not reach the trade data.</p><p class="sublead">Check your internet connection. This page tries again by itself every 90 seconds.</p>`;
-  }
-  const st = state.feed.status || {}, all = state.feed.trades || [];
-  const open = all.filter(t => t.status === "OPEN");
-  const tiles = st.tiles || [];
-  const seen = st.heartbeat || st.updated;
-  const fresh = seen && (!LIVE || Date.now() - new Date(seen).getTime() < 7 * 60e3);
-  const running = st.running && fresh;
-  const waitingLogin = running && st.phase === "login";
-  const missing = LIVE && !running && inHours();
-  pulse.innerHTML = `<span class="dot ${running ? "on" : ""}"></span><span>${waitingLogin ? "Waiting for Fyers login" : running ? "Watching now" : missing ? "Not checking in" : "Resting"}${seen ? `, last check-in ${hhmm(seen)}${LIVE && seen.slice(0, 10) !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) ? " on " + dayText(seen.slice(0, 10)) : ""}` : ""}</span>`;
-  if (LIVE) banner.innerHTML = waitingLogin ? `<div class="banner"><b>Waiting for your Fyers login.</b> Open your Telegram bot, tap the login link, and paste the code back. The tool cannot watch the market until then.</div>`
-    : missing ? `<div class="alarm"><b>The engine has not checked in${seen ? " since " + hhmm(seen) : ""}.</b> A backup start is attempted every 10 minutes during market hours, so it should restart by itself. If this message is still here after 20 minutes, start it from the Actions tab with Run workflow.</div>` : "";
-  const today = st.day ? all.filter(t => t.date === st.day.date) : [];
-  const closedToday = today.filter(t => t.status === "CLOSED");
-  const todayPnl = closedToday.reduce((s, t) => s + t.pnl, 0);
-  const lead = open.length ? `${open.length} trade${open.length > 1 ? "s" : ""} open right now.`
-    : waitingLogin ? "Waiting for your Fyers login." : running ? "No open trade. Watching for a setup."
-    : missing ? "The engine is not checking in." : "Markets are resting. Nothing open.";
-  const sub = `${today.length ? `${today.length} trade${today.length > 1 ? "s" : ""} triggered today` : "No trade triggered today"}${closedToday.length ? `, ${closedToday.length} closed for ${signed(todayPnl)}` : ""}. ${st.day && st.day.skip ? "New trades are paused for today." : ""}`;
-  const tr = filtered();
-  const log = (st.day && st.day.log || []).slice().reverse();
-  return `
-    <p class="lead">${lead}</p><p class="sublead">${sub}</p>
-    ${open.length ? `<h2>Open trades</h2>${open.map(openCard).join("")}` : ""}
-    <h2>Today’s markets</h2>
-    ${tiles.length ? `<div class="tiles">${tiles.map(tile).join("")}</div>` : `<div class="empty">The market list appears when the engine starts its next session.</div>`}
-    <h2>Stocks in the news</h2>${newsBlock(st.news)}
-    <h2>The tool’s record</h2>${record(tr)}
-    <h2>Backtest: the same rules on past prices</h2>${backtestBlock(state.bt)}
-    <h2>Every trade it triggered</h2>${tradeLog(tr)}
-    <details class="log"><summary>Today’s activity log</summary>
-      ${log.length ? `<ol class="timeline">${log.map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>` : `<p class="muted">Nothing logged yet today.</p>`}
-    </details>`;
-}
-
-/* ───────────── strategy tabs ───────────── */
-const HOW = { STOP: "Stop-loss hit", TARGET: "Target reached", RULE: "Strategy exit rule", TIME: "Time exit" };
-const VERDICT = { good: "Promising", mixed: "Unproven", bad: "No edge so far", few: "Too few trades" };
-const sMeta = id => STRATS.find(s => s.id === id) || { id, name: id, rules: [], window: ["09:15", "15:15"], exit_by: "15:15" };
-const sbOf = id => state.sb && state.sb.strategies.find(s => s.id === id);
-const num1 = (x, d = 2) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d);
 
 function fromBt(cols, r, sid) {
   const o = {}; cols.forEach((c, i) => { o[c] = r[i]; });
@@ -584,15 +431,7 @@ function fromBt(cols, r, sid) {
     entry: o.entry, exit: o.exit, stop: o.stop, target: o.target, qty: o.qty, risk: o.risk, gross: o.gross, cost: o.cost, net: o.net, r: o.r,
     how: o.how, regime: o.regime, why: o.why, status: "CLOSED", result: o.net > 0 ? "WIN" : o.net < 0 ? "LOSS" : "FLAT" };
 }
-function fromLive(t) {
-  return { sid: t.strategy, id: t.id, date: t.date, name: t.name, dir: t.dir, inT: t.entry_t.slice(11, 16), outT: t.exit_t ? t.exit_t.slice(11, 16) : "",
-    entry: t.entry, exit: t.exit, stop: t.stop, target: t.target, qty: t.qty, risk: t.risk, gross: t.gross, cost: t.cost, net: t.net, r: t.net_r,
-    how: t.exit_type, regime: t.regime, why: t.why, status: t.status, result: t.result, last: t.last, open: t.open_pnl, reason: t.exit_reason, late: t.late };
-}
-const liveRows = id => ((state.sl && state.sl.trades) || []).filter(t => !id || t.strategy === id).map(fromLive);
-// News comes from the engine's feed, so every tab can use it
-const newsList = () => (state.feed && state.feed.status && state.feed.status.news) || [];
-const newsFor = sym => newsList().filter(n => n.symbol === sym);
+
 
 function sstats(rows) {
   const c = rows.filter(t => t.status === "CLOSED"), w = c.filter(t => t.net > 0), l = c.filter(t => t.net < 0);
@@ -603,104 +442,13 @@ function sstats(rows) {
     pf: gl ? gw / gl : null, avgR: c.length ? sum(c, "r") / c.length : 0, dd };
 }
 // closed live trades kept in detail, plus the running totals of older days
-function liveRecord(id) {
-  const s = sstats(liveRows(id)), a = (state.sl && state.sl.archive && state.sl.archive[id]) || null;
-  if (!a) return s;
-  const n = s.n + a.n, w = s.w + a.wins, l = s.l + a.losses;
-  return { ...s, n, w, l, rate: w + l ? w / (w + l) * 100 : null, net: s.net + a.net, gross: s.gross + a.gross, avgR: n ? (s.avgR * s.n + a.r) / n : 0 };
-}
 
-function tabBar() {
-  const today = (state.sl && state.sl.today) || {};
-  const items = [["ov", "All strategies", 0], ["log", "All trades", 0], ...STRATS.map(s => [s.id, s.name, (today[s.id] || {}).open || 0]), ["desk", "Options desk", 0]];
-  return `<nav class="tabs" role="tablist" aria-label="Strategies">${items.map(([id, label, n]) =>
-    `<button class="tab" role="tab" data-tab="${id}" aria-selected="${state.tab === id}">${esc(label)}${n ? `<span class="n" title="${n} open now">${n}</span>` : ""}</button>`).join("")}</nav>`;
-}
-
-function hbars(list) {
-  const vals = list.flatMap(x => [x.gross, x.net, 0]), mn = Math.min(...vals), mx = Math.max(...vals), span = (mx - mn) || 1;
-  const pos = v => (v - mn) / span * 100, z = pos(0);
-  const bar = (v, cl) => { const p = pos(v); return `<i class="hb-bar ${cl}" style="left:${Math.min(p, z).toFixed(2)}%;width:${Math.abs(p - z).toFixed(2)}%;${cl === "n" ? `background:${v >= 0 ? "var(--gain)" : "var(--loss)"}` : ""}"></i>`; };
-  return `<div class="legend"><span><i style="background:var(--accent);opacity:.55"></i>Before costs</span><span><i style="background:var(--loss)"></i>After costs</span></div>` +
-    list.map(x => `<div class="hb" role="img" aria-label="${esc(x.name)}: ${signed(x.gross)} before costs, ${signed(x.net)} after costs"><div class="hb-name">${esc(x.name)}</div>
-      <div class="hb-track"><i class="hb-zero" style="left:${z.toFixed(2)}%"></i>${bar(x.gross, "g")}${bar(x.net, "n")}</div>
-      <div class="hb-val">${signed(x.gross)} before costs, ${signed(x.net)} after</div></div>`).join("");
-}
-
-function sLadder(t) {
-  const risk = Math.abs(t.entry - t.stop), target = t.target ?? t.entry + t.dir * 3 * risk;
-  return ladder({ stop_underlying: t.stop, target_underlying: target, underlying_entry: t.entry, underlying_last: t.status === "OPEN" ? (t.last ?? t.entry) : t.exit,
-    status: t.status, result: t.result, target_label: t.target == null ? "No target (3R mark)" : "Target" });
-}
-
-function sRow(t, showStrat) {
-  const isOpen = state.open.has(t.id), pnl = t.status === "OPEN" ? (t.open ?? 0) : t.net, pill = t.status === "OPEN" ? "OPEN" : t.result;
-  const head = `${t.dir === 1 ? "BUY" : "SELL"} ${inr(t.qty)} ${esc(t.name)}`;
-  const sub = t.status === "OPEN" ? `In at ${clock24(t.inT)}, ₹${inr(t.entry)}. Stop ₹${inr(t.stop)}${t.target ? `, target ₹${inr(t.target)}` : ", no fixed target"}`
-    : `${clock24(t.inT)} at ₹${inr(t.entry)} to ${clock24(t.outT)} at ₹${inr(t.exit)}. ${esc(t.reason || HOW[t.how] || t.how)}`;
-  let detail = "";
-  if (isOpen) {
-    detail = `<div class="detail">
-      <div class="muted" style="font-size:.84rem;margin-top:14px">Where price stands between the stop and the target</div>${sLadder(t)}
-      <div class="facts">
-        <div>Entry price<b>₹${inr(t.entry)}</b></div>
-        <div>${t.status === "OPEN" ? "Price now" : "Exit price"}<b>₹${inr(t.status === "OPEN" ? (t.last ?? t.entry) : t.exit)}</b></div>
-        <div>Quantity<b>${inr(t.qty)}</b></div><div>Planned risk<b>${rupee(t.risk)}</b></div>
-        ${t.status === "CLOSED" ? `<div>Before costs<b class="${cls(t.gross)}">${signed(t.gross)}</b></div><div>Costs<b>${rupee(t.cost)}</b></div><div>After costs<b class="${cls(t.net)}">${signed(t.net)}</b></div>` : ""}
-      </div>
-      ${t.regime ? `<p class="subhead">Market condition when it triggered</p><div>${esc(t.regime)}</div>` : ""}
-      ${t.why ? `<p class="subhead">Why this trade was triggered</p><ul class="why">${t.why.map(r => `<li>${esc(r)}</li>`).join("")}</ul>`
-        : `<p class="note">The reasons are kept for the most recent trades only, to keep this page light.</p>`}
-      ${newsFor(t.name).length ? `<p class="subhead">In the news today</p><ul class="why">${newsFor(t.name).slice(0, 2).map(n => `<li>${esc(n.tag)}: ${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title)} <span class="muted">[${esc(n.source)}]</span></li>`).join("")}</ul>` : ""}
-      ${t.late ? `<p class="note">This signal was found after the fact (the desk was restarted), so no alert was sent for it.</p>` : ""}
-    </div>`;
-  }
-  const nw = newsFor(t.name)[0];
-  return `<div class="row"><button data-trade="${esc(t.id)}" aria-expanded="${isOpen}">
-      <span class="pill ${pill}">${pill === "WIN" ? "Won" : pill === "LOSS" ? "Lost" : pill === "OPEN" ? "Open" : "Flat"}</span>
-      <span class="what">${showStrat ? `<span class="tag-s">${esc(sMeta(t.sid).name)}</span>` : ""}${nw ? `<span class="tag-s" style="background:var(--live-soft);color:var(--live)" title="${esc(nw.title)}">In the news: ${esc(nw.tag)}</span>` : ""}${head}<small>${sub}</small></span>
-      <span class="res ${cls(pnl)}">${signed(pnl)}<small>${t.status === "CLOSED" ? num1(t.r) + "R after costs" : "so far"}</small></span>
-    </button>${detail}</div>`;
-}
-
-function rowList(rows, newestFirst, showStrat) {
-  if (!rows.length) return "";
-  const list = newestFirst ? [...rows].reverse() : rows, shown = list.slice(0, state.sshown);
-  let html = "", last = "";
-  shown.forEach(t => { if (t.date !== last) { html += `<div class="day-label">${dayText(t.date)}</div>`; last = t.date; } html += sRow(t, showStrat); });
-  if (list.length > shown.length) html += `<button class="more" data-smore="1">Show ${Math.min(25, list.length - shown.length)} more of ${list.length - shown.length} older trades</button>`;
-  return html;
-}
 
 function liveMini(x) {
   return `<div class="mini"><div>Triggered today<b>${x.signals}</b></div><div>Open now<b>${x.open}</b></div><div>Closed<b>${x.closed}</b></div>
     <div>Won<b>${x.wins}</b></div><div>Result so far, after costs<b class="${cls(x.net)}">${signed(x.net)}</b></div></div>`;
 }
 
-function deskStatus() {
-  const sl = state.sl;
-  if (!sl || !sl.status || !sl.status.cycle_at) return `<div class="empty">The live strategy desk has not reported yet. It starts with the engine on trading days, and checks every 5-minute candle from 9:20 am.</div>`;
-  const s = sl.status;
-  return `<p class="note" style="margin:0 0 12px">Last check ${hhmm(s.cycle_at)}, covering the candle that closed at ${clock24(s.bar_end.slice(11, 16))}. ${s.scanned} of ${s.symbols} shares and indices had price data.${s.error ? ` <b class="loss">Problem: ${esc(s.error)}</b>` : ""}${sl.demo ? ` <b>${esc(sl.demo)}</b>` : ""}</p>`;
-}
-
-function liveBlock(id) {
-  const sl = state.sl;
-  if (!sl) return `<div class="empty">${state.slError ? "Could not read the live strategy data. It will try again shortly." : "No live data yet. The strategy desk starts with the engine on trading days."}</div>`;
-  const rows = liveRows(id), today = rows.filter(t => t.date === sl.date), open = today.filter(t => t.status === "OPEN");
-  const x = (sl.today || {})[id] || { signals: 0, open: 0, closed: 0, wins: 0, net: 0 };
-  const rec = liveRecord(id);
-  return `${deskStatus()}<div class="card">${liveMini(x)}</div>
-    ${open.length ? `<p class="subhead" style="margin-top:18px">Open right now (${open.length})</p>${open.slice(0, 12).map(t => sRow(t)).join("")}${open.length > 12 ? `<p class="note">and ${open.length - 12} more.</p>` : ""}` : ""}
-    <p class="subhead" style="margin-top:18px">Everything it triggered${sl.date ? " on " + dayText(sl.date) : ""} and the days before</p>
-    ${rows.length ? rowList(rows, true) : `<div class="empty">No trade has passed this strategy's rules yet.</div>`}
-    <div class="card" style="margin-top:14px"><h3>Live record so far</h3>
-      ${rec.n ? `<div class="mini"><div>Closed trades<b>${rec.n}</b></div><div>Win rate<b>${rec.rate === null ? "n/a" : rec.rate.toFixed(0) + "%"}</b></div>
-        <div>Before costs<b class="${cls(rec.gross)}">${signed(rec.gross)}</b></div><div>After costs<b class="${cls(rec.net)}">${signed(rec.net)}</b></div>
-        <div>Per trade<b>${num1(rec.avgR)}R</b></div></div>
-        ${rec.n < 30 ? `<p class="note">Fewer than 30 closed trades, so this will still swing a lot. The live record is the fair test of a strategy, because nothing in it was known in advance.</p>` : ""}`
-      : `<p class="muted" style="margin:6px 0 0">Nothing has closed yet. As trades end, this becomes the strategy's honest forward test.</p>`}</div>`;
-}
 
 function btBlock(id) {
   const b = sbOf(id);
@@ -731,94 +479,6 @@ function btBlock(id) {
     </div>`;
 }
 
-function btTrades(id) {
-  const b = sbOf(id);
-  if (!b || !b.trades.length) return "";
-  const rows = b.trades.map(r => fromBt(state.sb.cols, r, id));
-  return `<p class="note" style="margin-top:0">The latest ${rows.length} of ${b.trades_total} backtest trades. Tap one to see why it was triggered.</p>${rowList(rows, true)}
-    <button class="dl" data-csv="${id}">Download these trades (spreadsheet file)</button>`;
-}
-
-function strategyTab(id) {
-  const m = sMeta(id);
-  return `<p class="lead">${esc(m.name)}</p>
-    <p class="sublead">${esc(m.source)}. A signal can fire when a 5-minute candle closes between ${clock24(m.window[0])} and ${clock24(m.window[1])}. Every trade is closed by ${clock24(m.exit_by)}. Paper trades only; nothing is ordered.</p>
-    <div class="two" style="margin-top:22px">
-      <div class="card"><h3>When it should work</h3><p style="margin:0">${esc(m.best_for)}</p><h3 style="margin-top:16px">What can go wrong</h3><p style="margin:0">${esc(m.risk)}</p></div>
-      <div class="card"><h3>The rules</h3><ol class="rules">${m.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ol></div>
-    </div>
-    <h2>Live: the trades it triggers</h2>${liveBlock(id)}
-    ${newsSection(newsList(), new Set(liveRows(id).filter(t => state.sl && t.date === state.sl.date).map(t => t.name)))}
-    <h2>Backtest: the same rules on past prices</h2>${btBlock(id)}
-    <h2>Backtest trades</h2>${btTrades(id)}`;
-}
-
-function overviewTab() {
-  const sb = state.sb;
-  const head = `<p class="lead">Ten strategies, one scoreboard.</p>
-    <p class="sublead">Every strategy trades the same Nifty 200 shares and five indices at the same time, on the same costs and the same risk per trade, so the results can be compared fairly.</p>`;
-  if (!sb) return head + `<div class="empty" style="margin-top:22px">No backtest result yet. Open your GitHub page, go to <b>Actions</b>, choose <b>Strategy backtest</b> and press <b>Run workflow</b>. It takes a few minutes. It also runs by itself every weekday evening.</div>` + liveOverview();
-  const rows = sb.strategies.map(s => ({ s, m: s.summary, L: liveRecord(s.id), T: ((state.sl && state.sl.today) || {})[s.id] })).filter(r => r.m.n);
-  if (!rows.length) return head + `<div class="empty" style="margin-top:22px">The backtest ran but no strategy triggered a trade in the period.</div>` + liveOverview();
-  const sum = k => rows.reduce((a, r) => a + (r.m[k] || 0), 0);
-  const aheadG = rows.filter(r => r.m.gross_pnl > 0).length, aheadN = rows.filter(r => r.m.pnl > 0).length;
-  const best = [...rows].sort((a, b) => b.m.avg_r - a.m.avg_r)[0];
-  const tr = rows.reduce((a, r) => a + r.m.n, 0), risk = rows.reduce((a, r) => a + r.m.avg_risk * r.m.n, 0) / tr, cost = sum("cost_total") / tr;
-  const good = rows.filter(r => r.s.level === "good");
-  const says = [
-    `${aheadG} of ${rows.length} strategies made money before costs; ${aheadN} made money after costs.`,
-    `Together they made ${signed(sum("gross_pnl"))} before costs and paid ${rupee(sum("cost_total"))} in costs, which left ${signed(sum("pnl"))}.`,
-    `A typical trade risks about ${rupee(risk)} and costs about ${rupee(cost)} to make, so costs eat ${(cost / risk * 100).toFixed(0)}% of the risk before the market has moved at all.`,
-    best ? `Closest to breaking even after costs: <b>${esc(best.s.name)}</b>, at ${num1(best.m.avg_r)}R per trade (${num1(best.m.gross_r)}R before costs).` : "",
-    good.length ? `Passed the tougher tests (profitable in both halves and not explained by luck): <b>${good.map(r => esc(r.s.name)).join(", ")}</b>. A longer history and the live record must still confirm it.`
-      : `None passed the tougher tests: profitable after costs in both halves of the period, with a result too large to be luck.`,
-  ].filter(Boolean);
-  const table = `<div class="card" style="padding:6px 0"><div class="scroll"><table class="cmp"><thead><tr><th>Strategy</th><th>Trades</th><th>Win rate</th><th>Before costs</th><th>After costs</th><th>Per trade</th><th>Verdict</th><th>Live today</th></tr></thead><tbody>${rows.map(r => `
-    <tr data-tab="${r.s.id}"><td><b>${esc(r.s.name)}</b><small>${esc(r.s.best_for)}</small></td><td>${r.m.n}</td><td>${pct(r.m.win_rate)}</td>
-    <td class="${cls(r.m.gross_pnl)}">${signed(r.m.gross_pnl)}</td><td class="${cls(r.m.pnl)}">${signed(r.m.pnl)}</td><td>${num1(r.m.avg_r)}R</td>
-    <td><span class="vchip ${r.s.level}">${VERDICT[r.s.level]}</span></td><td>${r.T ? `${r.T.signals} <span class="muted">(${r.T.open} open)</span>` : "n/a"}</td></tr>`).join("")}</tbody></table></div></div>`;
-  return head + `<h2>What the backtest says</h2>
-    <div class="card"><ul class="says">${says.map(s => `<li>${s}</li>`).join("")}</ul>
-    <p class="note">Prices from ${esc(sb.source)}, ${dayText(sb.period.from)} to ${dayText(sb.period.to)} (${sb.period.days} sessions), ${sb.universe.stocks} shares and ${sb.universe.indices.length} indices. Run on ${dayText(sb.generated.slice(0, 10))}.</p></div>
-    <h2>Result by strategy</h2>${table}<p class="note">Tap a row to open that strategy.</p>
-    <h2>Before and after costs</h2><div class="card">${hbars(rows.map(r => ({ name: r.s.name, gross: r.m.gross_pnl, net: r.m.pnl })).sort((a, b) => b.net - a.net))}</div>
-    ${liveOverview()}
-    <details class="assume card"><summary>What these tests assume</summary><ul>${sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details>`;
-}
-
-// The options desk's own live numbers, so they are visible from every strategy view
-function deskCard() {
-  const f = state.feed;
-  if (!f || !f.status) return "";
-  const day = f.status.day && f.status.day.date, rows = (f.trades || []).filter(t => t.date === day);
-  const open = rows.filter(t => t.status === "OPEN"), closed = rows.filter(t => t.status === "CLOSED");
-  const net = closed.reduce((s, t) => s + t.pnl, 0) + open.reduce((s, t) => s + (t.open_pnl || 0), 0);
-  return `<h2>Options desk</h2><div class="card"><div class="mini"><div>Triggered today<b>${rows.length}</b></div><div>Open now<b>${open.length}</b></div>
-    <div>Closed<b>${closed.length}</b></div><div>Result so far<b class="${cls(net)}">${signed(net)}</b></div></div>
-    <p class="note">Index, commodity and stock options from the original rulebook. <button class="chip" data-tab="desk" style="margin-left:6px">Open the options desk</button></p></div>`;
-}
-
-function newsSection(items, mark) {
-  const list = [...items].sort((a, b) => (mark ? (mark.has(b.symbol) - mark.has(a.symbol)) : 0));
-  const hit = mark ? list.filter(n => mark.has(n.symbol)).length : 0;
-  return `<h2>Stocks in the news</h2>${hit ? `<p class="note" style="margin-top:0">${hit} headline${hit > 1 ? "s are" : " is"} about stocks this strategy has triggered on today. They are listed first.</p>` : ""}${newsBlock(list)}`;
-}
-
-function liveOverview() {
-  return liveOverviewCore() + deskCard() + newsSection(newsList());
-}
-
-function liveOverviewCore() {
-  const sl = state.sl;
-  const rows = liveRows(), today = sl ? rows.filter(t => t.date === sl.date) : [], open = today.filter(t => t.status === "OPEN");
-  if (!sl) return `<h2>Live now</h2><div class="empty">${state.slError ? "Could not read the live strategy data. It will try again shortly." : "No live data yet. The strategy desk starts with the engine on trading days."}</div>`;
-  const net = Object.values(sl.today || {}).reduce((a, x) => a + x.net, 0);
-  return `<h2>Live now</h2>${deskStatus()}
-    <div class="card"><div class="mini"><div>Triggered today<b>${today.length}</b></div><div>Open now<b>${open.length}</b></div>
-      <div>Closed<b>${today.length - open.length}</b></div><div>All strategies, so far<b class="${cls(net)}">${signed(net)}</b></div></div></div>
-    ${open.length ? `<p class="subhead" style="margin-top:18px">Open right now</p>${open.slice(0, 10).map(t => sRow(t, true)).join("")}${open.length > 10 ? `<p class="note">and ${open.length - 10} more. Open a strategy's tab to see them all.</p>` : ""}` : ""}
-    <p class="subhead" style="margin-top:18px">Latest triggers</p>${today.length ? today.slice(-12).reverse().map(t => sRow(t, true)).join("") : `<div class="empty">Nothing has triggered yet today.</div>`}`;
-}
 
 function downloadSt(id) {
   const b = sbOf(id); if (!b) return;
@@ -830,123 +490,342 @@ function downloadSt(id) {
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 
-/* ───────────── the combined trade log ───────────── */
-// One list for the options desk and all ten strategies. Options results are before costs (the live options
-// engine does not deduct any); strategy results are after estimated costs.
-function logItems() {
-  const items = [];
-  ((state.feed && state.feed.trades) || []).forEach(t => items.push({
-    src: "options", srcName: "Options desk", date: t.date, iso: t.entry_time, open: t.status === "OPEN", raw: t,
-    name: `${t.name} ${t.contract || ""} ${t.headline || ""}`, short: t.name,
-    value: t.status === "OPEN" ? (t.open_pnl || 0) : t.pnl, r: t.r || 0, won: t.status === "CLOSED" && t.pnl > 0, lost: t.status === "CLOSED" && t.pnl < 0 }));
-  ((state.sl && state.sl.trades) || []).forEach(t => items.push({
-    src: t.strategy, srcName: sMeta(t.strategy).name, date: t.date, iso: t.entry_t, open: t.status === "OPEN", row: fromLive(t),
-    name: t.name, short: t.name, value: t.status === "OPEN" ? (t.open_pnl || 0) : t.net, r: t.net_r || 0,
-    won: t.status === "CLOSED" && t.net > 0, lost: t.status === "CLOSED" && t.net < 0 }));
-  return items.sort((a, b) => (a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : 0));
+
+/* ───────────── one model for every trade ───────────── */
+const HOW = { STOP: "Stop-loss hit", TARGET: "Target reached", RULE: "Strategy exit rule", TIME: "Time exit", EARLY: "Early exit", TRAIL: "Target, then trailed" };
+const VERDICT = { good: "Promising", mixed: "Unproven", bad: "No edge so far", few: "Too few trades" };
+const num1 = (x, d = 2) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d);
+const sbOf = id => state.sb && state.sb.strategies.find(s => s.id === id);
+const newsList = () => (state.feed && state.feed.status && state.feed.status.news) || [];
+const newsFor = sym => newsList().filter(n => n.symbol === sym);
+
+function fromLive(t) {
+  return { sid: t.strategy, id: t.id, iso: t.entry_t, date: t.date, name: t.name, dir: t.dir, inT: t.entry_t.slice(11, 16), outT: t.exit_t ? t.exit_t.slice(11, 16) : "",
+    entry: t.entry, exit: t.exit, stop: t.stop, target: t.target, qty: t.qty, risk: t.risk, gross: t.gross, cost: t.cost, net: t.net, r: t.net_r,
+    how: t.exit_type, regime: t.regime, why: t.why, status: t.status, result: t.result, last: t.last, open: t.open_pnl, reason: t.exit_reason, late: t.late };
+}
+function fromOpt(t) {
+  return { sid: "options", opt: true, id: t.id, iso: t.entry_time, date: t.date, name: t.name, headline: t.headline, contract: t.contract, dir: t.dir,
+    inT: (t.entry_time || "").slice(11, 16), outT: (t.exit_time || "").slice(11, 16), entry: t.entry_price, exit: t.exit_price, last: t.last_price,
+    stop: t.stop_underlying, target: t.target_underlying, uEntry: t.underlying_entry, uLast: t.underlying_last, stopPrice: t.kind === "option" ? t.stop_price : null,
+    kind: t.kind, lots: t.lots, qty: t.qty, risk: t.risk_amount, gross: t.pnl, cost: 0, net: t.pnl, r: t.r, how: exitType(t), reason: t.exit_reason,
+    why: t.reasons, events: t.events, status: t.status, result: t.result, open: t.open_pnl, regime: t.book };
+}
+const optRows = () => ((state.feed && state.feed.trades) || []).map(fromOpt);
+const stratRows = id => ((state.sl && state.sl.trades) || []).filter(t => !id || t.strategy === id).map(fromLive);
+const allRows = () => [...optRows(), ...stratRows()].sort((a, b) => (a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : 0));
+const todayOf = id => id === "options" ? (state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.date) : (state.sl && state.sl.date);
+
+// closed live trades kept in detail, plus the running totals of older days
+function liveRecord(id) {
+  const s = sstats(stratRows(id)), a = (state.sl && state.sl.archive && state.sl.archive[id]) || null;
+  if (!a) return s;
+  const n = s.n + a.n, w = s.w + a.wins, l = s.l + a.losses;
+  return { ...s, n, w, l, rate: w + l ? w / (w + l) * 100 : null, net: s.net + a.net, gross: s.gross + a.gross, avgR: n ? (s.avgR * s.n + a.r) / n : 0 };
 }
 
-function logFilter(items) {
-  let out = items;
-  if (state.logSrc === "strategies") out = out.filter(x => x.src !== "options");
-  else if (state.logSrc !== "all") out = out.filter(x => x.src === state.logSrc);
-  if (state.logStatus === "open") out = out.filter(x => x.open);
-  else if (state.logStatus === "won") out = out.filter(x => x.won);
-  else if (state.logStatus === "lost") out = out.filter(x => x.lost);
-  if (state.logPeriod !== "all" && items.length) {
-    const last = items.reduce((m, x) => (x.date > m ? x.date : m), "");
-    const days = state.logPeriod === "today" ? 0 : +state.logPeriod;
+function srcStats(id) {
+  const rows = id === "options" ? optRows() : stratRows(id), td = todayOf(id);
+  const today = rows.filter(r => r.date === td), open = today.filter(r => r.status === "OPEN");
+  const todayNet = today.reduce((s, r) => s + (r.status === "OPEN" ? (r.open || 0) : r.net), 0);
+  let bt = null, curve = [], level = "few";
+  if (id === "options") {
+    const b = state.bt, m = b && b.variants[0].summary;
+    if (m && m.n) { bt = { n: m.n, win: m.win_rate, net: m.pnl, gross: m.gross_pnl }; curve = b.curve; level = m.n < 30 ? "few" : m.pnl > 0 ? "mixed" : "bad"; }
+  } else {
+    const b = sbOf(id);
+    if (b && b.summary.n) { bt = { n: b.summary.n, win: b.summary.win_rate, net: b.summary.pnl, gross: b.summary.gross_pnl }; curve = b.curve; level = b.level; }
+  }
+  return { id, meta: srcMeta(id), today: { n: today.length, open: open.length, net: todayNet }, rec: id === "options" ? sstats(rows) : liveRecord(id), bt, curve, level };
+}
+
+/* ───────────── trade rows ───────────── */
+function ladderOf(t) {
+  const e = t.opt ? t.uEntry : t.entry, risk = Math.abs(e - t.stop), target = t.target ?? e + t.dir * 3 * risk;
+  const now = t.opt ? t.uLast : t.status === "OPEN" ? (t.last ?? e) : t.exit;
+  return ladder({ stop_underlying: t.stop, target_underlying: target, underlying_entry: e, underlying_last: now, status: t.status, result: t.result,
+    target_label: t.target == null ? "No target (3R mark)" : "Target" });
+}
+
+function rowDetail(t) {
+  const open = t.status === "OPEN", nowP = open ? (t.last ?? t.entry) : t.exit;
+  const fact = (l, v, c) => `<div>${l}<b class="${c || ""}">${v}</b></div>`;
+  const qty = t.opt ? (t.kind === "option" ? `${t.lots} lot${t.lots > 1 ? "s" : ""} (${inr(t.qty)})` : `${inr(t.qty)} shares`) : inr(t.qty);
+  const news = newsFor(t.name).slice(0, 2);
+  return `<div class="detail">
+    <div class="muted" style="font-size:.84rem;margin-top:14px">${t.opt ? esc(t.name) + " level" : "Price"} between the stop and the target</div>${ladderOf(t)}
+    <div class="facts">${fact("Entry price", "₹" + inr(t.entry))}${fact(open ? "Price now" : "Exit price", "₹" + inr(nowP))}${fact("Quantity", qty)}${fact("Planned risk", rupee(t.risk))}
+      ${t.opt && t.stopPrice ? fact("Option stop-loss", "₹" + inr(t.stopPrice)) : ""}
+      ${!open && !t.opt ? fact("Before costs", signed(t.gross), cls(t.gross)) + fact("Costs", rupee(t.cost)) : ""}
+      ${!open ? fact(t.opt ? "Result, before costs" : "After costs", signed(t.net), cls(t.net)) : ""}</div>
+    ${t.regime && !t.opt ? `<p class="subhead">Market condition when it triggered</p><div>${esc(t.regime)}</div>` : ""}
+    ${t.why ? `<p class="subhead">Why this trade was triggered</p><ul class="why">${t.why.map(r => `<li>${esc(r)}</li>`).join("")}</ul>`
+      : `<p class="note">The reasons are kept for the most recent trades only, to keep this page light.</p>`}
+    ${news.length ? `<p class="subhead">In the news today</p><ul class="why">${news.map(n => `<li>${esc(n.tag)}: ${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title)} <span class="muted">[${esc(n.source)}]</span></li>`).join("")}</ul>` : ""}
+    ${t.events ? `<p class="subhead">What happened</p><ol class="timeline">${t.events.map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>` : ""}
+    ${t.late ? `<p class="note">This signal was found after the fact (the desk was restarted), so no alert was sent for it.</p>` : ""}
+  </div>`;
+}
+
+function tradeRow(t, showSrc) {
+  const isOpen = state.open.has(t.id), pnl = t.status === "OPEN" ? (t.open ?? 0) : t.net, pill = t.status === "OPEN" ? "OPEN" : t.result;
+  const head = t.opt ? esc(t.headline) : `${t.dir === 1 ? "BUY" : "SELL"} ${inr(t.qty)} ${esc(t.name)}`;
+  const sub = t.status === "OPEN"
+    ? `In at ${clock24(t.inT)}, ₹${inr(t.entry)}. ${t.opt ? (t.stopPrice ? "Option stop ₹" + inr(t.stopPrice) + "." : "") : `Stop ₹${inr(t.stop)}${t.target ? `, target ₹${inr(t.target)}` : ", no fixed target"}`}`
+    : `${clock24(t.inT)} at ₹${inr(t.entry)} to ${clock24(t.outT)} at ₹${inr(t.exit)}. ${esc(t.reason || HOW[t.how] || t.how)}`;
+  const nw = newsFor(t.name)[0];
+  const tags = (showSrc ? `<span class="tag-s">${esc(srcMeta(t.sid).name)}</span>` : "") +
+    (nw ? `<span class="tag-s" style="background:var(--live-soft);color:var(--live)" title="${esc(nw.title)}">In the news: ${esc(nw.tag)}</span>` : "");
+  return `<div class="row"><button data-trade="${esc(t.id)}" aria-expanded="${isOpen}">
+      <span class="pill ${pill}">${pill === "WIN" ? "Won" : pill === "LOSS" ? "Lost" : pill === "OPEN" ? "Open" : "Flat"}</span>
+      <span class="what">${tags}${head}<small>${sub}</small></span>
+      <span class="res ${cls(pnl)}">${signed(pnl)}<small>${t.status === "CLOSED" ? num1(t.r || 0) + "R" + (t.opt ? "" : " after costs") : "so far"}</small></span>
+    </button>${isOpen ? rowDetail(t) : ""}</div>`;
+}
+
+function rowList(rows, key, showSrc) {
+  if (!rows.length) return "";
+  const list = [...rows].reverse(), shown = list.slice(0, state[key]);
+  let html = "", last = "";
+  shown.forEach(t => { if (t.date !== last) { html += `<div class="day-label">${dayText(t.date)}</div>`; last = t.date; } html += tradeRow(t, showSrc); });
+  if (list.length > shown.length) html += `<button class="more" data-smore="${key}">Show ${Math.min(25, list.length - shown.length)} more of ${list.length - shown.length} older trades</button>`;
+  return html;
+}
+
+/* ───────────── the page ───────────── */
+function spark(pts) {
+  if (!pts || pts.length < 2) return "";
+  const step = Math.max(1, Math.floor(pts.length / 40)), p = pts.filter((_, i) => i % step === 0).concat(pts[pts.length - 1]);
+  const mn = Math.min(0, ...p), mx = Math.max(0, ...p), sp = (mx - mn) || 1, W = 84, H = 24;
+  const line = p.map((v, i) => `${(i / (p.length - 1) * W).toFixed(1)},${(H - 2 - (v - mn) / sp * (H - 4)).toFixed(1)}`).join(" ");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="0" x2="${W}" y1="${(H - 2 - (0 - mn) / sp * (H - 4)).toFixed(1)}" y2="${(H - 2 - (0 - mn) / sp * (H - 4)).toFixed(1)}" stroke="var(--line)"/>
+    <polyline points="${line}" fill="none" stroke="${p[p.length - 1] >= 0 ? "var(--gain)" : "var(--loss)"}" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+}
+
+function renderHeader() {
+  const pulse = $("pulse"), banner = $("banner");
+  const out = { running: false, waitingLogin: false, missing: false };
+  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview.</b> The strategy numbers come from <b>real prices</b>: the backtests cover the last 60 trading days and the live panels replay one real session. The options desk's live trades are made-up samples.</div>`;
+  const st = state.feed && state.feed.status;
+  if (!st) { pulse.innerHTML = `<span class="dot"></span><span>Not connected</span>`; return out; }
+  const seen = st.heartbeat || st.updated, fresh = seen && (!LIVE || Date.now() - new Date(seen).getTime() < 7 * 60e3);
+  out.running = !!(st.running && fresh); out.waitingLogin = out.running && st.phase === "login"; out.missing = LIVE && !out.running && inHours();
+  pulse.innerHTML = `<span class="dot ${out.running ? "on" : ""}"></span><span>${out.waitingLogin ? "Waiting for Fyers login" : out.running ? "Watching now" : out.missing ? "Not checking in" : "Resting"}${seen ? `, last check-in ${hhmm(seen)}${LIVE && seen.slice(0, 10) !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) ? " on " + dayText(seen.slice(0, 10)) : ""}` : ""}</span>`;
+  if (LIVE) banner.innerHTML = out.waitingLogin ? `<div class="banner"><b>Waiting for your Fyers login.</b> Open your Telegram bot, tap the login link, and paste the code back. The tool cannot watch the market until then.</div>`
+    : out.missing ? `<div class="alarm"><b>The engine has not checked in${seen ? " since " + hhmm(seen) : ""}.</b> A backup start is attempted every 10 minutes during market hours, so it should restart by itself. If this message is still here after 20 minutes, start it from the Actions tab with Run workflow.</div>` : "";
+  return out;
+}
+
+function kpis(S, hd) {
+  const open = S.reduce((a, s) => a + s.today.open, 0), trig = S.reduce((a, s) => a + s.today.n, 0);
+  const withBt = S.filter(s => s.bt), ahead = withBt.filter(s => s.bt.net > 0).length;
+  const strat = S.filter(s => s.id !== "options"), sNet = strat.reduce((a, s) => a + s.today.net, 0), oNet = (S.find(s => s.id === "options") || { today: { net: 0 } }).today.net;
+  const sub = state.sb ? `${state.sb.period.days} sessions, ${esc(state.sb.source.split(",")[0])}` : "no backtest yet";
+  return `<div class="kpis">
+    <div class="kpi"><span class="k">Open right now</span><b>${open}</b><small>${hd.waitingLogin ? "waiting for Fyers login" : hd.running ? "engine is watching" : "engine resting"}</small></div>
+    <div class="kpi"><span class="k">Triggered today</span><b>${trig}</b><small>across ${S.filter(s => s.today.n).length} of ${S.length} strategies</small></div>
+    <div class="kpi"><span class="k">Result so far today</span><b class="${cls(sNet)}">${signed(sNet)}</b><small>strategies, after costs${oNet ? ` · options ${signed(oNet)} before costs` : ""}</small></div>
+    <div class="kpi"><span class="k">Beat costs in the backtest</span><b>${withBt.length ? `${ahead} of ${withBt.length}` : "n/a"}</b><small>${sub}</small></div></div>`;
+}
+
+function rightNow() {
+  const open = allRows().filter(r => r.status === "OPEN").sort((a, b) => (a.iso < b.iso ? 1 : -1));
+  const sl = state.sl && state.sl.status && state.sl.status.cycle_at;
+  const shown = state.openAll ? open : open.slice(0, 6);
+  return `<div class="sec-head"><h2>Right now</h2><span class="muted" style="font-size:.88rem">${sl ? `Strategies last checked ${hhmm(sl)}` : ""}</span></div>
+    ${open.length ? shown.map(t => tradeRow(t, true)).join("") + (open.length > 6 ? `<button class="more" data-openall="1">${state.openAll ? "Show fewer" : `Show all ${open.length} open trades`}</button>` : "")
+      : `<div class="empty">No trade is open. A trade appears here the moment any strategy or the options desk triggers one, with its stop, target and the reasons.</div>`}`;
+}
+
+function scoreboard(S) {
+  const rows = [...S].sort((a, b) => (b.bt ? b.bt.net : -1e12) - (a.bt ? a.bt.net : -1e12));
+  const maxAbs = Math.max(1, ...rows.map(r => (r.bt ? Math.abs(r.bt.net) : 0)));
+  const body = rows.map(r => {
+    const w = r.bt ? Math.abs(r.bt.net) / maxAbs * 50 : 0;
+    return `<tr data-sheet="${r.id}"><td><button class="link" data-sheet="${r.id}">${esc(r.meta.name)}</button><small>${esc(r.meta.source)}</small></td>
+      <td>${r.today.n}${r.today.open ? ` <span class="muted">(${r.today.open} open)</span>` : ""}</td>
+      <td>${r.rec.n ? `${r.rec.n} · <span class="${cls(r.rec.net)}">${signed(r.rec.net)}</span>` : '<span class="muted">none yet</span>'}</td>
+      <td>${r.bt ? `${r.bt.n} · ${pct(r.bt.win)}` : '<span class="muted">n/a</span>'}</td>
+      <td>${r.bt ? `<span class="zb"><i style="${r.bt.net >= 0 ? "left" : "right"}:50%;width:${w}%;background:${r.bt.net >= 0 ? "var(--gain)" : "var(--loss)"}"></i></span><span class="${cls(r.bt.net)}">${signed(r.bt.net)}</span>` : '<span class="muted">n/a</span>'}</td>
+      <td>${spark(r.curve)}</td><td><span class="vchip ${r.level}">${VERDICT[r.level]}</span></td></tr>`;
+  }).join("");
+  return `<div class="sec-head"><h2>Which strategy is working?</h2><span class="muted" style="font-size:.88rem">Tap any row to drill in</span></div>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="cmp"><thead><tr><th>Strategy</th><th>Today</th><th>Live record</th><th>Backtest</th><th>After costs</th><th>Trend</th><th>Verdict</th></tr></thead><tbody>${body}</tbody></table></div></div>
+    <p class="note">Live record counts closed live trades, after costs for the strategies and before costs for the options desk. Backtest is the same rules on past prices, after estimated costs. The trend line is the backtest's running total.</p>`;
+}
+
+function newsPanel() {
+  const items = newsList();
+  return `<div class="sec-head"><h2>In the news</h2></div>${newsBlock(items.slice(0, 6))}`;
+}
+
+/* ───────────── the combined log ───────────── */
+function logFilter(rows) {
+  let out = rows;
+  if (state.logSrc === "strategies") out = out.filter(x => x.sid !== "options");
+  else if (state.logSrc !== "all") out = out.filter(x => x.sid === state.logSrc);
+  if (state.logStatus === "open") out = out.filter(x => x.status === "OPEN");
+  else if (state.logStatus === "won") out = out.filter(x => x.status === "CLOSED" && x.net > 0);
+  else if (state.logStatus === "lost") out = out.filter(x => x.status === "CLOSED" && x.net < 0);
+  if (state.logPeriod !== "all" && rows.length) {
+    const last = rows.reduce((m, x) => (x.date > m ? x.date : m), ""), days = state.logPeriod === "today" ? 0 : +state.logPeriod;
     const cut = new Date(new Date(last + "T00:00:00Z").getTime() - days * 864e5).toISOString().slice(0, 10);
     out = out.filter(x => x.date >= cut);
   }
   const q = state.logQ.trim().toLowerCase();
-  if (q) out = out.filter(x => x.name.toLowerCase().includes(q) || x.srcName.toLowerCase().includes(q));
-  return out;
+  return q ? out.filter(x => `${x.name} ${x.headline || ""} ${srcMeta(x.sid).name}`.toLowerCase().includes(q)) : out;
 }
 
-function logTab() {
-  const all = logItems(), list = logFilter(all);
+function logSection() {
+  const all = allRows(), list = logFilter(all);
   const sources = [["all", "Everything"], ["options", "Options desk"], ["strategies", "All ten strategies"], ...STRATS.map(s => [s.id, s.name])];
-  const chip = (k, v, label) => `<button class="chip" data-${k}="${v}" aria-pressed="${state[{ lstatus: "logStatus", lperiod: "logPeriod" }[k]] === v}">${label}</button>`;
-  const closed = list.filter(x => !x.open), won = closed.filter(x => x.won).length, lostN = closed.filter(x => x.lost).length;
-  const net = closed.reduce((s, x) => s + x.value, 0), openNet = list.filter(x => x.open).reduce((s, x) => s + x.value, 0);
-  const by = {};
-  list.forEach(x => { (by[x.src] ||= { name: x.srcName, n: 0, closed: 0, w: 0, l: 0, net: 0, open: 0 }); const b = by[x.src]; b.n++; if (x.open) b.open++; else { b.closed++; b.net += x.value; b.w += x.won; b.l += x.lost; } });
-  const rows = Object.entries(by).sort((a, b) => b[1].n - a[1].n).map(([k, b]) => `<tr data-tab="${k === "options" ? "desk" : k}"><td>${esc(b.name)}</td><td>${b.n}</td><td>${b.open}</td><td>${b.w + b.l ? Math.round(b.w / (b.w + b.l) * 100) + "%" : "n/a"}</td><td class="${cls(b.net)}">${signed(b.net)}</td></tr>`).join("");
-  const head = `<p class="lead">Every trade, in one place.</p>
-    <p class="sublead">The options desk and all ten strategies together, newest first. Filter by source, by whether a trade is open, won or lost, or by stock.</p>`;
-  if (!all.length) return head + `<div class="empty" style="margin-top:22px">No trades yet. They appear here as soon as the options desk or any strategy triggers one.</div>`;
-  const shown = [...list].reverse().slice(0, state.sshown);
+  const chip = (k, key, v, label) => `<button class="chip" data-${k}="${v}" aria-pressed="${state[key] === v}">${label}</button>`;
+  const closed = list.filter(x => x.status === "CLOSED"), won = closed.filter(x => x.net > 0).length, lost = closed.filter(x => x.net < 0).length;
+  const net = closed.reduce((s, x) => s + x.net, 0);
+  const shown = [...list].reverse().slice(0, state.lshown);
   let body = "", last = "";
-  shown.forEach(x => { if (x.date !== last) { body += `<div class="day-label">${dayText(x.date)}</div>`; last = x.date; } body += x.src === "options" ? tradeRow(x.raw) : sRow(x.row, true); });
-  if (list.length > shown.length) body += `<button class="more" data-smore="1">Show ${Math.min(25, list.length - shown.length)} more of ${list.length - shown.length} older trades</button>`;
-  return head + `<div class="filters" style="margin-top:18px">
-      <label class="muted" style="align-self:center">Source <select id="logsrc" style="font:inherit;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)">${sources.map(([v, l]) => `<option value="${v}" ${state.logSrc === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
-      <input id="logq" type="search" placeholder="Search a stock or index" value="${esc(state.logQ)}" aria-label="Search by stock or index" style="font:inherit;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-width:200px">
-    </div>
-    <div class="filters">${[["all", "All"], ["open", "Open now"], ["won", "Won"], ["lost", "Lost"]].map(([v, l]) => chip("lstatus", v, l)).join("")}
-      <span style="width:10px"></span>${[["all", "All time"], ["7", "Last 7 days"], ["today", "Latest day"]].map(([v, l]) => chip("lperiod", v, l)).join("")}</div>
-    <div class="card"><div class="mini"><div>Trades shown<b>${list.length}</b></div><div>Open now<b>${list.filter(x => x.open).length}</b></div>
-      <div>Won / lost<b>${won} / ${lostN}</b></div><div>Win rate<b>${won + lostN ? Math.round(won / (won + lostN) * 100) + "%" : "n/a"}</b></div>
-      <div>Closed result<b class="${cls(net)}">${signed(net)}</b></div><div>Open, so far<b class="${cls(openNet)}">${signed(openNet)}</b></div></div>
-      <div class="scroll" style="margin-top:12px"><table class="cmp"><thead><tr><th>Source</th><th>Trades</th><th>Open</th><th>Win rate</th><th>Closed result</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="note">Strategy results are after estimated costs. Options desk results are before costs, because the live options engine does not deduct any, so adding the two together mixes the two bases. The strategy side keeps its last 10 days in detail; older strategy trades are folded into running totals. Tap a row above to open that source.</p></div>
-    <p class="subhead" style="margin-top:20px">${list.length ? "Tap a trade for its stop, target and the reasons it was triggered" : ""}</p>
-    ${list.length ? body : `<div class="empty">No trade matches these filters.</div>`}
-    ${list.length ? `<button class="dl" data-logcsv="1">Download these ${list.length} trades (spreadsheet file)</button>` : ""}`;
+  shown.forEach(x => { if (x.date !== last) { body += `<div class="day-label">${dayText(x.date)}</div>`; last = x.date; } body += tradeRow(x, true); });
+  if (list.length > shown.length) body += `<button class="more" data-smore="lshown">Show ${Math.min(25, list.length - shown.length)} more of ${list.length - shown.length} older trades</button>`;
+  return `<div class="sec-head"><h2>Every trade</h2><span class="muted" style="font-size:.88rem">${list.length} shown${list.length !== all.length ? ` of ${all.length}` : ""} · ${won} won, ${lost} lost · <span class="${cls(net)}">${signed(net)}</span> closed</span></div>
+    <div class="filters">
+      <label class="muted" style="align-self:center">Source <select id="logsrc" class="ctl">${sources.map(([v, l]) => `<option value="${v}" ${state.logSrc === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+      <input id="logq" class="ctl" type="search" placeholder="Search a stock or index" value="${esc(state.logQ)}" aria-label="Search by stock or index" style="border-radius:999px;min-width:200px">
+      <span style="width:6px"></span>${[["all", "All"], ["open", "Open"], ["won", "Won"], ["lost", "Lost"]].map(([v, l]) => chip("lstatus", "logStatus", v, l)).join("")}
+      <span style="width:6px"></span>${[["all", "All time"], ["7", "Last 7 days"], ["today", "Latest day"]].map(([v, l]) => chip("lperiod", "logPeriod", v, l)).join("")}</div>
+    ${all.length ? (list.length ? body : `<div class="empty">No trade matches these filters.</div>`) : `<div class="empty">No trades yet. They appear here as soon as the options desk or any strategy triggers one.</div>`}
+    ${list.length ? `<button class="dl" data-logcsv="1">Download these ${list.length} trades (spreadsheet file)</button>` : ""}
+    <p class="note">Strategy results are after estimated costs; options desk results are before costs, so totals that mix the two mix their bases. Strategy trades are kept in detail for 10 days; older ones are folded into running totals.</p>`;
 }
 
 function downloadLog() {
   const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const head = ["Source", "Date", "Market", "Direction", "In", "Out", "Entry price", "Exit price", "Result", "R", "How it ended", "Status"];
-  const rows = logFilter(logItems()).map(x => {
-    if (x.src === "options") { const t = x.raw; return ["Options desk", t.date, t.name, t.action || (t.dir === 1 ? "BUY" : "SELL"), (t.entry_time || "").slice(11, 16), (t.exit_time || "").slice(11, 16), t.entry_price, t.exit_price ?? "", x.value, t.r ?? "", exitType(t), t.status]; }
-    const t = x.row; return [x.srcName, t.date, t.name, t.dir === 1 ? "BUY" : "SELL", t.inT, t.outT, t.entry, t.exit ?? "", x.value, t.r ?? "", t.how || "", t.status];
-  }).map(r => r.map(q).join(","));
+  const rows = logFilter(allRows()).map(t => [srcMeta(t.sid).name, t.date, t.opt ? t.name : t.name, t.dir === 1 ? "BUY" : "SELL", t.inT, t.outT, t.entry, t.exit ?? "", t.status === "OPEN" ? (t.open ?? "") : t.net, t.r ?? "", t.how || "", t.status].map(q).join(","));
   const url = URL.createObjectURL(new Blob([[head.map(q).join(","), ...rows].join("\n")], { type: "text/csv" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: "signal-desk-all-trades.csv" });
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 
-document.addEventListener("change", e => { if (e.target.id === "logsrc") { state.logSrc = e.target.value; state.sshown = 25; render(); } });
-document.addEventListener("input", e => {
-  if (e.target.id !== "logq") return;
-  state.logQ = e.target.value; state.sshown = 25;
-  const pos = e.target.selectionStart; render();
-  const box = document.getElementById("logq"); if (box) { box.focus(); box.setSelectionRange(pos, pos); }
-});
-
-function render() {
-  const desk = renderDeskTab();
-  document.getElementById("app").innerHTML = tabBar() + (state.tab === "desk" ? desk : state.tab === "ov" ? overviewTab() : state.tab === "log" ? logTab() : strategyTab(state.tab));
-  const sel = document.querySelector('.tab[aria-selected="true"]');
-  if (sel && sel.scrollIntoView && !state.tabSeen) { state.tabSeen = true; sel.scrollIntoView({ inline: "center", block: "nearest" }); }
+/* ───────────── drill-down panel ───────────── */
+function deskStatus() {
+  const s = state.sl && state.sl.status;
+  if (!s || !s.cycle_at) return `<div class="empty">The live strategy desk has not reported yet. It starts with the engine on trading days and checks every 5-minute candle from 9:20 am.</div>`;
+  return `<p class="note" style="margin:0 0 12px">Last check ${hhmm(s.cycle_at)}, covering the candle that closed at ${clock24(s.bar_end.slice(11, 16))}. ${s.scanned} of ${s.symbols} shares and indices had price data.${s.error ? ` <b class="loss">Problem: ${esc(s.error)}</b>` : ""}${state.sl.demo ? ` <b>${esc(state.sl.demo)}</b>` : ""}</p>`;
 }
 
-window.addEventListener("hashchange", () => { const t = decodeURIComponent(location.hash.slice(1)); if (TABS.includes(t) && t !== state.tab) { state.tab = t; state.sshown = 25; render(); scrollTo(0, 0); } });
+function liveStrategy(id) {
+  const sl = state.sl;
+  if (!sl) return `<div class="empty">${state.slError ? "Could not read the live strategy data. It will try again shortly." : "No live data yet. The strategy desk starts with the engine on trading days."}</div>`;
+  const rows = stratRows(id), open = rows.filter(t => t.date === sl.date && t.status === "OPEN");
+  const x = (sl.today || {})[id] || { signals: 0, open: 0, closed: 0, wins: 0, net: 0 }, rec = liveRecord(id);
+  return `${deskStatus()}<div class="card">${liveMini(x)}</div>
+    ${open.length ? `<p class="subhead" style="margin-top:18px">Open right now (${open.length})</p>${open.slice(0, 12).map(t => tradeRow(t)).join("")}${open.length > 12 ? `<p class="note">and ${open.length - 12} more.</p>` : ""}` : ""}
+    <p class="subhead" style="margin-top:18px">Everything it triggered, newest first</p>${rows.length ? rowList(rows, "sshown") : `<div class="empty">No trade has passed this strategy's rules yet.</div>`}
+    <div class="card" style="margin-top:14px"><h3>Live record so far</h3>${rec.n ? `<div class="mini"><div>Closed trades<b>${rec.n}</b></div><div>Win rate<b>${rec.rate === null ? "n/a" : rec.rate.toFixed(0) + "%"}</b></div>
+      <div>Before costs<b class="${cls(rec.gross)}">${signed(rec.gross)}</b></div><div>After costs<b class="${cls(rec.net)}">${signed(rec.net)}</b></div><div>Per trade<b>${num1(rec.avgR)}R</b></div></div>
+      ${rec.n < 30 ? `<p class="note">Fewer than 30 closed trades, so this will still swing a lot. The live record is the fair test of a strategy, because nothing in it was known in advance.</p>` : ""}`
+      : `<p class="muted" style="margin:6px 0 0">Nothing has closed yet. As trades end, this becomes the strategy's honest forward test.</p>`}</div>`;
+}
 
-document.addEventListener("click", e => {
-  const b = e.target.closest("button, tr[data-tab]");
-  if (!b) return;
-  if (b.dataset.tab) {
-    state.tab = b.dataset.tab; state.sshown = 25; history.replaceState(null, "", "#" + state.tab);
-    render(); scrollTo(0, 0);
-    if (LIVE && !state.sl && state.tab !== "desk") loadStrat().then(render);
+function liveOptions() {
+  const f = state.feed, tiles = (f && f.status && f.status.tiles) || [], rows = optRows(), open = rows.filter(t => t.status === "OPEN"), s = sstats(rows);
+  return `<p class="subhead" style="margin-top:0">Today's markets</p>${tiles.length ? `<div class="tiles">${tiles.map(tile).join("")}</div>` : `<div class="empty">The market list appears when the engine starts its next session.</div>`}
+    ${open.length ? `<p class="subhead" style="margin-top:18px">Open right now (${open.length})</p>${open.map(t => tradeRow(t)).join("")}` : ""}
+    <p class="subhead" style="margin-top:18px">Everything it triggered, newest first</p>${rows.length ? rowList(rows, "sshown") : `<div class="empty">No trade has triggered yet.</div>`}
+    ${s.n ? `<div class="card" style="margin-top:14px"><h3>Live record so far</h3><div class="mini"><div>Closed trades<b>${s.n}</b></div><div>Win rate<b>${s.rate === null ? "n/a" : s.rate.toFixed(0) + "%"}</b></div>
+      <div>Result, before costs<b class="${cls(s.net)}">${signed(s.net)}</b></div><div>Average win<b class="gain">${s.w ? rupee(rows.filter(t => t.status === "CLOSED" && t.net > 0).reduce((a, t) => a + t.net, 0) / s.w) : "n/a"}</b></div>
+      <div>Per trade<b>${num1(s.avgR)}R</b></div></div></div>` : ""}`;
+}
+
+function btTrades(id) {
+  const b = sbOf(id);
+  if (!b || !b.trades.length) return "";
+  const rows = b.trades.map(r => fromBt(state.sb.cols, r, id));
+  return `<p class="note" style="margin-top:0">The latest ${rows.length} of ${b.trades_total} backtest trades. Tap one to see why it was triggered.</p>${rowList(rows, "sshown")}
+    <button class="dl" data-csv="${id}">Download these trades (spreadsheet file)</button>`;
+}
+
+function sheetHtml() {
+  const id = state.sheet;
+  if (!id) return "";
+  const m = srcMeta(id), isOpt = id === "options", st = srcStats(id);
+  const btBody = isOpt ? (state.bt ? backtestBlock(state.bt) : `<div class="empty">No options backtest yet. Run the Backtest workflow from the Actions tab.</div>`)
+    : `${btBlock(id)}${btTrades(id) ? `<h3 class="sec">Backtest trades</h3>${btTrades(id)}` : ""}`;
+  return `<div class="veil" data-close="1"></div>
+    <aside class="sheet" role="dialog" aria-modal="true" aria-label="${esc(m.name)}">
+      <div class="sheet-top"><div><div class="muted" style="font-size:.82rem">${esc(m.source)}</div><div class="sheet-title">${esc(m.name)} <span class="vchip ${st.level}">${VERDICT[st.level]}</span></div></div>
+        <button class="chip" id="sheetclose" data-close="1">Close</button></div>
+      <div class="sheet-body">
+        <p class="sublead" style="margin-top:16px">${isOpt ? "Signals can fire between 9:45 and 11:30 am (evening for commodities)." : `A signal can fire when a 5-minute candle closes between ${clock24(m.window[0])} and ${clock24(m.window[1])}.`} Every trade closes by ${clock24(m.exit_by)}. Paper trades only; nothing is ordered.</p>
+        <div class="two" style="margin-top:16px">
+          <div class="card"><h3>When it should work</h3><p style="margin:0">${esc(m.best_for)}</p><h3 style="margin-top:14px">What can go wrong</h3><p style="margin:0">${esc(m.risk)}</p></div>
+          <div class="card"><h3>The rules</h3><ol class="rules">${m.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ol></div></div>
+        <h3 class="sec">Live</h3>${isOpt ? liveOptions() : liveStrategy(id)}
+        <h3 class="sec">Backtest: the same rules on past prices</h3>${btBody}
+      </div></aside>`;
+}
+
+function openSheet(id, from) {
+  state.sheet = id; state.sshown = 25; state.sheetFrom = from || null;
+  history.replaceState(null, "", location.pathname + location.search + "#s=" + id);
+  render();
+  const c = $("sheetclose"); if (c) c.focus();
+}
+function closeSheet() {
+  state.sheet = null;
+  history.replaceState(null, "", location.pathname + location.search);
+  render();
+  if (state.sheetFrom && document.contains(state.sheetFrom)) state.sheetFrom.focus();
+}
+
+function render() {
+  const keep = document.querySelector(".sheet-body"), sy = keep ? keep.scrollTop : 0;
+  const hd = renderHeader();
+  if (!state.feed && !state.sl && !state.sb) {
+    $("app").innerHTML = state.error === "none-yet"
+      ? `<p class="lead">Nothing to show yet.</p><p class="sublead">The engine has not run for the first time. Open your GitHub page, go to Actions, choose Trade engine, and press Run workflow. This page fills in a minute after it starts.</p>`
+      : `<p class="lead">${state.error === "unreachable" ? "Could not reach the trade data." : "Loading…"}</p><p class="sublead">${state.error === "unreachable" ? "Check your internet connection. This page tries again by itself every 90 seconds." : ""}</p>`;
+    $("sheet").innerHTML = "";
     return;
   }
-  if (b.dataset.lstatus) { state.logStatus = b.dataset.lstatus; state.sshown = 25; const y = scrollY; render(); scrollTo(0, y); return; }
-  if (b.dataset.lperiod) { state.logPeriod = b.dataset.lperiod; state.sshown = 25; const y = scrollY; render(); scrollTo(0, y); return; }
+  const S = SOURCES.map(s => srcStats(s.id)), open = S.reduce((a, s) => a + s.today.open, 0), trig = S.reduce((a, s) => a + s.today.n, 0);
+  const lead = open ? `${open} trade${open > 1 ? "s" : ""} open right now.` : hd.waitingLogin ? "Waiting for your Fyers login." : hd.running ? "No open trade. Watching for a setup."
+    : hd.missing ? "The engine is not checking in." : "Markets are resting. Nothing open.";
+  const skip = state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.skip;
+  $("app").innerHTML = `<p class="lead">${lead}</p>
+    <p class="sublead">${trig ? `${trig} trade${trig > 1 ? "s" : ""} triggered today` : "No trade triggered today"} across the options desk and ten strategies. ${skip ? "New options trades are paused for today." : ""}</p>
+    ${kpis(S, hd)}${rightNow()}${scoreboard(S)}${newsPanel()}${logSection()}
+    ${(state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.log || []).length ? `<details class="log"><summary>Today’s options-desk activity log</summary><ol class="timeline">${state.feed.status.day.log.slice().reverse().map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol></details>` : ""}
+    ${state.sb ? `<details class="assume card"><summary>What the strategy backtests assume</summary><ul>${state.sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details>` : ""}`;
+  $("sheet").innerHTML = sheetHtml();
+  const nb = document.querySelector(".sheet-body"); if (nb) nb.scrollTop = sy;
+  document.documentElement.style.overflow = state.sheet ? "hidden" : "";
+}
+const rerender = () => { const y = scrollY; render(); scrollTo(0, y); };
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button, tr[data-sheet], [data-close]");
+  if (!b) return;
+  if (b.dataset.close) { closeSheet(); return; }
+  if (b.dataset.sheet) { openSheet(b.dataset.sheet, b.tagName === "BUTTON" ? b : null); return; }
+  if (b.dataset.openall) { state.openAll = !state.openAll; rerender(); return; }
+  if (b.dataset.lstatus) { state.logStatus = b.dataset.lstatus; state.lshown = 25; rerender(); return; }
+  if (b.dataset.lperiod) { state.logPeriod = b.dataset.lperiod; state.lshown = 25; rerender(); return; }
   if (b.dataset.logcsv) { downloadLog(); return; }
-  if (b.dataset.smore) { state.sshown += 25; const y = scrollY; render(); scrollTo(0, y); return; }
   if (b.dataset.csv) { downloadSt(b.dataset.csv); return; }
-  if (b.dataset.trade) { const id = b.dataset.trade; state.open.has(id) ? state.open.delete(id) : state.open.add(id); }
-  else if (b.dataset.book) { state.book = b.dataset.book; state.shown = 25; }
-  else if (b.dataset.period) { state.period = b.dataset.period; state.shown = 25; }
-  else if (b.id === "more") state.shown += 25;
-  else if (b.id === "btcsv") { downloadBt(); return; }
-  else return;
-  const y = scrollY; render(); scrollTo(0, y);
+  if (b.id === "btcsv") { downloadBt(); return; }
+  if (b.dataset.smore) { state[b.dataset.smore] += 25; rerender(); return; }
+  if (b.dataset.trade) { const id = b.dataset.trade; state.open.has(id) ? state.open.delete(id) : state.open.add(id); rerender(); }
 });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && state.sheet) closeSheet(); });
+document.addEventListener("change", e => { if (e.target.id === "logsrc") { state.logSrc = e.target.value; state.lshown = 25; rerender(); } });
+document.addEventListener("input", e => {
+  if (e.target.id !== "logq") return;
+  state.logQ = e.target.value; state.lshown = 25;
+  const pos = e.target.selectionStart; rerender();
+  const box = $("logq"); if (box) { box.focus(); box.setSelectionRange(pos, pos); }
+});
+window.addEventListener("hashchange", () => { const s = hashSheet(); if (s !== state.sheet) { state.sheet = s; state.sshown = 25; render(); } });
 
 function downloadBt() {
   const head = ["Date", "Market", "Direction", "Trade", "In", "Out", "Entry price", "Exit price", "Result before costs", "Costs", "Result after costs", "R", "How it ended"];
@@ -976,6 +855,7 @@ function loginHelper() {
   };
   document.getElementById("skip").onclick = () => { history.replaceState(null, "", location.pathname); box.innerHTML = ""; };
 }
+
 
 (async function start() {
   await load(); render(); loginHelper();

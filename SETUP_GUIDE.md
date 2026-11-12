@@ -173,10 +173,13 @@ Besides the options rulebook, the tool now runs **ten intraday strategies at the
 All ten look at the same Nifty 200 shares and five indices (as index futures, one lot). Every trade is a **paper trade**: shares bought or sold intraday, with the quantity set so that a stop-loss costs about ₹500, or one lot of an index future. Nothing is ordered. Costs are deducted so the strategies can be compared fairly.
 
 **What you see**
-- **All strategies** tab: a scoreboard with every strategy's backtest result before and after costs, a plain-language reading of it, and everything open right now.
-- **All trades** tab: one log of every trade, from the options desk and all ten strategies together, newest first. Filter by source, by open, won or lost, by period, or search a stock. It has a combined record, a per-source table, and a spreadsheet download. Strategy results are after estimated costs; options desk results are before costs, so the totals mix the two.
-- One tab per strategy: the rules in plain words, when it should work and what can go wrong, the trades it is triggering today with the stop, target and reasons for each, its **live record**, and its **backtest** (win rate, profit before and after costs, first half against second half of the period, by market, by how trades ended, by month).
-- A strategy is only called **Promising** if it is profitable after costs in both halves of the test period and its result is too large to be luck. Otherwise it is **Unproven** or **No edge so far**. Treat the live record as the fair test: nothing in it was known in advance.
+The dashboard is **one page**, top to bottom:
+- **At a glance:** how many trades are open, how many triggered today, today's result, and how many strategies beat costs in the backtest.
+- **Right now:** every open trade from the options desk and all ten strategies in one list. Tap a trade for its ladder (stop, entry, target), the reasons it triggered, and any news on the stock.
+- **Which strategy is working?** One scoreboard with eleven rows: the ten strategies and the original options rulebook, which is treated as just another strategy (the same kind of breakout signal, bought as an option). Each row shows today's triggers, the live record, the backtest, a trend line and a verdict. **Tap a row** to open a side panel with that strategy's rules, when it should work and what can go wrong, the live trades with their reasons, its live record, and its full backtest (first half against second half, by market, by how trades ended, by month).
+- **In the news:** headlines for Nifty 200 stocks. A trade on a stock with a headline carries an "In the news" tag.
+- **Every trade:** one log of everything, newest first. Filter by source, open, won or lost, period, or search a stock. It can be downloaded as a spreadsheet file. Strategy results are after estimated costs; options desk results are before costs, so totals that mix the two mix their bases.
+- A strategy is only called **Promising** if it is profitable after costs in both halves of the test period and its result is too large to be luck. Otherwise it is **Unproven** or **No edge so far**. The live record is the fair test, because nothing in it was known in advance.
 
 **How it runs**
 - The live desk checks every 5-minute candle from 9:20 am to 3:20 pm inside the same engine run, with the same Fyers login. It works each day out afresh from the day's candles, so a restart loses nothing.
