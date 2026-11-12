@@ -173,13 +173,20 @@ Besides the options rulebook, the tool now runs **ten intraday strategies at the
 All ten look at the same Nifty 200 shares and five indices (as index futures, one lot). Every trade is a **paper trade**: shares bought or sold intraday, with the quantity set so that a stop-loss costs about ₹500, or one lot of an index future. Nothing is ordered. Costs are deducted so the strategies can be compared fairly.
 
 **What you see**
-The dashboard is **one page**, top to bottom:
-- **At a glance:** how many trades are open, how many triggered today, today's result, and how many strategies beat costs in the backtest.
-- **Right now:** every open trade from the options desk and all ten strategies in one list. Tap a trade for its ladder (stop, entry, target), the reasons it triggered, and any news on the stock.
-- **Which strategy is working?** One scoreboard with eleven rows: the ten strategies and the original options rulebook, which is treated as just another strategy (the same kind of breakout signal, bought as an option). Each row shows today's triggers, the live record, the backtest, a trend line and a verdict. **Tap a row** to open a side panel with that strategy's rules, when it should work and what can go wrong, the live trades with their reasons, its live record, and its full backtest (first half against second half, by market, by how trades ended, by month).
+The dashboard is **one page**, in the order a trader uses it. The buttons under the title jump to each section.
+- **At a glance:** open positions and their planned risk, trades triggered today, today's result, and how many strategies beat costs in the backtest.
+- **Market conditions:** Nifty and Bank Nifty (trend strength, above or below VWAP, day range) and a breadth read across the Nifty 200: how many shares are trending, above VWAP, up on the day. It also shows how many shares currently pass the filter of the three condition-gated strategies (Bollinger bounce, EMA pullback, EMA crossover). This describes the conditions; it is not a forecast.
+- **What's being watched:** the stock watchlist (shares up or down 1% or more on about double their usual early volume, with the headline behind the move and where each stands against its range) and the opening range of each index and commodity. The strategies scan all 205 shares and indices every 5 minutes as well.
+- **Open positions:** every open trade, grouped by stock, with the stocks where the most strategies agree first. Totals show planned risk, capital in use and the result so far. Tap a stock, then a trade, for its **chart**, ladder, reasons and news.
+- **Which strategy is working?** One scoreboard with eleven rows: the ten strategies and the original options rulebook, which is treated as just another strategy (the same kind of breakout signal, bought as an option). Tap a row for a side panel with that strategy's rules, its live trades and record, and its full backtest.
+- **Every trade:** one log of everything, newest first. Filter by source, open, won, lost or **Taken by me**, by period, or search a stock. Downloadable as a spreadsheet file.
 - **In the news:** headlines for Nifty 200 stocks. A trade on a stock with a headline carries an "In the news" tag.
-- **Every trade:** one log of everything, newest first. Filter by source, open, won or lost, period, or search a stock. It can be downloaded as a spreadsheet file. Strategy results are after estimated costs; options desk results are before costs, so totals that mix the two mix their bases.
-- A strategy is only called **Promising** if it is profitable after costs in both halves of the test period and its result is too large to be luck. Otherwise it is **Unproven** or **No edge so far**. The live record is the fair test, because nothing in it was known in advance.
+
+**The trade chart.** Opening a trade shows its 5-minute candles with the trigger candle highlighted (the one whose close gave the signal), the entry, stop and target, any exit, and the levels that made it trigger: the opening range, the tight range before a breakout, the gap levels, VWAP, the moving averages or the Bollinger bands, depending on the strategy. Charts are kept for the last three days of live trades and for the 100 most recent backtest trades of each strategy. They load only when you open a trade, so the page stays fast. Options desk charts cover indices and shares, not commodity options.
+
+**For taking a trade yourself.** Each trade has **Copy order details** (quantity, entry, stop, target and risk, ready to paste when you place it in your broker app) and an **I took this trade** tick. The tick is remembered on this device only and powers the "Taken by me" filter, so you can compare your own trades with the tool's numbers. The tool never places orders.
+
+A strategy is only called **Promising** if it is profitable after costs in both halves of the test period and its result is too large to be luck. Otherwise it is **Unproven** or **No edge so far**. The live record is the fair test, because nothing in it was known in advance.
 
 **How it runs**
 - The live desk checks every 5-minute candle from 9:20 am to 3:20 pm inside the same engine run, with the same Fyers login. It works each day out afresh from the day's candles, so a restart loses nothing.

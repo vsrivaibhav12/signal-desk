@@ -2,14 +2,16 @@
 
     python -m tests.make_strategy_demo --cache <folder>       (the folder is filled on the first run, about 3 minutes)
 
-It writes tests/strategies_demo.json (a real backtest) and tests/strategies_live_demo.json (the last session
-replayed through the real live desk, stopped part-way through the day so some trades are still open).
+It writes tests/strategies_demo.json (a real backtest), tests/strategies_live_demo.json (the last session
+replayed through the real live desk, stopped part-way through the day so some trades are still open) and the
+chart files (tests/chartbt_*.json and tests/chartlive_*.json) that the trade charts load.
 Then run  python -m tests.build_dashboard  to put them into index.html.
 """
 import argparse
 import json
 import os
 import sys
+import shutil
 import tempfile
 from datetime import timedelta
 
@@ -51,6 +53,10 @@ def main():
     clock.set_fake(now)
     desk.tick(now)
     clock.set_fake(None)
+    desk.save()                                            # also writes the chart files into the temp folder
+    for f in os.listdir(folder):
+        if f.startswith("chartlive_"):
+            shutil.copy(os.path.join(folder, f), os.path.join(HERE, f))
     st = desk.state
     for t in st["trades"]:
         t.pop("late", None)

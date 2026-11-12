@@ -10,7 +10,7 @@ import json
 import os
 import time
 import traceback
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from .. import clock
 from ..clock import at, ts
@@ -20,6 +20,7 @@ from .defs import STRATEGIES
 from .indicators import Series
 
 KEEP_DAYS = 10            # trades older than this are folded into running totals
+CHART_DAYS = 3            # calendar days of trade charts kept (today, and the last session or two)
 LATE_AFTER = 600          # a signal found more than this many seconds after its candle closed is recorded, not announced
 WARM_DAYS = 10            # calendar days of earlier candles kept for the indicators
 PASS_BUDGET = 200         # seconds one pass may take; the rest waits for the next candle
@@ -35,7 +36,7 @@ def px(x):
 
 
 class StrategyDesk:
-    def __init__(self, cfg, broker, notify, folder, universe, master_markets, heartbeat=None):
+    def __init__(self, cfg, broker, notify, folder, universe, master_markets, heartbeat=None, options_trades=None):
         self.cfg = sim.settings(cfg)
         sc = cfg.get("strategies") or {}
         self.on = sc.get("enabled", True)
@@ -47,13 +48,19 @@ class StrategyDesk:
         self.heartbeat = heartbeat or (lambda: None)               # called often so a long pass never looks like a dead engine
         self.rotate = 0                                            # where the next pass starts, so no symbol is always last
         self.broker, self.notify = broker, notify
+        self.folder = folder
         self.path = os.path.join(folder, "strategies.json")
         lots = self.cfg["index_lots"]
         self.insts = sim.build_instruments(master_markets, universe, lots)
+        self.by_name = {i["name"]: sym for sym, i in self.insts.items()}
+        self.options_trades = options_trades or (lambda: [])        # the options desk's trades, so they get charts too
         self.warm = {}                     # symbol -> earlier candles
         self.warm_day = None
+        self.series = {}                   # symbol -> today's Series from the latest pass
         self.dirty = False
         self.state = self._load()
+        self.charts = self._load_charts()  # source id -> {trade id: chart}
+        self._charts_changed = set()
 
     # ── saved state ──────────────────────────────────────────
     def _load(self):
@@ -69,11 +76,31 @@ class StrategyDesk:
         st.setdefault("first_day", None)
         return st
 
-    def save(self):
-        tmp = self.path + ".tmp"
+    def _chart_path(self, sid):
+        return os.path.join(self.folder, f"chartlive_{sid}.json")
+
+    def _load_charts(self):
+        out = {}
+        for sid in [s["id"] for s in STRATEGIES] + ["options"]:
+            try:
+                with open(self._chart_path(sid), encoding="utf-8") as f:
+                    out[sid] = json.load(f)
+            except (OSError, ValueError):
+                out[sid] = {}
+        return out
+
+    @staticmethod
+    def _write(path, obj):
+        tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.state, f, ensure_ascii=False, separators=(",", ":"))
-        os.replace(tmp, self.path)
+            json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp, path)
+
+    def save(self):
+        self._write(self.path, self.state)
+        for sid in self._charts_changed:
+            self._write(self._chart_path(sid), self.charts[sid])
+        self._charts_changed = set()
 
     # ── one pass ─────────────────────────────────────────────
     def tick(self, now):
@@ -137,8 +164,9 @@ class StrategyDesk:
                     continue
                 scanned += 1
                 done_syms.add(sym)
+                self.series[sym] = S
                 for strat in STRATEGIES:
-                    fresh += sim.simulate(S, inst, strat, self.cfg, days=[today], live_day=today)
+                    fresh += sim.simulate(S, inst, strat, self.cfg, days=[today], live_day=today, chart_from=today)
             except AuthError:
                 raise
             except Exception as e:
@@ -146,6 +174,11 @@ class StrategyDesk:
                 if failed <= 3:
                     print(f"Strategy desk: no data for {sym}: {e}")
         self.rotate = (self.rotate + stopped_at) % len(names) if stopped_at else 0
+        for t in fresh:                                  # charts live in their own files, loaded only when a trade is opened
+            ch = t.pop("_chart", None)
+            if ch:
+                self.charts.setdefault(t["strategy"], {})[t["id"]] = ch
+                self._charts_changed.add(t["strategy"])
         known = {t["id"]: t for t in self.state["trades"] if t["date"] == iso}
         announce_new, announce_done = [], []
         for t in fresh:
@@ -169,6 +202,9 @@ class StrategyDesk:
             self.state["trades"] = older + sorted(kept + fresh, key=lambda x: x["entry_ts"])
         self._roll_archive(today)
         self._today_stats(iso)
+        self._option_charts(today)
+        self._prune_charts(today)
+        self.state["regime"] = self._regime(today)
         stt.update({"cycle_at": now.isoformat(timespec="seconds"), "bar_end": bar_end.isoformat(timespec="minutes"),
                     "symbols": len(self.insts), "scanned": scanned, "failed": failed, "error": None})
         self.state["date"] = iso
@@ -177,6 +213,78 @@ class StrategyDesk:
         announce_done = [t for t in announce_done if t["strategy"] in self.alert_for]
         if self.tg_signals and (announce_new or announce_done):
             self._tell(announce_new, announce_done)
+
+    # ── charts ───────────────────────────────────────────────
+    def _option_charts(self, today):
+        """Charts for the options desk's trades, drawn from the same candles (indices and shares only)."""
+        iso = today.isoformat()
+        for t in self.options_trades():
+            if t.get("date") != iso or not t.get("entry_min"):
+                continue
+            S = self.series.get(self.by_name.get(t["name"]))
+            if S is None or not S.n:
+                continue
+            sig = [j for j in range(S.n) if S.t[j] + 300 <= t["entry_min"] + 59]
+            if not sig:
+                continue
+            i_sig = sig[-1]
+            closed = t["status"] == "CLOSED"
+            i_end = S.n - 1
+            if closed and t.get("exit_time"):
+                x_ts = int(datetime.fromisoformat(t["exit_time"]).timestamp())
+                ends = [j for j in range(S.n) if S.t[j] + 300 <= x_ts + 59]
+                i_end = ends[-1] if ends else i_end
+            a = S.starts[S.day[i_sig]]
+            n_range = 3 if t.get("book") == "Stocks" else 6
+            lines = [("Range high", t["range_high"]), ("Range low", t["range_low"]), ("Range middle (stop)", t["range_mid"])]
+            box = {"i0": a, "i1": a + n_range - 1, "lo": t["range_low"], "hi": t["range_high"], "label": "Opening range"}
+            xp = t.get("underlying_last") if closed else None
+            self.charts.setdefault("options", {})[t["id"]] = sim.build_chart(
+                S, i_sig, max(i_end, i_sig), ["vwap"], lines, box, t["underlying_entry"], xp)
+            self._charts_changed.add("options")
+
+    def _prune_charts(self, today):
+        cut = (today - timedelta(days=CHART_DAYS)).isoformat()
+        dates = {t["id"]: t["date"] for t in self.state["trades"]}
+        dates.update({t["id"]: t["date"] for t in self.options_trades()})
+        for sid, d in self.charts.items():
+            gone = [k for k in d if dates.get(k, "") < cut]
+            for k in gone:
+                del d[k]
+            if gone:
+                self._charts_changed.add(sid)
+
+    # ── market conditions ────────────────────────────────────
+    def _regime(self, today):
+        """The state of the market right now, and how many shares pass each condition-gated strategy's filter."""
+        def label(adx):
+            return "Trending" if adx >= 22 else "Early trend or mixed" if adx >= 18 else "Ranging"
+        markets = []
+        for name in ("Nifty 50", "Bank Nifty"):
+            S = self.series.get(self.by_name.get(name))
+            if S is None or not S.n or S.day[-1] != today or S.adx[-1] is None:
+                continue
+            i, a = S.n - 1, S.starts[today]
+            pc = S.prev_close.get(today)
+            hi, lo = max(S.h[a:]), min(S.l[a:])
+            markets.append({"name": name, "price": round(S.c[i], 2), "chg": round((S.c[i] / pc - 1) * 100, 2) if pc else None,
+                            "adx": round(S.adx[i], 1), "label": label(S.adx[i]),
+                            "trend": "up" if S.ema20[i] > S.ema50[i] else "down", "vwap": "above" if S.c[i] > S.vwap[i] else "below",
+                            "range": round((hi - lo) / S.day_open[today] * 100, 2), "squeeze": bool(S.squeeze[i])})
+        stocks = [S for sym, S in self.series.items() if sym.endswith("-EQ") and S.n and S.day[-1] == today and S.adx[-1] is not None]
+        if not markets and not stocks:
+            return None
+        n = len(stocks)
+
+        def share(test):
+            return round(sum(1 for S in stocks if test(S)) / n * 100) if n else None
+        breadth = {"stocks": n, "trending": share(lambda S: S.adx[-1] >= 22), "ranging": share(lambda S: S.adx[-1] < 22),
+                   "above_vwap": share(lambda S: S.c[-1] > S.vwap[-1]),
+                   "up_on_day": share(lambda S: bool(S.prev_close.get(today)) and S.c[-1] > S.prev_close[today])}
+        filters = {"bb_bounce": {"gate": "ADX below 22 (the market is not trending)", "share": breadth["ranging"]},
+                   "ema_pullback": {"gate": "ADX of 22 or more (a strong trend)", "share": breadth["trending"]},
+                   "ema_cross": {"gate": "ADX of 18 or more and rising (a trend building)", "share": share(lambda S: S.adx[-1] >= 18)}}
+        return {"asof": clock.now().isoformat(timespec="minutes"), "markets": markets, "breadth": breadth, "filters": filters}
 
     # ── bookkeeping ──────────────────────────────────────────
     def _roll_archive(self, today):

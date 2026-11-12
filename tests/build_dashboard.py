@@ -22,7 +22,8 @@ def load(name):
 
 feed, _ = main(verbose=False)
 feed["status"]["day"].pop("markets", None)   # the page only needs the tiles, log and trades
-feed["status"]["day"]["stocks"] = {}
+stocks = feed["status"]["day"].get("stocks") or {}
+feed["status"]["day"]["stocks"] = {"watch": stocks.get("watch", []), "note": stocks.get("note", ""), "done": stocks.get("done", False)}
 feed["status"]["day"].pop("news", None)
 feed["status"]["heartbeat"] = feed["status"]["updated"]
 page = open(os.path.join(ROOT, "index.template.html"), encoding="utf-8").read()

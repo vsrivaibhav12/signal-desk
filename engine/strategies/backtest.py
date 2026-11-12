@@ -19,8 +19,9 @@ from . import data, sim
 from .defs import STRATEGIES
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CHARTS_KEPT = 100        # the latest trades of each strategy that get a chart
 COLS = ["date", "name", "dir", "in", "out", "entry", "exit", "stop", "target", "qty", "risk", "gross", "cost",
-        "net", "r", "how", "regime", "why"]
+        "net", "r", "how", "regime", "why", "id"]
 
 
 def load_config():
@@ -98,7 +99,7 @@ def thin(points, keep=240):
 def row(t, with_why):
     return [t["date"], t["name"], t["dir"], t["entry_t"][11:16], t["exit_t"][11:16], t["entry"], t["exit"],
             t["stop"], t["target"], t["qty"], t["risk"], t["gross"], t["cost"], t["net"], t["net_r"],
-            t["exit_type"], t["regime"], t["why"] if with_why else None]
+            t["exit_type"], t["regime"], t["why"] if with_why else None, t["id"]]
 
 
 def analyse(strat, trades, keep_rows=300, keep_why=100):
@@ -175,11 +176,22 @@ def main(argv=None):
     ref = next((s for s in series.values() if len(s.days) > 20), next(iter(series.values())))
     days = ref.days
     log(f"Replaying {len(days)} sessions ({days[0]} to {days[-1]}) on {len(series)} symbols ...")
-    results = sim.run_all(series, insts, sc, log=log)
+    chart_from = days[-12] if len(days) > 12 else days[0]          # charts are drawn only for the latest sessions
+    results = sim.run_all(series, insts, sc, log=log, chart_from=chart_from)
     out_s = []
+    out_dir = os.path.dirname(a.out)
+    os.makedirs(out_dir, exist_ok=True)
+    chart_files = set()
     for strat in STRATEGIES:
-        r = analyse(strat, results[strat["id"]])
+        trades = results[strat["id"]]
+        r = analyse(strat, trades)
         out_s.append(r)
+        charts = {t["id"]: t["_chart"] for t in trades[-CHARTS_KEPT:] if "_chart" in t}
+        name = f"chartbt_{strat['id']}.json"
+        json.dump(charts, open(os.path.join(out_dir, name), "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
+        chart_files.add(name)
+        for t in trades:
+            t.pop("_chart", None)
         s = r["summary"]
         log(f"  {strat['name']:28s} {s.get('n', 0):5d} trades  net ₹{s.get('pnl', 0):>10,.0f}  win {s.get('win_rate')}%")
     out = {
@@ -205,7 +217,7 @@ def main(argv=None):
     log(f"\nWritten to {a.out} ({os.path.getsize(a.out) // 1024} KB)")
     if os.path.isdir(os.path.join(ROOT, "_data", ".git")) and os.path.abspath(a.out).startswith(os.path.join(ROOT, "_data")):
         from ..store import Store
-        Store(os.path.join(ROOT, "_data"), "unused").publish(own={"strategies_backtest.json"})
+        Store(os.path.join(ROOT, "_data"), "unused").publish(own={"strategies_backtest.json"}, own_prefix=("chartbt_",))
         log("Published to your dashboard.")
     return out
 

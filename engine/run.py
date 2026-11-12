@@ -124,7 +124,7 @@ class Session:
         st = self.feed["status"]
         st.update({"run_id": RUN_ID, "running": running, "heartbeat": clock.now().isoformat(timespec="seconds")})
         self.store.save_feed(self.feed)
-        self.store.publish(own=ENGINE_FILES)
+        self.store.publish(own=ENGINE_FILES, own_prefix=("chartlive_",))
         if self.engine:
             self.engine.dirty = False
         self.last_beat = time.time()
@@ -269,7 +269,7 @@ class Session:
         self.engine = Engine(self.cfg, self.fy, Master(), self.tg.send, feed)
         self.desk = StrategyDesk(self.cfg, self.fy, self.tg.send, os.path.join(ROOT, "_data"), self.engine.universe,
                                  [m for m in self.cfg["markets"] if m.get("kind") == "index"],
-                                 heartbeat=self.beat)
+                                 heartbeat=self.beat, options_trades=lambda: self.feed["trades"])
         if not sess:
             nxt = next((s for s in sessions(self.cfg, now.date()) if s[1] > now), None)
             when = f"today at {clock_text(nxt[1])}" if nxt and now.weekday() < 5 else "on the next trading day"

@@ -206,6 +206,31 @@ table.cmp tbody tr{cursor:pointer} table.cmp tbody tr:hover td{background:var(--
 .sheet-body{overflow:auto;padding:4px 20px 70px;-webkit-overflow-scrolling:touch;flex:1}
 .sec{font:700 1.15rem var(--display);margin:30px 0 10px}
 .sheet .row{background:var(--surface)}
+
+/* trader's workflow */
+.jump{display:flex;gap:6px;overflow-x:auto;position:sticky;top:0;z-index:6;background:var(--paper);margin:14px -18px 0;padding:8px 18px;border-bottom:1px solid var(--line);scrollbar-width:none}
+.jump::-webkit-scrollbar{display:none}
+.jump .chip{flex:none}
+section{scroll-margin-top:62px}
+.mkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.mk{background:var(--sunk);border-radius:10px;padding:10px 14px;font-size:.92rem}
+.mk .muted{font-size:.84rem;margin-top:2px}
+.gates{display:grid;gap:8px}
+.gate{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.86rem}
+table.watch td small{display:block;color:var(--muted);font-size:.78rem;white-space:normal;max-width:420px}
+table.watch td:first-child,table.watch th:first-child{text-align:left}
+.expo{display:flex;gap:6px 22px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 16px;margin-bottom:12px;font-size:.92rem}
+.pill.BUY{background:var(--gain-soft);color:var(--gain)} .pill.SELL{background:var(--loss-soft);color:var(--loss)} .pill.MIXED{background:var(--live-soft);color:var(--live)}
+.row .chips{display:block;margin-top:4px}
+.grp-body{padding:4px 12px 12px;border-top:1px solid var(--line);background:var(--paper)}
+.grp-body .row{background:var(--surface)}
+.chart{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.chart svg{display:block;width:100%;min-width:660px;height:auto;margin-top:14px}
+.chart-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--muted);margin-top:2px}
+.chart-legend i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.took{font-size:.9rem;display:inline-flex;gap:8px;align-items:center;cursor:pointer}
+.took input{width:18px;height:18px}
 </style>
 </head>
 <body>
@@ -244,9 +269,13 @@ const SOURCES = [OPT, ...STRATS];
 const srcMeta = id => SOURCES.find(s => s.id === id) || { id, name: id, rules: [], window: ["09:15", "15:15"], exit_by: "15:15" };
 const hashSheet = () => { const m = location.hash.match(/^#s=([\w]+)/); return m && SOURCES.some(s => s.id === m[1]) ? m[1] : null; };
 const state = { feed: null, bt: null, btAt: 0, sb: null, sbAt: 0, sl: null, slAt: 0, slError: false, error: null,
-  open: new Set(), lshown: 25, sshown: 25, openAll: false, sheet: hashSheet(), sheetFrom: null,
-  logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "" };
+  open: new Set(), openGroups: new Set(), lshown: 25, sshown: 25, openAll: false, sheet: hashSheet(), sheetFrom: null,
+  logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "", charts: {} };
 const $ = id => document.getElementById(id);
+const ROWS = new Map();           // trade id -> trade, filled while rendering, so a chart can find its stop and target
+// "I took this" marks live in this browser only (the tool itself never places orders)
+const takenSet = (() => { try { return new Set(JSON.parse(localStorage.getItem("sd_taken") || "[]")); } catch (e) { return new Set(); } })();
+const saveTaken = () => { try { localStorage.setItem("sd_taken", JSON.stringify([...takenSet].slice(-500))); } catch (e) { /* private window */ } };
 
 const inr = (x, d = 2) => Number(x).toLocaleString("en-IN", { maximumFractionDigits: d, minimumFractionDigits: 0 });
 const rupee = x => (x < 0 ? "−" : "") + "₹" + inr(Math.abs(x), Math.abs(x) >= 1000 ? 0 : 2);
@@ -272,10 +301,15 @@ async function loadBt() {
 }
 
 
+const dataBase = () => {
+  if (!LIVE) return "tests/";
+  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  return `https://raw.githubusercontent.com/${owner}/${repo}/data/`;
+};
+
 async function loadStrat() {
   if (!LIVE) { state.sb = SB_DEMO; state.sl = SL_DEMO; return; }
-  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
-  const base = `https://raw.githubusercontent.com/${owner}/${repo}/data/`;
+  const base = dataBase();
   if (Date.now() - state.sbAt > 15 * 60e3) {
     state.sbAt = Date.now();
     try { const r = await fetch(`${base}strategies_backtest.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) state.sb = await r.json(); } catch (e) { /* stays empty */ }
@@ -425,14 +459,6 @@ function backtestBlock(b) {
 }
 
 
-function fromBt(cols, r, sid) {
-  const o = {}; cols.forEach((c, i) => { o[c] = r[i]; });
-  return { sid, id: `bt|${sid}|${o.date}|${o.name}|${o.in}|${o.entry}`, date: o.date, name: o.name, dir: o.dir, inT: o.in, outT: o.out,
-    entry: o.entry, exit: o.exit, stop: o.stop, target: o.target, qty: o.qty, risk: o.risk, gross: o.gross, cost: o.cost, net: o.net, r: o.r,
-    how: o.how, regime: o.regime, why: o.why, status: "CLOSED", result: o.net > 0 ? "WIN" : o.net < 0 ? "LOSS" : "FLAT" };
-}
-
-
 function sstats(rows) {
   const c = rows.filter(t => t.status === "CLOSED"), w = c.filter(t => t.net > 0), l = c.filter(t => t.net < 0);
   const sum = (a, k) => a.reduce((s, t) => s + (t[k] || 0), 0);
@@ -499,13 +525,19 @@ const sbOf = id => state.sb && state.sb.strategies.find(s => s.id === id);
 const newsList = () => (state.feed && state.feed.status && state.feed.status.news) || [];
 const newsFor = sym => newsList().filter(n => n.symbol === sym);
 
+function fromBt(cols, r, sid) {
+  const o = {}; cols.forEach((c, i) => { o[c] = r[i]; });
+  return { sid, src: "bt", id: o.id, iso: o.date + "T" + o.in, date: o.date, name: o.name, dir: o.dir, inT: o.in, outT: o.out,
+    entry: o.entry, exit: o.exit, stop: o.stop, target: o.target, qty: o.qty, risk: o.risk, gross: o.gross, cost: o.cost, net: o.net, r: o.r,
+    how: o.how, regime: o.regime, why: o.why, status: "CLOSED", result: o.net > 0 ? "WIN" : o.net < 0 ? "LOSS" : "FLAT" };
+}
 function fromLive(t) {
-  return { sid: t.strategy, id: t.id, iso: t.entry_t, date: t.date, name: t.name, dir: t.dir, inT: t.entry_t.slice(11, 16), outT: t.exit_t ? t.exit_t.slice(11, 16) : "",
+  return { sid: t.strategy, src: "live", id: t.id, iso: t.entry_t, date: t.date, name: t.name, dir: t.dir, inT: t.entry_t.slice(11, 16), outT: t.exit_t ? t.exit_t.slice(11, 16) : "",
     entry: t.entry, exit: t.exit, stop: t.stop, target: t.target, qty: t.qty, risk: t.risk, gross: t.gross, cost: t.cost, net: t.net, r: t.net_r,
     how: t.exit_type, regime: t.regime, why: t.why, status: t.status, result: t.result, last: t.last, open: t.open_pnl, reason: t.exit_reason, late: t.late };
 }
 function fromOpt(t) {
-  return { sid: "options", opt: true, id: t.id, iso: t.entry_time, date: t.date, name: t.name, headline: t.headline, contract: t.contract, dir: t.dir,
+  return { sid: "options", src: "live", opt: true, id: t.id, iso: t.entry_time, date: t.date, name: t.name, headline: t.headline, contract: t.contract, dir: t.dir,
     inT: (t.entry_time || "").slice(11, 16), outT: (t.exit_time || "").slice(11, 16), entry: t.entry_price, exit: t.exit_price, last: t.last_price,
     stop: t.stop_underlying, target: t.target_underlying, uEntry: t.underlying_entry, uLast: t.underlying_last, stopPrice: t.kind === "option" ? t.stop_price : null,
     kind: t.kind, lots: t.lots, qty: t.qty, risk: t.risk_amount, gross: t.pnl, cost: 0, net: t.pnl, r: t.r, how: exitType(t), reason: t.exit_reason,
@@ -539,25 +571,125 @@ function srcStats(id) {
   return { id, meta: srcMeta(id), today: { n: today.length, open: open.length, net: todayNet }, rec: id === "options" ? sstats(rows) : liveRecord(id), bt, curve, level };
 }
 
+/* ───────────── trade charts ───────────── */
+async function getCharts(src, sid) {
+  const key = `${src}|${sid}`, c = state.charts[key], ttl = src === "live" ? 150e3 : 3600e3;
+  if (c && c.data && Date.now() - c.at < ttl) return c.data;
+  if (c && c.pending) return c.pending;
+  const stamp = src === "live" ? Math.floor(Date.now() / 6e4) : Math.floor(Date.now() / 6e5);
+  const p = fetch(`${dataBase()}${src === "live" ? "chartlive_" : "chartbt_"}${sid}.json?t=${stamp}`, { cache: "no-store" })
+    .then(r => (r.ok ? r.json() : {})).catch(() => ({}))
+    .then(data => { state.charts[key] = { at: Date.now(), data }; return data; });
+  state.charts[key] = { ...(c || {}), pending: p };
+  return p;
+}
+
+const OV_STYLE = { vwap: ["VWAP", "var(--live)", ""], ema9: ["9-period average", "var(--accent)", ""], ema21: ["21-period average", "#a259c4", ""],
+  ema20: ["20-period average", "var(--accent)", ""], ema50: ["50-period average", "#a259c4", ""],
+  bb_up: ["Upper band", "var(--muted)", ""], bb_mid: ["Middle band", "var(--muted)", "4 3"], bb_lo: ["Lower band", "var(--muted)", ""] };
+const hmOf = t => { const m = Math.floor(((t + 19800) % 86400) / 60); return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+
+function chartSvg(ch, t) {
+  const n = ch.k.length;
+  if (!n) return "";
+  const W = 760, H = 340, L = 10, R = 170, T = 16, B = 26, pw = W - L - R, ph = H - T - B;
+  let lo = Math.min(...ch.k.map(k => k[2])), hi = Math.max(...ch.k.map(k => k[1]));
+  const band = (hi - lo) || 1, near = v => v != null && v > lo - .8 * band && v < hi + .8 * band;
+  const stop = t.stop, target = t.target, ep = ch.ep, tgtOff = target != null && !near(target);
+  [stop, ep, tgtOff ? null : target].forEach(v => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+  const extra = (ch.ln || []).filter(l => near(l[1]));
+  extra.forEach(l => { lo = Math.min(lo, l[1]); hi = Math.max(hi, l[1]); });
+  const pad = (hi - lo) * .07; lo -= pad; hi += pad;
+  const x = i => L + (i + .5) / n * pw, y = v => T + (hi - v) / (hi - lo) * ph, cw = Math.max(2, pw / n * .62), slot = pw / n;
+  const labels = [];
+  let g = "";
+  if (ch.bx) {                                                    // a shaded range, such as the opening range
+    const [i0, i1, blo, bhi, name] = ch.bx;
+    g += `<rect x="${(x(i0) - slot / 2).toFixed(1)}" y="${y(bhi).toFixed(1)}" width="${((i1 - i0 + 1) * slot).toFixed(1)}" height="${Math.max(1, y(blo) - y(bhi)).toFixed(1)}" fill="var(--accent)" opacity=".10"/>
+      <text x="${(x(i0) - slot / 2 + 4).toFixed(1)}" y="${(y(bhi) - 4).toFixed(1)}" font-size="10" fill="var(--muted)">${esc(name)}</text>`;
+  }
+  g += `<rect x="${(x(ch.e) - slot / 2).toFixed(1)}" y="${T}" width="${slot.toFixed(1)}" height="${ph}" fill="var(--live)" opacity=".13"/>`;   // the trigger candle
+  const hline = (v, color, dash, label, w = 1) => {
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${color}" stroke-width="${w}" stroke-dasharray="${dash}"/>`;
+    labels.push({ y: y(v), text: `${label} ${inr(v)}`, color });
+  };
+  extra.forEach(l => hline(l[1], "var(--muted)", "2 4", l[0]));
+  if (stop != null) hline(stop, "var(--loss)", "6 4", "Stop", 1.4);
+  if (target != null && !tgtOff) hline(target, "var(--gain)", "6 4", "Target", 1.4);
+  hline(ep, "var(--ink)", "1 3", "Entry");
+  if (tgtOff) labels.push({ y: target > hi ? T + 6 : H - B - 6, text: `Target ${inr(target)} ${target > hi ? "↑" : "↓"}`, color: "var(--gain)" });
+  Object.entries(ch.ov || {}).forEach(([name, vals]) => {         // indicator lines, broken where there is no value
+    const st = OV_STYLE[name] || [name, "var(--muted)", ""];
+    let run = [];
+    const flush = () => { if (run.length > 1) g += `<polyline points="${run.join(" ")}" fill="none" stroke="${st[1]}" stroke-width="1.6" stroke-dasharray="${st[2]}" stroke-linejoin="round"/>`; run = []; };
+    vals.forEach((v, i) => { if (v == null || v < lo || v > hi) flush(); else run.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); });
+    flush();
+  });
+  ch.k.forEach((k, i) => {                                        // candles
+    const up = k[3] >= k[0], col = up ? "var(--gain)" : "var(--loss)";
+    g += `<g><title>${hmOf(ch.t0 + ch.d[i] * 300)}  open ${inr(k[0])}, high ${inr(k[1])}, low ${inr(k[2])}, close ${inr(k[3])}</title>
+      <line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${y(k[1]).toFixed(1)}" y2="${y(k[2]).toFixed(1)}" stroke="${col}" stroke-width="1.2"/>
+      <rect x="${(x(i) - cw / 2).toFixed(1)}" y="${Math.min(y(k[0]), y(k[3])).toFixed(1)}" width="${cw.toFixed(1)}" height="${Math.max(1.2, Math.abs(y(k[0]) - y(k[3]))).toFixed(1)}" fill="${col}"/></g>`;
+  });
+  const tk = ch.k[ch.e], buy = t.dir === 1;                       // trigger marker, on the side the trade wants to go
+  const my = buy ? y(tk[2]) + 15 : y(tk[1]) - 15, px = x(ch.e);
+  g += `<polygon points="${buy ? `${px},${my - 7} ${px - 6},${my + 4} ${px + 6},${my + 4}` : `${px},${my + 7} ${px - 6},${my - 4} ${px + 6},${my - 4}`}" fill="var(--live)" stroke="var(--surface)" stroke-width="1.2"/>
+    <text x="${px.toFixed(1)}" y="${(T + 9).toFixed(1)}" font-size="10" font-weight="600" fill="var(--live)" text-anchor="middle">Trigger</text>`;
+  if (ch.x != null && ch.xp != null) {                            // exit
+    const xc = t.result === "WIN" ? "var(--gain)" : t.result === "LOSS" ? "var(--loss)" : "var(--muted)";
+    g += `<circle cx="${x(ch.x).toFixed(1)}" cy="${y(ch.xp).toFixed(1)}" r="5.5" fill="${xc}" stroke="var(--surface)" stroke-width="2"/>
+      <text x="${x(ch.x).toFixed(1)}" y="${(y(ch.xp) + (t.dir === 1 ? 17 : -9)).toFixed(1)}" font-size="10" font-weight="600" fill="${xc}" text-anchor="middle">Exit</text>`;
+  }
+  labels.sort((a, b) => a.y - b.y);                               // right-hand labels, nudged apart so none overlap
+  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 12) labels[i].y = labels[i - 1].y + 12;
+  labels.forEach(l => { g += `<text x="${W - R + 6}" y="${(l.y + 3.5).toFixed(1)}" font-size="10.5" fill="${l.color}" font-variant-numeric="tabular-nums">${esc(l.text)}</text>`; });
+  const step = Math.max(1, Math.ceil(n / 8));
+  for (let i = 0; i < n; i += step) g += `<text x="${x(i).toFixed(1)}" y="${H - 8}" font-size="10" fill="var(--muted)" text-anchor="middle">${hmOf(ch.t0 + ch.d[i] * 300)}</text>`;
+  const leg = Object.keys(ch.ov || {}).map(k => `<span><i style="background:${(OV_STYLE[k] || [])[1] || "var(--muted)"}"></i>${esc((OV_STYLE[k] || [k])[0])}</span>`).join("");
+  const why0 = (t.why || [])[0];
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Chart of ${esc(t.name)}: ${n} five-minute candles, ${buy ? "buy" : "sell"} trigger at ${hmOf(ch.t0 + ch.d[ch.e] * 300)} near ${inr(ep)}, stop ${inr(stop)}${target != null ? ", target " + inr(target) : ""}">${g}</svg>
+    <div class="chart-legend"><span><i style="background:var(--live);opacity:.5"></i>Trigger candle (the one whose close gave the signal)</span>${leg}</div>
+    ${why0 ? `<p class="note" style="margin-top:4px">${esc(why0)}</p>` : ""}`;
+}
+
+async function hydrateCharts() {
+  for (const el of [...document.querySelectorAll("[data-cid]")]) {
+    const t = ROWS.get(el.dataset.cid);
+    if (!t) continue;
+    const data = await getCharts(el.dataset.csrc, el.dataset.csid);
+    if (!el.isConnected) continue;
+    const ch = data && data[t.id];
+    el.innerHTML = ch && ch.k && ch.k.length ? chartSvg(ch, t)
+      : `<p class="note" style="margin:0">No chart was stored for this trade. Charts are kept for the last three days of live trades and the 100 most recent backtest trades of each strategy${t.opt ? ", and not for commodity options" : ""}.</p>`;
+    el.scrollLeft = el.scrollWidth;
+  }
+}
+
 /* ───────────── trade rows ───────────── */
-function ladderOf(t) {
-  const e = t.opt ? t.uEntry : t.entry, risk = Math.abs(e - t.stop), target = t.target ?? e + t.dir * 3 * risk;
-  const now = t.opt ? t.uLast : t.status === "OPEN" ? (t.last ?? e) : t.exit;
-  return ladder({ stop_underlying: t.stop, target_underlying: target, underlying_entry: e, underlying_last: now, status: t.status, result: t.result,
-    target_label: t.target == null ? "No target (3R mark)" : "Target" });
+function ticketText(t) {
+  const risk = rupee(t.risk), name = srcMeta(t.sid).name;
+  if (t.opt) return `${t.headline} | entry about ₹${inr(t.entry)}${t.stopPrice ? ` | option stop ₹${inr(t.stopPrice)}` : ""} | ${t.name} stop ${inr(t.stop)}, target ${inr(t.target)} | planned risk ${risk} | ${name}`;
+  return `${t.dir === 1 ? "BUY" : "SELL"} ${inr(t.qty)} ${t.name} | entry about ₹${inr(t.entry)} | stop ₹${inr(t.stop)} | ${t.target ? `target ₹${inr(t.target)}` : "no fixed target"} | planned risk ${risk} | ${name}`;
 }
 
 function rowDetail(t) {
+  ROWS.set(t.id, t);
   const open = t.status === "OPEN", nowP = open ? (t.last ?? t.entry) : t.exit;
   const fact = (l, v, c) => `<div>${l}<b class="${c || ""}">${v}</b></div>`;
   const qty = t.opt ? (t.kind === "option" ? `${t.lots} lot${t.lots > 1 ? "s" : ""} (${inr(t.qty)})` : `${inr(t.qty)} shares`) : inr(t.qty);
   const news = newsFor(t.name).slice(0, 2);
+  const reward = !t.opt && t.target ? t.qty * Math.abs(t.target - t.entry) : null;
   return `<div class="detail">
-    <div class="muted" style="font-size:.84rem;margin-top:14px">${t.opt ? esc(t.name) + " level" : "Price"} between the stop and the target</div>${ladderOf(t)}
+    <div class="chart" data-csrc="${t.src}" data-csid="${t.sid}" data-cid="${esc(t.id)}"><p class="note" style="margin:14px 0 0">Loading the chart…</p></div>
+    <div class="muted" style="font-size:.84rem;margin-top:14px">Where price stands between the stop and the target</div>${ladderOf(t)}
     <div class="facts">${fact("Entry price", "₹" + inr(t.entry))}${fact(open ? "Price now" : "Exit price", "₹" + inr(nowP))}${fact("Quantity", qty)}${fact("Planned risk", rupee(t.risk))}
+      ${reward ? fact("Reward at target", rupee(reward)) + fact("Reward to risk", (reward / t.risk).toFixed(1) + " : 1") : ""}
+      ${!t.opt ? fact("Position value", rupee(t.qty * t.entry)) : ""}
       ${t.opt && t.stopPrice ? fact("Option stop-loss", "₹" + inr(t.stopPrice)) : ""}
       ${!open && !t.opt ? fact("Before costs", signed(t.gross), cls(t.gross)) + fact("Costs", rupee(t.cost)) : ""}
       ${!open ? fact(t.opt ? "Result, before costs" : "After costs", signed(t.net), cls(t.net)) : ""}</div>
+    <div class="actions">${t.src === "live" ? `<button class="chip" data-copy="${esc(t.id)}">Copy order details</button>` : ""}
+      <label class="took"><input type="checkbox" data-took="${esc(t.id)}" ${takenSet.has(t.id) ? "checked" : ""}> I took this trade</label></div>
     ${t.regime && !t.opt ? `<p class="subhead">Market condition when it triggered</p><div>${esc(t.regime)}</div>` : ""}
     ${t.why ? `<p class="subhead">Why this trade was triggered</p><ul class="why">${t.why.map(r => `<li>${esc(r)}</li>`).join("")}</ul>`
       : `<p class="note">The reasons are kept for the most recent trades only, to keep this page light.</p>`}
@@ -567,6 +699,13 @@ function rowDetail(t) {
   </div>`;
 }
 
+function ladderOf(t) {
+  const e = t.opt ? t.uEntry : t.entry, risk = Math.abs(e - t.stop), target = t.target ?? e + t.dir * 3 * risk;
+  const now = t.opt ? t.uLast : t.status === "OPEN" ? (t.last ?? e) : t.exit;
+  return ladder({ stop_underlying: t.stop, target_underlying: target, underlying_entry: e, underlying_last: now, status: t.status, result: t.result,
+    target_label: t.target == null ? "No target (3R mark)" : "Target" });
+}
+
 function tradeRow(t, showSrc) {
   const isOpen = state.open.has(t.id), pnl = t.status === "OPEN" ? (t.open ?? 0) : t.net, pill = t.status === "OPEN" ? "OPEN" : t.result;
   const head = t.opt ? esc(t.headline) : `${t.dir === 1 ? "BUY" : "SELL"} ${inr(t.qty)} ${esc(t.name)}`;
@@ -574,7 +713,7 @@ function tradeRow(t, showSrc) {
     ? `In at ${clock24(t.inT)}, ₹${inr(t.entry)}. ${t.opt ? (t.stopPrice ? "Option stop ₹" + inr(t.stopPrice) + "." : "") : `Stop ₹${inr(t.stop)}${t.target ? `, target ₹${inr(t.target)}` : ", no fixed target"}`}`
     : `${clock24(t.inT)} at ₹${inr(t.entry)} to ${clock24(t.outT)} at ₹${inr(t.exit)}. ${esc(t.reason || HOW[t.how] || t.how)}`;
   const nw = newsFor(t.name)[0];
-  const tags = (showSrc ? `<span class="tag-s">${esc(srcMeta(t.sid).name)}</span>` : "") +
+  const tags = (showSrc ? `<span class="tag-s">${esc(srcMeta(t.sid).name)}</span>` : "") + (takenSet.has(t.id) ? `<span class="tag-s" style="background:var(--gain-soft);color:var(--gain)">Taken</span>` : "") +
     (nw ? `<span class="tag-s" style="background:var(--live-soft);color:var(--live)" title="${esc(nw.title)}">In the news: ${esc(nw.tag)}</span>` : "");
   return `<div class="row"><button data-trade="${esc(t.id)}" aria-expanded="${isOpen}">
       <span class="pill ${pill}">${pill === "WIN" ? "Won" : pill === "LOSS" ? "Lost" : pill === "OPEN" ? "Open" : "Flat"}</span>
@@ -592,20 +731,22 @@ function rowList(rows, key, showSrc) {
   return html;
 }
 
-/* ───────────── the page ───────────── */
+/* ───────────── the page, in the order a trader uses it ───────────── */
+const sec = (id, title, right, inner) => `<section id="${id}"><div class="sec-head"><h2>${title}</h2><span class="muted" style="font-size:.88rem">${right || ""}</span></div>${inner}</section>`;
+
 function spark(pts) {
   if (!pts || pts.length < 2) return "";
   const step = Math.max(1, Math.floor(pts.length / 40)), p = pts.filter((_, i) => i % step === 0).concat(pts[pts.length - 1]);
-  const mn = Math.min(0, ...p), mx = Math.max(0, ...p), sp = (mx - mn) || 1, W = 84, H = 24;
+  const mn = Math.min(0, ...p), mx = Math.max(0, ...p), sp = (mx - mn) || 1, W = 84, H = 24, zy = (H - 2 - (0 - mn) / sp * (H - 4)).toFixed(1);
   const line = p.map((v, i) => `${(i / (p.length - 1) * W).toFixed(1)},${(H - 2 - (v - mn) / sp * (H - 4)).toFixed(1)}`).join(" ");
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="0" x2="${W}" y1="${(H - 2 - (0 - mn) / sp * (H - 4)).toFixed(1)}" y2="${(H - 2 - (0 - mn) / sp * (H - 4)).toFixed(1)}" stroke="var(--line)"/>
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="0" x2="${W}" y1="${zy}" y2="${zy}" stroke="var(--line)"/>
     <polyline points="${line}" fill="none" stroke="${p[p.length - 1] >= 0 ? "var(--gain)" : "var(--loss)"}" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 }
 
 function renderHeader() {
   const pulse = $("pulse"), banner = $("banner");
   const out = { running: false, waitingLogin: false, missing: false };
-  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview.</b> The strategy numbers come from <b>real prices</b>: the backtests cover the last 60 trading days and the live panels replay one real session. The options desk's live trades are made-up samples.</div>`;
+  banner.innerHTML = LIVE ? "" : `<div class="banner"><b>Preview.</b> The strategy numbers and charts come from <b>real prices</b>: the backtests cover the last 60 trading days and the live panels replay one real session. The options desk's live trades are made-up samples.</div>`;
   const st = state.feed && state.feed.status;
   if (!st) { pulse.innerHTML = `<span class="dot"></span><span>Not connected</span>`; return out; }
   const seen = st.heartbeat || st.updated, fresh = seen && (!LIVE || Date.now() - new Date(seen).getTime() < 7 * 60e3);
@@ -616,25 +757,84 @@ function renderHeader() {
   return out;
 }
 
-function kpis(S, hd) {
-  const open = S.reduce((a, s) => a + s.today.open, 0), trig = S.reduce((a, s) => a + s.today.n, 0);
-  const withBt = S.filter(s => s.bt), ahead = withBt.filter(s => s.bt.net > 0).length;
+function exposure(rows) {
+  return { risk: rows.reduce((a, t) => a + (t.risk || 0), 0), cap: rows.reduce((a, t) => a + (t.qty || 0) * (t.entry || 0), 0), pnl: rows.reduce((a, t) => a + (t.open || 0), 0) };
+}
+
+function kpis(S, hd, open) {
+  const trig = S.reduce((a, s) => a + s.today.n, 0), withBt = S.filter(s => s.bt), ahead = withBt.filter(s => s.bt.net > 0).length;
   const strat = S.filter(s => s.id !== "options"), sNet = strat.reduce((a, s) => a + s.today.net, 0), oNet = (S.find(s => s.id === "options") || { today: { net: 0 } }).today.net;
+  const ex = exposure(open), stocks = new Set(open.map(t => t.name)).size;
   const sub = state.sb ? `${state.sb.period.days} sessions, ${esc(state.sb.source.split(",")[0])}` : "no backtest yet";
   return `<div class="kpis">
-    <div class="kpi"><span class="k">Open right now</span><b>${open}</b><small>${hd.waitingLogin ? "waiting for Fyers login" : hd.running ? "engine is watching" : "engine resting"}</small></div>
+    <div class="kpi"><span class="k">Open positions</span><b>${open.length}</b><small>${stocks} stock${stocks === 1 ? "" : "s"} · ${rupee(ex.risk)} planned risk</small></div>
     <div class="kpi"><span class="k">Triggered today</span><b>${trig}</b><small>across ${S.filter(s => s.today.n).length} of ${S.length} strategies</small></div>
     <div class="kpi"><span class="k">Result so far today</span><b class="${cls(sNet)}">${signed(sNet)}</b><small>strategies, after costs${oNet ? ` · options ${signed(oNet)} before costs` : ""}</small></div>
     <div class="kpi"><span class="k">Beat costs in the backtest</span><b>${withBt.length ? `${ahead} of ${withBt.length}` : "n/a"}</b><small>${sub}</small></div></div>`;
 }
 
-function rightNow() {
-  const open = allRows().filter(r => r.status === "OPEN").sort((a, b) => (a.iso < b.iso ? 1 : -1));
+function marketSection() {
+  const rg = state.sl && state.sl.regime, skip = state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.skip;
+  if (!rg) return sec("market", "Market conditions", "", `<div class="empty">The market read appears after the first 5-minute pass of the day (about 9:20 am). It shows whether the market is trending or ranging, which decides which strategies are allowed to trade.</div>`);
+  const mk = rg.markets.map(m => `<div class="mk"><div><b>${esc(m.name)}</b> <span class="num">${inr(m.price)}</span> ${m.chg == null ? "" : `<span class="${cls(m.chg)}">${m.chg >= 0 ? "+" : "−"}${Math.abs(m.chg).toFixed(2)}%</span>`}</div>
+    <div class="muted">${esc(m.label)} (ADX ${m.adx}) · trend ${m.trend} · ${m.vwap} VWAP · day range ${m.range}%${m.squeeze ? " · bands squeezed" : ""}</div></div>`).join("");
+  const b = rg.breadth, f = rg.filters;
+  const gate = (id, name) => { const x = f[id], on = x.share != null && x.share >= 50; return `<div class="gate"><span class="vchip ${on ? "good" : "few"}">${esc(name)}: ${x.share == null ? "n/a" : x.share + "% of shares pass"}</span><span class="muted">${esc(x.gate)}</span></div>`; };
+  return sec("market", "Market conditions", `as of ${hhmm(rg.asof)}`, `<div class="card">
+    ${skip ? `<p class="alarm" style="margin:0 0 12px">New options trades are paused for today (skip day).</p>` : ""}
+    <div class="mkgrid">${mk || '<div class="muted">Index data is not available yet.</div>'}</div>
+    ${b.stocks ? `<div class="mini"><div>Shares trending<b>${b.trending}%</b></div><div>Shares above VWAP<b>${b.above_vwap}%</b></div><div>Shares up on the day<b>${b.up_on_day}%</b></div><div>Shares scanned<b>${b.stocks}</b></div></div>` : ""}
+    <p class="subhead">Three strategies only trade in the right conditions. Each checks the filter on the individual share:</p>
+    <div class="gates">${gate("bb_bounce", "Bollinger bounce")}${gate("ema_pullback", "EMA trend pullback")}${gate("ema_cross", "EMA 9/21 crossover")}</div>
+    <p class="note">A strategy whose filter most shares fail will mostly sit out today. This is a description of the conditions, not a forecast.</p></div>`);
+}
+
+function watchSection() {
+  const f = state.feed, st = f && f.status, day = st && st.day, stocks = (day && day.stocks) || {}, watch = stocks.watch || [], tiles = (st && st.tiles) || [];
+  const stockTiles = Object.fromEntries(tiles.filter(t => t.book === "Stocks").map(t => [t.name, t]));
+  const marketTiles = tiles.filter(t => t.book !== "Stocks");
+  const wl = watch.length ? `<div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Stock</th><th>Move today</th><th>Early volume</th><th>Where it stands</th></tr></thead><tbody>${watch.map(w => {
+    const t = stockTiles[w.name] || {}, n = (w.news || [])[0];
+    return `<tr><td><b>${esc(w.name)}</b>${n ? `<small>${esc(n.tag)}: ${esc(n.title)}</small>` : ""}</td><td class="${cls(w.chg)}">${w.chg > 0 ? "+" : "−"}${Math.abs(w.chg).toFixed(2)}%</td><td>${w.volx}x usual</td>
+      <td>${t.in_trade ? "<b>In a trade</b>" : esc(t.note || "Waiting")}${t.range_high ? `<small>Range ${inr(t.range_low)} to ${inr(t.range_high)}${t.price ? ` · now ${inr(t.price)}` : ""}</small>` : ""}</td></tr>`;
+  }).join("")}</tbody></table></div></div>`
+    : `<div class="empty">${esc(stocks.note || "No Nifty 200 stock has passed the scan yet.")} The scan picks shares that are up or down 1% or more with about double their usual early volume, and runs at 9:30 am.</div>`;
+  const rg = state.sl && state.sl.status;
+  return sec("watch", "What's being watched", rg && rg.scanned ? `strategies scan ${rg.scanned} shares and indices every 5 minutes` : "", `
+    <p class="subhead" style="margin-top:0">Stock watchlist (options desk scan)</p>${wl}
+    <p class="subhead" style="margin-top:18px">Indices and commodities (opening ranges)</p>
+    ${marketTiles.length ? `<div class="tiles">${marketTiles.map(tile).join("")}</div>` : `<div class="empty">The market list appears when the engine starts its next session.</div>`}`);
+}
+
+function groupOpen(rows) {
+  const g = new Map();
+  rows.forEach(t => { if (!g.has(t.name)) g.set(t.name, []); g.get(t.name).push(t); });
+  return [...g.entries()].map(([name, ts]) => {
+    const side = d => new Set(ts.filter(t => t.dir === d).map(t => t.sid)), buy = side(1), sell = side(-1);
+    const dir = buy.size && sell.size ? 0 : buy.size ? 1 : -1, ex = exposure(ts);
+    return { name, trades: ts, dir, strategies: [...new Set(ts.map(t => t.sid))], agree: dir === 0 ? Math.max(buy.size, sell.size) : (dir === 1 ? buy.size : sell.size), risk: ex.risk, pnl: ex.pnl, latest: ts.reduce((m, t) => (t.iso > m ? t.iso : m), "") };
+  }).sort((a, b) => b.agree - a.agree || (a.latest < b.latest ? 1 : -1));
+}
+
+function groupRow(g) {
+  const isOpen = state.openGroups.has(g.name), word = g.dir === 0 ? "MIXED" : g.dir === 1 ? "BUY" : "SELL";
+  const chips = g.strategies.map(id => `<span class="tag-s">${esc(srcMeta(id).name)}</span>`).join("");
+  return `<div class="row grp"><button data-group="${esc(g.name)}" aria-expanded="${isOpen}">
+      <span class="pill ${word}">${word === "MIXED" ? "Mixed" : word}</span>
+      <span class="what">${esc(g.name)}<small>${g.agree} strateg${g.agree === 1 ? "y" : "ies"} ${g.dir === 0 ? "on the larger side · conflicting signals" : "agree"}</small><span class="chips">${chips}</span></span>
+      <span class="res ${cls(g.pnl)}">${signed(g.pnl)}<small>${rupee(g.risk)} at risk</small></span></button>
+    ${isOpen ? `<div class="grp-body">${g.trades.sort((a, b) => (a.iso < b.iso ? 1 : -1)).map(t => tradeRow(t, true)).join("")}</div>` : ""}</div>`;
+}
+
+function openSection(open) {
+  const groups = groupOpen(open), ex = exposure(open), shown = state.openAll ? groups : groups.slice(0, 8);
   const sl = state.sl && state.sl.status && state.sl.status.cycle_at;
-  const shown = state.openAll ? open : open.slice(0, 6);
-  return `<div class="sec-head"><h2>Right now</h2><span class="muted" style="font-size:.88rem">${sl ? `Strategies last checked ${hhmm(sl)}` : ""}</span></div>
-    ${open.length ? shown.map(t => tradeRow(t, true)).join("") + (open.length > 6 ? `<button class="more" data-openall="1">${state.openAll ? "Show fewer" : `Show all ${open.length} open trades`}</button>` : "")
-      : `<div class="empty">No trade is open. A trade appears here the moment any strategy or the options desk triggers one, with its stop, target and the reasons.</div>`}`;
+  return sec("open", "Open positions", sl ? `strategies last checked ${hhmm(sl)}` : "", open.length ? `
+    <div class="expo"><span><b>${open.length}</b> trades in <b>${groups.length}</b> stocks</span><span>Planned risk <b>${rupee(ex.risk)}</b></span><span>Capital in use <b>${rupee(ex.cap)}</b></span>
+      <span class="${cls(ex.pnl)}"><b>${signed(ex.pnl)}</b> so far, before costs</span></div>
+    ${shown.map(groupRow).join("")}${groups.length > 8 ? `<button class="more" data-openall="1">${state.openAll ? "Show fewer" : `Show all ${groups.length} stocks`}</button>` : ""}
+    <p class="note">These are paper positions from ten strategies running at once, so planned risk and capital in use add up every trade; no real account would hold them all. Trades are grouped by stock, with the stocks where the most strategies agree first. Tap a stock for its trades, each with a chart. Agreement is shown for clarity: in the backtest, trades with other strategies already in the same direction did slightly better before costs, but not after them, and not steadily across the period. Stocks with <b>conflicting</b> signals did worst.</p>`
+    : `<div class="empty">No trade is open. A trade appears here the moment any strategy or the options desk triggers one, with its chart, stop, target and the reasons.</div>`);
 }
 
 function scoreboard(S) {
@@ -649,14 +849,13 @@ function scoreboard(S) {
       <td>${r.bt ? `<span class="zb"><i style="${r.bt.net >= 0 ? "left" : "right"}:50%;width:${w}%;background:${r.bt.net >= 0 ? "var(--gain)" : "var(--loss)"}"></i></span><span class="${cls(r.bt.net)}">${signed(r.bt.net)}</span>` : '<span class="muted">n/a</span>'}</td>
       <td>${spark(r.curve)}</td><td><span class="vchip ${r.level}">${VERDICT[r.level]}</span></td></tr>`;
   }).join("");
-  return `<div class="sec-head"><h2>Which strategy is working?</h2><span class="muted" style="font-size:.88rem">Tap any row to drill in</span></div>
+  return sec("board", "Which strategy is working?", "Tap any row to drill in", `
     <div class="card" style="padding:6px 0"><div class="scroll"><table class="cmp"><thead><tr><th>Strategy</th><th>Today</th><th>Live record</th><th>Backtest</th><th>After costs</th><th>Trend</th><th>Verdict</th></tr></thead><tbody>${body}</tbody></table></div></div>
-    <p class="note">Live record counts closed live trades, after costs for the strategies and before costs for the options desk. Backtest is the same rules on past prices, after estimated costs. The trend line is the backtest's running total.</p>`;
+    <p class="note">Live record counts closed live trades, after costs for the strategies and before costs for the options desk. Backtest is the same rules on past prices, after estimated costs. The trend line is the backtest's running total.</p>`);
 }
 
-function newsPanel() {
-  const items = newsList();
-  return `<div class="sec-head"><h2>In the news</h2></div>${newsBlock(items.slice(0, 6))}`;
+function newsSection() {
+  return sec("news", "In the news", "", newsBlock(newsList().slice(0, 8)));
 }
 
 /* ───────────── the combined log ───────────── */
@@ -667,6 +866,7 @@ function logFilter(rows) {
   if (state.logStatus === "open") out = out.filter(x => x.status === "OPEN");
   else if (state.logStatus === "won") out = out.filter(x => x.status === "CLOSED" && x.net > 0);
   else if (state.logStatus === "lost") out = out.filter(x => x.status === "CLOSED" && x.net < 0);
+  else if (state.logStatus === "taken") out = out.filter(x => takenSet.has(x.id));
   if (state.logPeriod !== "all" && rows.length) {
     const last = rows.reduce((m, x) => (x.date > m ? x.date : m), ""), days = state.logPeriod === "today" ? 0 : +state.logPeriod;
     const cut = new Date(new Date(last + "T00:00:00Z").getTime() - days * 864e5).toISOString().slice(0, 10);
@@ -686,21 +886,23 @@ function logSection() {
   let body = "", last = "";
   shown.forEach(x => { if (x.date !== last) { body += `<div class="day-label">${dayText(x.date)}</div>`; last = x.date; } body += tradeRow(x, true); });
   if (list.length > shown.length) body += `<button class="more" data-smore="lshown">Show ${Math.min(25, list.length - shown.length)} more of ${list.length - shown.length} older trades</button>`;
-  return `<div class="sec-head"><h2>Every trade</h2><span class="muted" style="font-size:.88rem">${list.length} shown${list.length !== all.length ? ` of ${all.length}` : ""} · ${won} won, ${lost} lost · <span class="${cls(net)}">${signed(net)}</span> closed</span></div>
+  const mine = all.filter(x => takenSet.has(x.id)), mineClosed = mine.filter(x => x.status === "CLOSED");
+  return sec("log", "Every trade", `${list.length} shown${list.length !== all.length ? ` of ${all.length}` : ""} · ${won} won, ${lost} lost · <span class="${cls(net)}">${signed(net)}</span> closed`, `
     <div class="filters">
       <label class="muted" style="align-self:center">Source <select id="logsrc" class="ctl">${sources.map(([v, l]) => `<option value="${v}" ${state.logSrc === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
       <input id="logq" class="ctl" type="search" placeholder="Search a stock or index" value="${esc(state.logQ)}" aria-label="Search by stock or index" style="border-radius:999px;min-width:200px">
-      <span style="width:6px"></span>${[["all", "All"], ["open", "Open"], ["won", "Won"], ["lost", "Lost"]].map(([v, l]) => chip("lstatus", "logStatus", v, l)).join("")}
+      <span style="width:6px"></span>${[["all", "All"], ["open", "Open"], ["won", "Won"], ["lost", "Lost"], ["taken", "Taken by me"]].map(([v, l]) => chip("lstatus", "logStatus", v, l)).join("")}
       <span style="width:6px"></span>${[["all", "All time"], ["7", "Last 7 days"], ["today", "Latest day"]].map(([v, l]) => chip("lperiod", "logPeriod", v, l)).join("")}</div>
+    ${mine.length ? `<p class="note" style="margin-top:0">You marked <b>${mine.length}</b> trade${mine.length > 1 ? "s" : ""} as taken (on this device only). ${mineClosed.length ? `Of those, ${mineClosed.length} ${mineClosed.length > 1 ? "have" : "has"} closed for <b class="${cls(mineClosed.reduce((a, x) => a + x.net, 0))}">${signed(mineClosed.reduce((a, x) => a + x.net, 0))}</b> by the tool's numbers.` : ""}</p>` : ""}
     ${all.length ? (list.length ? body : `<div class="empty">No trade matches these filters.</div>`) : `<div class="empty">No trades yet. They appear here as soon as the options desk or any strategy triggers one.</div>`}
     ${list.length ? `<button class="dl" data-logcsv="1">Download these ${list.length} trades (spreadsheet file)</button>` : ""}
-    <p class="note">Strategy results are after estimated costs; options desk results are before costs, so totals that mix the two mix their bases. Strategy trades are kept in detail for 10 days; older ones are folded into running totals.</p>`;
+    <p class="note">Strategy results are after estimated costs; options desk results are before costs, so totals that mix the two mix their bases. Strategy trades are kept in detail for 10 days; older ones are folded into running totals.</p>`);
 }
 
 function downloadLog() {
   const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["Source", "Date", "Market", "Direction", "In", "Out", "Entry price", "Exit price", "Result", "R", "How it ended", "Status"];
-  const rows = logFilter(allRows()).map(t => [srcMeta(t.sid).name, t.date, t.opt ? t.name : t.name, t.dir === 1 ? "BUY" : "SELL", t.inT, t.outT, t.entry, t.exit ?? "", t.status === "OPEN" ? (t.open ?? "") : t.net, t.r ?? "", t.how || "", t.status].map(q).join(","));
+  const head = ["Source", "Date", "Market", "Direction", "In", "Out", "Entry price", "Exit price", "Result", "R", "How it ended", "Status", "Taken by me"];
+  const rows = logFilter(allRows()).map(t => [srcMeta(t.sid).name, t.date, t.name, t.dir === 1 ? "BUY" : "SELL", t.inT, t.outT, t.entry, t.exit ?? "", t.status === "OPEN" ? (t.open ?? "") : t.net, t.r ?? "", t.how || "", t.status, takenSet.has(t.id) ? "yes" : ""].map(q).join(","));
   const url = URL.createObjectURL(new Blob([[head.map(q).join(","), ...rows].join("\n")], { type: "text/csv" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: "signal-desk-all-trades.csv" });
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
@@ -728,20 +930,19 @@ function liveStrategy(id) {
 }
 
 function liveOptions() {
-  const f = state.feed, tiles = (f && f.status && f.status.tiles) || [], rows = optRows(), open = rows.filter(t => t.status === "OPEN"), s = sstats(rows);
-  return `<p class="subhead" style="margin-top:0">Today's markets</p>${tiles.length ? `<div class="tiles">${tiles.map(tile).join("")}</div>` : `<div class="empty">The market list appears when the engine starts its next session.</div>`}
-    ${open.length ? `<p class="subhead" style="margin-top:18px">Open right now (${open.length})</p>${open.map(t => tradeRow(t)).join("")}` : ""}
+  const rows = optRows(), open = rows.filter(t => t.status === "OPEN"), s = sstats(rows);
+  return `${open.length ? `<p class="subhead" style="margin-top:0">Open right now (${open.length})</p>${open.map(t => tradeRow(t)).join("")}` : ""}
     <p class="subhead" style="margin-top:18px">Everything it triggered, newest first</p>${rows.length ? rowList(rows, "sshown") : `<div class="empty">No trade has triggered yet.</div>`}
     ${s.n ? `<div class="card" style="margin-top:14px"><h3>Live record so far</h3><div class="mini"><div>Closed trades<b>${s.n}</b></div><div>Win rate<b>${s.rate === null ? "n/a" : s.rate.toFixed(0) + "%"}</b></div>
-      <div>Result, before costs<b class="${cls(s.net)}">${signed(s.net)}</b></div><div>Average win<b class="gain">${s.w ? rupee(rows.filter(t => t.status === "CLOSED" && t.net > 0).reduce((a, t) => a + t.net, 0) / s.w) : "n/a"}</b></div>
-      <div>Per trade<b>${num1(s.avgR)}R</b></div></div></div>` : ""}`;
+      <div>Result, before costs<b class="${cls(s.net)}">${signed(s.net)}</b></div><div>Per trade<b>${num1(s.avgR)}R</b></div></div></div>` : ""}
+    <p class="note">The markets and stocks this desk is watching today are in the "What's being watched" section of the main page.</p>`;
 }
 
 function btTrades(id) {
   const b = sbOf(id);
   if (!b || !b.trades.length) return "";
   const rows = b.trades.map(r => fromBt(state.sb.cols, r, id));
-  return `<p class="note" style="margin-top:0">The latest ${rows.length} of ${b.trades_total} backtest trades. Tap one to see why it was triggered.</p>${rowList(rows, "sshown")}
+  return `<p class="note" style="margin-top:0">The latest ${rows.length} of ${b.trades_total} backtest trades. Tap one for its chart and the reasons it was triggered.</p>${rowList(rows, "sshown")}
     <button class="dl" data-csv="${id}">Download these trades (spreadsheet file)</button>`;
 }
 
@@ -778,6 +979,8 @@ function closeSheet() {
   if (state.sheetFrom && document.contains(state.sheetFrom)) state.sheetFrom.focus();
 }
 
+const NAV = [["market", "Market"], ["watch", "Watching"], ["open", "Open positions"], ["board", "Strategies"], ["log", "Trades"], ["news", "News"]];
+
 function render() {
   const keep = document.querySelector(".sheet-body"), sy = keep ? keep.scrollTop : 0;
   const hd = renderHeader();
@@ -788,27 +991,38 @@ function render() {
     $("sheet").innerHTML = "";
     return;
   }
-  const S = SOURCES.map(s => srcStats(s.id)), open = S.reduce((a, s) => a + s.today.open, 0), trig = S.reduce((a, s) => a + s.today.n, 0);
-  const lead = open ? `${open} trade${open > 1 ? "s" : ""} open right now.` : hd.waitingLogin ? "Waiting for your Fyers login." : hd.running ? "No open trade. Watching for a setup."
+  ROWS.clear();
+  const S = SOURCES.map(s => srcStats(s.id)), open = allRows().filter(r => r.status === "OPEN"), trig = S.reduce((a, s) => a + s.today.n, 0);
+  const lead = open.length ? `${open.length} trade${open.length > 1 ? "s" : ""} open right now.` : hd.waitingLogin ? "Waiting for your Fyers login." : hd.running ? "No open trade. Watching for a setup."
     : hd.missing ? "The engine is not checking in." : "Markets are resting. Nothing open.";
-  const skip = state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.skip;
-  $("app").innerHTML = `<p class="lead">${lead}</p>
-    <p class="sublead">${trig ? `${trig} trade${trig > 1 ? "s" : ""} triggered today` : "No trade triggered today"} across the options desk and ten strategies. ${skip ? "New options trades are paused for today." : ""}</p>
-    ${kpis(S, hd)}${rightNow()}${scoreboard(S)}${newsPanel()}${logSection()}
+  $("app").innerHTML = `<nav class="jump" aria-label="Sections">${NAV.map(([id, l]) => `<button class="chip" data-jump="${id}">${l}</button>`).join("")}</nav>
+    <p class="lead">${lead}</p>
+    <p class="sublead">${trig ? `${trig} trade${trig > 1 ? "s" : ""} triggered today` : "No trade triggered today"} across the options desk and ten strategies.</p>
+    ${kpis(S, hd, open)}${marketSection()}${watchSection()}${openSection(open)}${scoreboard(S)}${logSection()}${newsSection()}
     ${(state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.log || []).length ? `<details class="log"><summary>Today’s options-desk activity log</summary><ol class="timeline">${state.feed.status.day.log.slice().reverse().map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol></details>` : ""}
     ${state.sb ? `<details class="assume card"><summary>What the strategy backtests assume</summary><ul>${state.sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details>` : ""}`;
   $("sheet").innerHTML = sheetHtml();
   const nb = document.querySelector(".sheet-body"); if (nb) nb.scrollTop = sy;
   document.documentElement.style.overflow = state.sheet ? "hidden" : "";
+  hydrateCharts();
 }
 const rerender = () => { const y = scrollY; render(); scrollTo(0, y); };
 
 document.addEventListener("click", e => {
-  const b = e.target.closest("button, tr[data-sheet], [data-close]");
+  const b = e.target.closest("button, tr[data-sheet], [data-close], input[data-took]");
   if (!b) return;
   if (b.dataset.close) { closeSheet(); return; }
   if (b.dataset.sheet) { openSheet(b.dataset.sheet, b.tagName === "BUTTON" ? b : null); return; }
+  if (b.dataset.jump) { const el = $(b.dataset.jump); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  if (b.dataset.group) { const k = b.dataset.group; state.openGroups.has(k) ? state.openGroups.delete(k) : state.openGroups.add(k); rerender(); return; }
   if (b.dataset.openall) { state.openAll = !state.openAll; rerender(); return; }
+  if (b.dataset.took) { const id = b.dataset.took; takenSet.has(id) ? takenSet.delete(id) : takenSet.add(id); saveTaken(); rerender(); return; }
+  if (b.dataset.copy) {
+    const t = ROWS.get(b.dataset.copy); if (!t) return;
+    const done = () => { b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy order details"; }, 1800); };
+    (navigator.clipboard ? navigator.clipboard.writeText(ticketText(t)).then(done) : Promise.reject()).catch(() => prompt("Copy the order details:", ticketText(t)));
+    return;
+  }
   if (b.dataset.lstatus) { state.logStatus = b.dataset.lstatus; state.lshown = 25; rerender(); return; }
   if (b.dataset.lperiod) { state.logPeriod = b.dataset.lperiod; state.lshown = 25; rerender(); return; }
   if (b.dataset.logcsv) { downloadLog(); return; }

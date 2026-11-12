@@ -76,6 +76,7 @@ def _open_trade(strat, inst, S, i, sig, cfg):
         "qty": qty, "risk": round(qty * unit, 2), "why": sig["why"], "regime": sig["regime"],
         "rule_exit": sig.get("exit"), "status": "OPEN", "last": round(c, 2), "open_pnl": 0.0,
         "exit_by": cfg["exit_by"],
+        "_lines": sig.get("lines") or [], "_box": sig.get("box"), "_i0": i,      # used for the chart, then removed
     }
 
 
@@ -113,12 +114,44 @@ def _manage(tr, S, i, cfg, exit_min):
     return None
 
 
-def simulate(S, inst, strat, cfg, days=None, live_day=None):
+SERIES_ATTR = {"vwap": "vwap", "ema9": "ema9", "ema21": "ema21", "ema20": "ema20", "ema50": "ema50",
+               "bb_up": "bb_up", "bb_mid": "bb_mid", "bb_lo": "bb_lo"}
+
+
+def build_chart(S, i_sig, i_end, overlays, lines, box, ep, xp=None, before=30, after=4):
+    """Everything needed to draw a trade: the candles around it, indicator lines, trigger levels, entry and exit.
+
+    Candles are [open, high, low, close]. e is the trigger candle, x the exit candle (None while open).
+    """
+    day = S.day[i_sig]
+    j0, j1 = max(S.starts[day], i_sig - before), min(S.ends[day], i_end + after)
+    rng = range(j0, j1 + 1)
+    ch = {"t0": S.t[j0], "d": [(S.t[j] - S.t[j0]) // 300 for j in rng],
+          "k": [[round(S.o[j], 2), round(S.h[j], 2), round(S.l[j], 2), round(S.c[j], 2)] for j in rng],
+          "e": i_sig - j0, "x": (i_end - j0) if xp is not None else None, "ep": round(ep, 2),
+          "xp": round(xp, 2) if xp is not None else None,
+          "ln": [[lab, round(px, 2)] for lab, px in lines],
+          "ov": {name: [None if getattr(S, SERIES_ATTR[name])[j] is None else round(getattr(S, SERIES_ATTR[name])[j], 2) for j in rng]
+                 for name in overlays}}
+    if box:
+        ch["bx"] = [max(0, box["i0"] - j0), max(0, box["i1"] - j0), round(box["lo"], 2), round(box["hi"], 2), box["label"]]
+    return ch
+
+
+def _finish(tr, S, strat, i_end, closed, want):
+    lines, box, i0 = tr.pop("_lines"), tr.pop("_box"), tr.pop("_i0")
+    if want:
+        tr["_chart"] = build_chart(S, i0, i_end, strat.get("overlay", []), lines, box, tr["entry"], tr["exit"] if closed else None)
+    return tr
+
+
+def simulate(S, inst, strat, cfg, days=None, live_day=None, chart_from=None):
     """All trades one strategy would have taken in one symbol.
 
     days     the dates to look at (None = every date in the data)
     live_day a date allowed to end the data with a trade still open (live use). Any other
              day's open trade is closed at that day's last candle.
+    chart_from  from this date on, each trade also gets a "_chart" (candles and levels to draw it)
     """
     kind = inst["kind"]
     p = params(cfg, strat, kind)
@@ -131,12 +164,13 @@ def simulate(S, inst, strat, cfg, days=None, live_day=None):
             continue
         a, b = S.starts[day], S.ends[day]
         tr, taken = None, 0
+        want = chart_from is not None and day >= chart_from
         for i in range(a, b + 1):
             end = minute_of_day(S.t[i]) + 5
             if tr is not None:
                 done = _manage(tr, S, i, cfg, exit_min)
                 if done:
-                    out.append(done)
+                    out.append(_finish(done, S, strat, i, True, want))
                     tr = None
                     continue
             if tr is None and w0 <= end <= w1 and end < exit_min and i >= cfg["min_bars"] and (not cap or taken < cap):
@@ -147,9 +181,9 @@ def simulate(S, inst, strat, cfg, days=None, live_day=None):
                         taken += 1
         if tr is not None:
             if day == live_day:
-                out.append(tr)
+                out.append(_finish(tr, S, strat, b, False, want))
             else:
-                out.append(_close(tr, S, b, S.c[b], "TIME", "Closed at the last candle of the day", cfg))
+                out.append(_finish(_close(tr, S, b, S.c[b], "TIME", "Closed at the last candle of the day", cfg), S, strat, b, True, want))
     return out
 
 
@@ -165,7 +199,7 @@ def build_instruments(markets, universe, lots):
     return out
 
 
-def run_all(series, insts, cfg, days=None, live_day=None, only=None, log=print):
+def run_all(series, insts, cfg, days=None, live_day=None, only=None, log=print, chart_from=None):
     """series: {symbol: Series}. Returns {strategy id: [trades]}."""
     res = {s["id"]: [] for s in STRATEGIES if not only or s["id"] in only}
     for n, (sym, S) in enumerate(series.items()):
@@ -174,7 +208,7 @@ def run_all(series, insts, cfg, days=None, live_day=None, only=None, log=print):
             continue
         for strat in STRATEGIES:
             if strat["id"] in res:
-                res[strat["id"]] += simulate(S, inst, strat, cfg, days, live_day)
+                res[strat["id"]] += simulate(S, inst, strat, cfg, days, live_day, chart_from)
         if (n + 1) % 50 == 0:
             log(f"    scanned {n + 1} of {len(series)} symbols")
     for v in res.values():

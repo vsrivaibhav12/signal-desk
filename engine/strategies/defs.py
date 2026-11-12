@@ -22,9 +22,10 @@ def _a(S, i):
     return S.starts[S.day[i]]
 
 
-def _sig(d, stop, why, regime, target=None, target_r=None, exit=None):
+def _sig(d, stop, why, regime, target=None, target_r=None, exit=None, lines=None, box=None):
+    """lines: [(label, price)] horizontal levels for the chart. box: a shaded range {i0, i1, lo, hi, label}."""
     return {"dir": d, "stop": stop, "target": target, "target_r": target_r,
-            "why": why, "regime": regime, "exit": exit}
+            "why": why, "regime": regime, "exit": exit, "lines": lines or [], "box": box}
 
 
 def _vol_ok(S, i, need):
@@ -62,7 +63,8 @@ def scan_momentum(S, i, p):
                f"Price is {_word(d)} the day's average price line (VWAP {n2(vw)}).",
                vtxt or "This is an index, which has no volume, so the volume check does not apply."]
         return _sig(d, c * (1 - d * p["stop_pct"] / 100), why,
-                    f"Early-session momentum, RSI {r:.0f}", target_r=p["target_r"], exit="momentum_fade")
+                    f"Early-session momentum, RSI {r:.0f}", target_r=p["target_r"], exit="momentum_fade",
+                    lines=[(f"Previous {N}-candle {'high' if d == 1 else 'low'}", hi if d == 1 else lo)])
     return None
 
 
@@ -105,7 +107,9 @@ def scan_breakout(S, i, p):
                f"({n2(L)} to {n2(H)}, {width / L * 100:.2f}% wide).", vtxt,
                f"Stop sits at the middle of the range ({n2(mid)}); target is {p['target_x']}x the range height "
                f"beyond the breakout ({n2(target)})."]
-        return _sig(d, mid, why, f"Tight range ({width / L * 100:.2f}%) then expansion", target=target)
+        return _sig(d, mid, why, f"Tight range ({width / L * 100:.2f}%) then expansion", target=target,
+                    lines=[("Range high", H), ("Range low", L), ("Range middle (stop)", mid)],
+                    box={"i0": i - 3 * p["range_bars"] - 2, "i1": i - 3, "lo": L, "hi": H, "label": "Tight range"})
     return None
 
 
@@ -146,7 +150,8 @@ def scan_reversal(S, i, p):
                f"{min(recent) if d == 1 else max(recent):.0f}, an exhausted move.",
                f"The candle just closed with {pattern}, a sign the other side is stepping in.",
                f"Target is the day's average price line (VWAP {n2(vw)}), a pull back toward the middle of the day."]
-        return _sig(d, stop, why, f"Over-extended {abs(mv):.1f}% move, fading it", target=vw)
+        return _sig(d, stop, why, f"Over-extended {abs(mv):.1f}% move, fading it", target=vw,
+                    lines=[("Today's open", S.day_open[S.day[i]])])
     return None
 
 
@@ -211,7 +216,9 @@ def scan_gap(S, i, p):
            f"After waiting 15 minutes, price closed at {n2(c)}, {_word(d)} the first 15-minute {'high' if d == 1 else 'low'} "
            f"({n2(level)}), so the gap is continuing."]
     return _sig(d, (fh + fl) / 2, why, f"Gap {'up' if d == 1 else 'down'} of {abs(gap):.1f}% that is holding",
-                target_r=p["target_r"])
+                target_r=p["target_r"],
+                lines=[("Yesterday's close", pc), ("Today's open", op), ("First 15-min " + ("high" if d == 1 else "low"), level)],
+                box={"i0": a, "i1": a + 2, "lo": fl, "hi": fh, "label": "First 15 minutes"})
 
 
 # ── 6. Opening range breakout (article) ──────────────────────
@@ -236,7 +243,9 @@ def scan_orb(S, i, p):
                f"A 5-minute candle closed at {n2(c)}, {_word(d)} the range {'high' if d == 1 else 'low'}.",
                f"Stop is the other end of the range ({n2(fl if d == 1 else fh)}); target is {p['target_x']}x the range "
                f"height beyond the breakout ({n2(target)})."]
-        return _sig(d, fl if d == 1 else fh, why, "Opening range breakout", target=target)
+        return _sig(d, fl if d == 1 else fh, why, "Opening range breakout", target=target,
+                    lines=[("Opening range high", fh), ("Opening range low", fl)],
+                    box={"i0": a, "i1": a + 2, "lo": fl, "hi": fh, "label": "Opening range (9:15 to 9:30)"})
     return None
 
 
@@ -469,6 +478,13 @@ STRATEGIES = [
      "stock": {"min_adx": 22, "touch_pct": 0.05, "stop_atr": 0.5, "target_r": 2.0},
      "index": {"min_adx": 22, "touch_pct": 0.03, "stop_atr": 0.5, "target_r": 2.0}},
 ]
+
+# Indicator lines drawn on each strategy's trade chart (names match Series attributes)
+OVERLAYS = {"momentum": ["vwap"], "reversal": ["vwap"], "vwap": ["vwap"], "gap": ["vwap"],
+            "bb_bounce": ["bb_up", "bb_mid", "bb_lo"], "bb_squeeze": ["bb_up", "bb_mid", "bb_lo"],
+            "ema_cross": ["ema9", "ema21"], "ema_pullback": ["ema20", "ema50"]}
+for _s in STRATEGIES:
+    _s["overlay"] = OVERLAYS.get(_s["id"], [])
 
 BY_ID = {s["id"]: s for s in STRATEGIES}
 

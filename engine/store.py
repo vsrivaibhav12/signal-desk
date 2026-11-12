@@ -62,10 +62,10 @@ class Store:
         except ValueError:
             return None
 
-    def publish(self, own=None):
+    def publish(self, own=None, own_prefix=()):
         """Push the data folder to the 'data' branch. One commit per day keeps it small.
 
-        own: the files this program is allowed to overwrite. Every other file is first
+        own: the files this program is allowed to overwrite (own_prefix: and any file starting with these). Every other file is first
         refreshed from what is already online, so one program can never wipe out another's
         work (for example a backtest overwriting the live trade log).
         """
@@ -78,7 +78,7 @@ class Store:
         if own is not None and git("fetch", "--quiet", "--depth", "1", "origin", "data").returncode == 0:
             names = git("ls-tree", "-r", "--name-only", "FETCH_HEAD").stdout.split("\n")
             for name in filter(None, names):
-                if name in own or "/" in name:
+                if name in own or name.startswith(tuple(own_prefix)) or "/" in name:
                     continue
                 blob = git("show", f"FETCH_HEAD:{name}", raw=True)
                 if blob.returncode == 0:

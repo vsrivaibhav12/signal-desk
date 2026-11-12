@@ -297,6 +297,79 @@ def test_fyers_year():
     check("all ten strategies run over a year without error", set(res) == {s["id"] for s in STRATEGIES})
 
 
+def test_charts():
+    print("Trade charts and market conditions")
+    cfg = sim.settings({"strategies": {"min_bars": 0}})
+    prev = flat_day(DAY - timedelta(days=1))
+    S = Series(prev + orb_day(DAY, "target"))
+    t = sim.simulate(S, INST, BY_ID["orb"], cfg, days=[DAY], chart_from=DAY)[0]
+    ch = t.pop("_chart")
+    check("a trade's chart has candles in four numbers each", ch["k"] and all(len(k) == 4 for k in ch["k"]), ch["k"][:1])
+    check("the trigger candle is the one whose close gave the entry", ch["k"][ch["e"]][3] == 101.5 and ch["ep"] == 101.5, (ch["e"], ch["ep"]))
+    check("the exit candle and price are marked", ch["x"] == ch["e"] + 1 and ch["xp"] == 102.5, (ch["x"], ch["xp"]))
+    check("opening range levels and the shaded box are drawn", [l[0] for l in ch["ln"]] == ["Opening range high", "Opening range low"]
+          and ch["bx"][:2] == [0, 2] and ch["bx"][2:4] == [100, 101], (ch["ln"], ch["bx"]))
+    check("candle times step in 5-minute slots", ch["d"][:4] == [0, 1, 2, 3] and ch["t0"] == ts(at(DAY, "09:15")))
+    check("no stray working fields are left on the trade", not [k for k in t if k.startswith("_")], [k for k in t if k.startswith("_")])
+    S2 = Series(prev + orb_day(DAY, "quiet"))
+    quiet = sim.simulate(S2, INST, BY_ID["orb"], sim.settings({"strategies": {"min_bars": 0, "exit_by": "23:00"}}),
+                         days=[DAY], live_day=DAY, chart_from=DAY)[0]
+    check("a trade still open has no exit marker", quiet["status"] == "OPEN" and quiet["_chart"]["x"] is None and quiet["_chart"]["xp"] is None)
+    check("without chart_from no chart is built", "_chart" not in sim.simulate(S, INST, BY_ID["orb"], cfg, days=[DAY])[0])
+
+    rng = random.Random(23)
+    Sx = Series(walk(weekdays(24), rng, vol=0.003))
+    cfg2 = sim.settings({})
+    seen_ov, bad = set(), []
+    for strat in STRATEGIES:
+        for tr in sim.simulate(Sx, INST, strat, cfg2, chart_from=Sx.days[0]):
+            c = tr["_chart"]
+            for name, vals in c["ov"].items():
+                seen_ov.add(name)
+                if len(vals) != len(c["k"]):
+                    bad.append((strat["id"], name))
+            if not (0 <= c["e"] < len(c["k"])):
+                bad.append((strat["id"], "e"))
+    check("every indicator line has one value per candle", not bad, bad[:3])
+    check("indicator lines were drawn for the Bollinger, EMA and VWAP strategies", {"vwap", "bb_up", "ema9", "ema20"} <= seen_ov, seen_ov)
+
+    # the desk writes chart files, keeps only recent ones, charts the options desk's trades, and reports market conditions
+    names = ["AAA", "BBB", "CCC", "DDD"]
+    data = {f"NSE:{n}-EQ": walk(weekdays(20), random.Random(i + 70), start=500 + 200 * i, vol=0.0035) for i, n in enumerate(names)}
+    folder = tempfile.mkdtemp()
+    try:
+        opt = {"id": f"{DAY.isoformat()}-AAA-1", "date": DAY.isoformat(), "name": "AAA", "book": "Stocks", "status": "OPEN",
+               "entry_min": ts(at(DAY, "10:32")), "range_high": 0, "range_low": 0, "range_mid": 0, "underlying_entry": 0}
+        S0 = Series(data["NSE:AAA-EQ"])
+        a0 = S0.starts[DAY]
+        opt.update(range_high=max(S0.h[a0:a0 + 3]), range_low=min(S0.l[a0:a0 + 3]), underlying_entry=S0.c[a0 + 15])
+        d = StrategyDesk({}, FakeBroker(data), lambda m: None, folder, names, [], options_trades=lambda: [opt])
+        d.charts["orb"]["ghost-old-trade"] = {"k": []}
+        replay(d)
+        d.save()
+        files = sorted(f for f in os.listdir(folder) if f.startswith("chartlive_"))
+        check("chart files are written per strategy, loaded only when needed", len(files) >= 3 and "strategies.json" in os.listdir(folder), files)
+        main = open(os.path.join(folder, "strategies.json"), encoding="utf-8").read()
+        check("the main live file carries no candle data", '"k":[[' not in main and len(main) < 5_000_000)
+        ids = {t["id"] for t in d.state["trades"]}
+        stored = {sid: set(v) for sid, v in d.charts.items() if v}
+        check("every stored chart belongs to a live trade", all(v <= ids | {opt["id"]} for v in stored.values()), {k: len(v) for k, v in stored.items()})
+        check("charts of unknown old trades are dropped", "ghost-old-trade" not in d.charts["orb"])
+        check("the options desk's trade has a chart with its opening range", opt["id"] in d.charts["options"]
+              and d.charts["options"][opt["id"]]["bx"][:2] == [0, 2] and d.charts["options"][opt["id"]]["xp"] is None)
+        sc = d.charts["options"][opt["id"]]
+        check("that chart's trigger candle matches the entry time", clock.from_ts(sc["t0"] + sc["d"][sc["e"]] * 300).strftime("%H:%M") == "10:25",
+              clock.from_ts(sc["t0"] + sc["d"][sc["e"]] * 300).strftime("%H:%M"))
+        rg = d.state.get("regime")
+        check("market conditions are reported", rg and rg["breadth"]["stocks"] == 4 and rg["breadth"]["trending"] is not None, rg)
+        check("each condition-gated strategy says how many shares pass its filter", set(rg["filters"]) == {"bb_bounce", "ema_pullback", "ema_cross"}
+              and all(0 <= f["share"] <= 100 for f in rg["filters"].values()))
+        check("trending and ranging shares add up to everything", rg["breadth"]["trending"] + rg["breadth"]["ranging"] in (99, 100, 101))
+    finally:
+        clock.set_fake(None)
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def main():
     test_indicators()
     test_no_lookahead()
@@ -304,6 +377,7 @@ def main():
     test_desk()
     test_alerts_and_heartbeat()
     test_fyers_year()
+    test_charts()
     print("\nALL CHECKS PASSED" if not check.failed else f"\n{check.failed} CHECK(S) FAILED")
     sys.exit(1 if check.failed else 0)
 

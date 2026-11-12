@@ -21,7 +21,7 @@ Start with **SETUP_GUIDE.md**. Settings live in **config.yaml**.
 | `engine/run.py` | Keeps it running through the session, handles login and bot commands |
 | `engine/fyers.py`, `engine/symbols.py` | Price data and contract lookup |
 | `engine/backtest/` | Replays past days through the same rulebook, with a luck check |
-| `engine/strategies/` | The ten strategies: indicators, rules (`defs.py`), trade simulator, live desk, backtest |
+| `engine/strategies/` | The ten strategies: indicators, rules and chart levels (`defs.py`), trade simulator, live desk (market conditions, trade charts), backtest |
 | `engine/news.py` | Free headline scan for Nifty 200 stocks |
 | `engine/telegram.py`, `engine/store.py` | Alerts, and the trade log |
 | `.github/workflows/engine.yml` | The timer that starts it |
@@ -32,7 +32,8 @@ Start with **SETUP_GUIDE.md**. Settings live in **config.yaml**.
     pip install -r requirements.txt
     python -m tests.test_engine      # checks the special rules
     python -m tests.test_backtest    # checks the backtest
-    python -m tests.test_strategies  # checks the ten strategies, fills, costs and the live desk
+    python -m tests.test_strategies  # checks the ten strategies, fills, costs, charts and the live desk
+    python -m tests.test_store_publish  # checks the engine and the backtest never overwrite each other's files
     python -m tests.simulate         # replays made-up days and prints every trade
 
 The sample trades shown on the dashboard before setup come from that replay. They are made up and say nothing about real results.
