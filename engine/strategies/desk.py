@@ -12,7 +12,7 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
-from .. import clock, optscan
+from .. import clock, journal, migrations, optscan
 from ..errors import BrokerError
 from ..schema import SCHEMA
 from ..clock import at, ts
@@ -65,7 +65,8 @@ class StrategyDesk:
         self.rotate = 0                                            # where the next pass starts, so no symbol is always last
         self.broker, self.notify = broker, notify
         self.alerts = alerts
-        self.say = alerts.send if alerts else (lambda text, kind="info": notify(text))
+        self.say = alerts.send if alerts else (lambda text, kind="info", buttons=None: notify(text))
+        self.journal = None                                         # set by the session: gives alerts their Took it / Skip buttons
         self.results, self.watch, self.master = results, watch, master
         self.leaders = leaders                                      # relative-strength ratings from NSE's daily files (engine/leaders.py)
         self.catalysts = catalysts or (lambda: [])                  # names of shares with a news catalyst today
@@ -96,14 +97,15 @@ class StrategyDesk:
                 st = json.load(f)
         except (OSError, ValueError):
             st = {}
-        if st and st.get("schema") != SCHEMA:                 # a file from an older layout: start clean, drop its charts too
-            st = {}
-            for f in os.listdir(self.folder):
-                if f.startswith("chartlive_"):
-                    try:
-                        os.remove(os.path.join(self.folder, f))
-                    except OSError:
-                        pass
+        if st and st.get("schema") != SCHEMA:                 # a file from an older layout: migrate it, or keep its trades and start clean
+            st, was_reset = migrations.upgrade_strategy_state(st, self.folder)
+            if was_reset:                                     # the old charts belong to the old layout
+                for f in os.listdir(self.folder):
+                    if f.startswith("chartlive_"):
+                        try:
+                            os.remove(os.path.join(self.folder, f))
+                        except OSError:
+                            pass
         st["schema"] = SCHEMA
         st.setdefault("trades", [])
         st.setdefault("archive", {})
@@ -498,9 +500,10 @@ class StrategyDesk:
         i = r["idea"]
         side = "CALL" if r["side"] == "CE" else "PUT"
         warn = ("\n⚠️ " + ", ".join(r["warnings"])) if r.get("warnings") else ""
+        buttons = self.journal.buttons([journal.summary_from_scan(r, m, clock.now().date().isoformat())]) if self.journal else None
         self.say(f"🎯 <b>{m['name']}: {side} idea</b> ({r['score']} of 5)\n{i['contract']} at ₹{px(i['premium'])}, lot {i['lot']}\n"
                  f"Stop ₹{px(i['stop'])}, target ₹{px(i['target'])}. Risk about {rs(i['risk_per_lot'])} a lot."
-                 f"{warn}\nPaper idea; check the dashboard before acting.", "options")
+                 f"{warn}\nPaper idea; check the dashboard before acting.", "options", buttons=buttons)
 
     def _apply(self, now, today, bar_end, fresh, done_syms, totals):
         stt = self.state["status"]
@@ -757,7 +760,10 @@ class StrategyDesk:
             if len(new) > MAX_LINES:
                 lines.append(f"… and {len(new) - MAX_LINES} more on the dashboard.")
             lines.append("Paper trades. Reasons and chart on the dashboard.")
-            self.say("\n".join(lines), "trades")
+            shown = sorted(new, key=lambda x: x["entry_ts"])[:MAX_LINES]
+            takes = [journal.summary_from_strategy(t) for t in shown if (t.get("dec") or {}).get("g") == "take"]
+            buttons = self.journal.buttons(takes) if self.journal and takes else None
+            self.say("\n".join(lines), "trades", buttons=buttons)
         if done:
             self.say("<b>Ended:</b> " + ", ".join(f"{t['name']} {rs(t['net'])}" for t in sorted(done, key=lambda x: x["exit_ts"])[:6])
                      + (f", and {len(done) - 6} more" if len(done) > 6 else ""), "exits")

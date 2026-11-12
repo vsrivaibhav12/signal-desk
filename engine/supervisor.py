@@ -21,7 +21,7 @@ import yaml
 
 from . import clock
 from .run import ROOT, Session, current_session, load_config, sessions
-from .store import Store
+from .store import ENGINE_PREFIXES, Store
 
 STOP = False
 STOP_EVENT = threading.Event()
@@ -29,7 +29,7 @@ DATA_DIR = Path(ROOT) / "_data"
 SUPERVISOR_PATH = DATA_DIR / "supervisor.json"
 ENGINE_SHARED_FILES = {
     "feed.json", "secure.bin", "strategies.json", "results.json", "volbase.json",
-    "holidays.json", "options_tape.jsonl", "intelligence.json", "supervisor.json",
+    "holidays.json", "options_tape.jsonl", "intelligence.json", "supervisor.json", "live.json", "journal.bin",
 }
 
 
@@ -86,7 +86,7 @@ class TradingSupervisor:
         if time.monotonic() - self.last_publish >= 115:
             # Keep the engine/news-owned files from being overwritten while
             # refreshing the remote branch tip in a shared always-on checkout.
-            self.store.publish(own={"supervisor.json"}, own_prefix=("chartlive_",), preserve_local=ENGINE_SHARED_FILES)
+            self.store.publish(own={"supervisor.json"}, own_prefix=ENGINE_PREFIXES, preserve_local=ENGINE_SHARED_FILES)
             self.last_publish = time.monotonic()
 
     def once(self):

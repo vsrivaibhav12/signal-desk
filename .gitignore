@@ -5,3 +5,6 @@ tests/.master_cache/
 dist/
 .claude/
 /deploy/signal-desk.env
+node_modules/
+web/src/generated/
+.superpowers/

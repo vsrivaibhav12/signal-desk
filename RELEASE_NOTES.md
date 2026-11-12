@@ -1,3 +1,34 @@
+# Signal Desk 5.0.0: the decision cockpit
+
+Released 12 November 2026. Upgrade steps: [docs/upgrades/UPGRADE_5.0.0.md](docs/upgrades/UPGRADE_5.0.0.md). How it fits together: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**Structure**
+- **A published contract.** `contract/schemas/` defines `live.json`, `manifest.json`, `swing.json` and the ledger. The dashboard's TypeScript types are generated from them, and the tests validate real engine output (a whole simulated trading day, the sample data, the ledger) against them.
+- **`manifest.json`.** Every publish writes an index of the data branch with each file's size, SHA-256 and when its content last changed. The dashboard reads it first and fetches only what changed. An idle publish adds no commit.
+- **A permanent ledger** (`ledger-YYYY-MM.jsonl`). Every settled paper trade, written once and never edited. Schema upgrades now migrate the data, or archive settled trades to the ledger before any reset; previously a schema change wiped the log.
+- **One shared portfolio module** (`engine/portfolio.py`). The position, open-risk and daily-loss arithmetic that `core.py` and `strategies/risk.py` each wrote is now written once (checked against the originals on 5,000 random cases). **One cost table** (`engine/costs.py`).
+- **Isolated desks** (`engine/desks.py`). An unexpected error in one desk no longer skips the other for that minute. A broker authentication error still stops the cycle, as before.
+- **Packaging and CI.** `pyproject.toml`, `requirements-dev.txt`, and a CI workflow that runs the Python suite (3.10 and 3.12) and the dashboard's type check, tests and build on every push.
+
+**Logic**
+- **Index-correlation cap.** Nifty, Bank Nifty, Fin Nifty, Midcap Nifty and Sensex move together, so no new index position is accepted once two same-direction index positions are open across both engines and options and futures (`portfolio.max_same_direction_index_positions`, set to `0` to turn it off). This is a behaviour change.
+- **Ranked ideas with their evidence.** `live.json` ranks ideas by a documented 0 to 100 quality score (not a probability), lists the checks behind each grade as pass, fail, unknown or not applicable, and attaches what the research found for that kind of idea.
+- **Swing desk** (`engine/swing.py`, run by the Leaders workflow each weekday evening). Applies the one swing rule taken to the sealed holdout, unchanged, plus a Nifty-above-its-200-day filter, and follows a paper book exactly as `engine.daily.simulate` does (tested night by night against it). Ideas are SETUP, never TAKE. The holdout result (+0.08R over 127 trades, range -0.26 to +0.44) is shown beside every one. Gap-ups on results days are listed for observation only; they are not paper-traded.
+- **Journal.** Telegram alerts carry Took it and Skip buttons; after Took it, reply with your fill. Entries (with slippage against the paper price) are stored AES-256-GCM encrypted on the data branch and decrypted in your browser. Off unless `JOURNAL_PASSPHRASE` is set.
+
+**Dashboard** (`web/`, Preact + TypeScript, 68 KB; the previous dashboard is kept at `legacy/`)
+- Six screens: Today (one ranked list across all desks, risk budget, market read, Impact Radar), Positions, Market, Swing (with a position-size calculator), Journal, System.
+- **Every number carries its age.** When the engine stops publishing or prices go old, the page itself shows TAKE as EXPIRED or WATCH and says why. The page can lower a grade, never raise one. A closed session is shown as closed, not as stale.
+- Sample data at `?demo`, and `?demo&stale` shows the stopped-engine state. Light and dark. Phone layout with a bottom tab bar. The data source accepts only a `raw.githubusercontent.com` data branch.
+
+**Verification.** 210 offline Python tests and 65 dashboard tests pass; Python code parses as 3.10; the dashboard type-checks and builds from a clean `npm ci`; the schemas are valid and every workflow file parses. The encrypted journal written by Python was decrypted by Node's WebCrypto and by the real browser. The dashboard was driven in a browser on the sample data at desktop and 375 px width: no page-level horizontal overflow, the idea sheet opens and closes, stale mode removes every TAKE, the journal unlocks with the right passphrase and refuses a wrong one.
+
+**Not verified here.** Live Kotak or Fyers sessions; a real Telegram button tap; a real GitHub Actions run, the Pages deployment and the Leaders workflow's Yahoo fetch of Nifty; a long unattended session. Screenshots could not be taken (the browser pane was hidden), so the visual design was checked through the page structure and layout measurements, not by eye.
+
+**Boundaries that remain.** No strategy has shown a reliable edge after costs; a TAKE means an idea passed this tool's own checks. The browser cannot reach a broker, so the cockpit is as fresh as the engine's last publish. The data branch is public when the repository is; the journal is encrypted, but the ledger and the trade record are not.
+
+---
+
 # Signal Desk 4.1.1: Kotak and Fyers workflow hotfix
 
 Released 12 November 2026.

@@ -3,7 +3,8 @@ name: Leaders
 # Each weekday evening, after NSE publishes its daily price file, rates every liquid share's relative strength (the percentile of its
 # weighted 3/6/9/12-month return), lists the leaders (strength 80+, above the 200-day average) and measures market health (the share of
 # shares above their 50-day and 200-day averages). One download a day; no broker requests. The Trade engine reads the result and flags
-# leaders on the watchlist, in alerts and in the morning brief. The first run downloads about 300 sessions of files (a few minutes).
+# leaders on the watchlist, in alerts and in the morning brief. A second step then looks for swing setups (engine/swing.py) and follows
+# the swing paper book, using Nifty's daily history from Yahoo Finance for the market filter. The first run downloads about 300 sessions of files (a few minutes).
 on:
   schedule:
     - cron: "45 13 * * 1-5"      # 7:15 pm India time
@@ -57,3 +58,8 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: python -m engine.leaders --bhav _bhav --out _data/leaders.json
+
+      - name: Find tonight's swing setups and follow the paper book
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -m engine.swing --bhav _bhav --out _data

@@ -1,4 +1,6 @@
-"""Sends alerts to your phone and reads the few words you can send back."""
+"""Sends alerts to your phone and reads the few words you can send back, and the taps on the buttons under an alert."""
+import time
+
 import requests
 
 
@@ -24,20 +26,30 @@ class Telegram:
             self.username = res.get("username")
         return self.username
 
-    def send(self, text):
+    def send(self, text, buttons=None):
+        """Sends a message. `buttons` is an optional inline keyboard: rows of {"text": ..., "callback_data": ...}."""
         print("[alert]", text.replace("\n", " | ")[:300])
         if self.chat_id:
-            self._call("sendMessage", chat_id=self.chat_id, text=text, parse_mode="HTML",
-                       disable_web_page_preview=True)
+            params = {"chat_id": self.chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
+            if buttons:
+                params["reply_markup"] = {"inline_keyboard": buttons}
+            self._call("sendMessage", **params)
 
     def poll(self, wait=0):
-        """Returns new messages as a list of (chat_id, text, sent_time)."""
-        params = {"timeout": int(wait), "allowed_updates": ["message"]}
+        """Returns new messages as a list of (chat_id, text, sent_time). A tap on a button arrives as the text 'cb:<callback_data>'."""
+        params = {"timeout": int(wait), "allowed_updates": ["message", "callback_query"]}
         if self.offset is not None:
             params["offset"] = self.offset
         out = []
         for u in self._call("getUpdates", **params) or []:
             self.offset = u["update_id"] + 1
+            tap = u.get("callback_query")
+            if tap:
+                chat = ((tap.get("message") or {}).get("chat") or {}).get("id")
+                self._call("answerCallbackQuery", callback_query_id=tap.get("id"))      # stops the button's spinner
+                if chat is not None and tap.get("data"):
+                    out.append((chat, "cb:" + str(tap["data"]), int(time.time())))
+                continue
             m = u.get("message") or {}
             if m.get("text"):
                 out.append((m["chat"]["id"], m["text"].strip(), m.get("date", 0)))

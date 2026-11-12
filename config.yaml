@@ -11,6 +11,10 @@ portfolio:
   max_open_positions: 8
   max_open_risk: 17500
   max_daily_loss: 3500
+  # Nifty, Bank Nifty, Fin Nifty, Midcap Nifty and Sensex move together, so same-direction positions in them are largely one bet.
+  # No new index position is accepted once this many same-direction index positions are open (options and futures together,
+  # both engines). Shares and commodities are not limited by this. 0 turns it off.
+  max_same_direction_index_positions: 2
 
 general:
   lots: 1                    # lots per options trade. With 1 lot the whole trade exits at the target.

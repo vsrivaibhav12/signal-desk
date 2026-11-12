@@ -7,6 +7,8 @@ paper portfolio. Exits are processed before entries at the same timestamp.
 from collections import Counter
 from datetime import datetime
 
+from .. import portfolio
+
 DEFAULTS = {
     "enabled": True,
     "require_take_grade": True,
@@ -21,6 +23,7 @@ SHARED_DEFAULTS = {
     "max_open_positions": 8,
     "max_open_risk": 17500.0,
     "max_daily_loss": 3500.0,
+    "max_same_direction_index_positions": None,   # off unless set: index underlyings move together, so same-way positions are one bet
 }
 
 
@@ -103,6 +106,7 @@ def annotate(trades, cfg=None, external_trades=None, shared_cfg=None):
             normalized = {
                 "risk": float(tr.get("risk", tr.get("risk_amount", 0.0)) or 0.0),
                 "symbol": tr.get("symbol") or tr.get("unit") or tr.get("name"),
+                "name": tr.get("name"), "dir": tr.get("dir"),
                 "source": "external", "id": ext_id,
             }
             events.append((entry_ts, 1, 0, ext_id, "external_entry", (tr, normalized)))
@@ -152,25 +156,36 @@ def annotate(trades, cfg=None, external_trades=None, shared_cfg=None):
             if own_enabled:
                 if lim.get("require_take_grade", True) and grade != "take":
                     reasons.append("signal_not_take_grade")
-                if realized_own <= -float(lim["max_daily_loss"]):
-                    reasons.append("daily_loss_limit")
-                if len(active_own) >= int(lim["max_open_positions"]):
-                    reasons.append("max_open_positions")
+                own_risk = sum(float(x.get("risk", 0.0) or 0.0) for x in active_own.values())
+                breaches = portfolio.limit_breaches(
+                    len(active_own), own_risk, realized_own, candidate_risk,
+                    max_positions=int(lim["max_open_positions"]), max_risk=float(lim["max_total_open_risk"]),
+                    max_daily_loss=float(lim["max_daily_loss"]), tolerance=1e-9)
                 same_symbol = sum(1 for x in active_own.values() if x.get("symbol") == tr.get("symbol"))
+                if portfolio.DAILY_LOSS in breaches:
+                    reasons.append("daily_loss_limit")
+                if portfolio.POSITIONS in breaches:
+                    reasons.append("max_open_positions")
                 if same_symbol >= int(lim["max_open_positions_per_symbol"]):
                     reasons.append("symbol_already_exposed")
-                own_risk = sum(float(x.get("risk", 0.0) or 0.0) for x in active_own.values())
-                if own_risk + candidate_risk > float(lim["max_total_open_risk"]) + 1e-9:
+                if portfolio.OPEN_RISK in breaches:
                     reasons.append("max_total_open_risk")
 
             if shared_enabled:
-                if realized_all <= -float(shared["max_daily_loss"]):
-                    reasons.append("shared_daily_loss_limit")
-                if len(active_all) >= int(shared["max_open_positions"]):
-                    reasons.append("shared_max_open_positions")
                 shared_risk = sum(float(x.get("risk", 0.0) or 0.0) for x in active_all.values())
-                if shared_risk + candidate_risk > float(shared["max_open_risk"]) + 1e-9:
+                breaches = portfolio.limit_breaches(
+                    len(active_all), shared_risk, realized_all, candidate_risk,
+                    max_positions=int(shared["max_open_positions"]), max_risk=float(shared["max_open_risk"]),
+                    max_daily_loss=float(shared["max_daily_loss"]), tolerance=1e-9)
+                if portfolio.DAILY_LOSS in breaches:
+                    reasons.append("shared_daily_loss_limit")
+                if portfolio.POSITIONS in breaches:
+                    reasons.append("shared_max_open_positions")
+                if portfolio.OPEN_RISK in breaches:
                     reasons.append("shared_max_open_risk")
+                if portfolio.correlated_exposure_breached(tr.get("name"), tr.get("dir"), active_all.values(),
+                                                          shared.get("max_same_direction_index_positions")):
+                    reasons.append("correlated_index_exposure")
 
             if candidate_risk <= 0:
                 reasons.append("invalid_risk")
@@ -178,7 +193,8 @@ def annotate(trades, cfg=None, external_trades=None, shared_cfg=None):
             tr["risk_reasons"] = reasons
             if not reasons:
                 active_own[tid] = tr
-                active_all["candidate:" + tid] = {"risk": candidate_risk, "symbol": tr.get("symbol")}
+                active_all["candidate:" + tid] = {"risk": candidate_risk, "symbol": tr.get("symbol"),
+                                                  "name": tr.get("name"), "dir": tr.get("dir")}
 
     return trades
 

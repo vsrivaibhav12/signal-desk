@@ -5,7 +5,7 @@ so a live trade follows exactly the rules that were tested. It never places an o
 """
 import copy
 
-from .. import clock
+from .. import clock, costs
 from . import decide, risk
 from .defs import EXITS, STRATEGIES, window_minutes
 from .indicators import hhmm_to_min, minute_of_day
@@ -49,9 +49,7 @@ def params(cfg, strat, kind):
 
 
 def trade_cost(kind, qty, entry, exit_, cfg):
-    c = cfg["costs"]
-    k = "stock" if kind == "stock" else "index"
-    return c[f"{k}_per_trade"] + qty * (entry + exit_) * (c[f"{k}_pct"] / 2 + c[f"{k}_slippage_pct"]) / 100
+    return costs.round_trip("stock" if kind == "stock" else "index", qty, entry, exit_, cfg["costs"])
 
 
 def _iso(t):

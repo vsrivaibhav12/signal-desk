@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "manifest.schema.json",
+  "title": "Manifest",
+  "description": "Index of every file on the data branch: size, content hash and when the content last changed. The dashboard reads this first.",
+  "type": "object",
+  "required": ["contract", "generated_at", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "contract": { "type": "integer", "const": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "bytes", "sha256", "updated_at", "schema"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "schema": { "type": ["string", "null"], "description": "Contract schema this file follows, as name@version, or null" }
+        }
+      }
+    }
+  }
+}

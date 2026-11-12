@@ -17,20 +17,23 @@ from datetime import datetime, timedelta
 import requests
 import yaml
 
-from . import clock
+from . import clock, costs, migrations
+from . import ledger as ledger_mod
+from . import live as live_mod
 from .clock import at, clock_text
 from .core import Engine
+from .desks import DeskRunner
 from . import brokers
 from .alerts import Alerts
 from .leaders import Leaders
 from .intelligence import equity_catalysts
 from .results import Results
 from .tradingcal import TradingCalendar
-from .schema import SCHEMA
 from .watch import Watch
 from .errors import AuthError, BrokerError
+from .journal import Journal, JournalUI
 from .fyers import Fyers
-from .store import Store
+from .store import ENGINE_PREFIXES, Store
 from .strategies.desk import StrategyDesk
 from .telegram import Telegram
 
@@ -38,7 +41,8 @@ RUN_BUDGET = 5 * 3600 + 5 * 60   # GitHub stops a run at 6 hours, so hand over b
 BEAT_EVERY = 110                 # seconds between heartbeats
 STALE_AFTER = 300                # a heartbeat older than this means the other run is dead
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ENGINE_FILES = {"feed.json", "secure.bin", "strategies.json", "results.json", "volbase.json", "holidays.json", "options_tape.jsonl"}
+ENGINE_FILES = {"feed.json", "secure.bin", "strategies.json", "results.json", "volbase.json", "holidays.json", "options_tape.jsonl",
+                "live.json", "journal.bin"}
 RUN_ID = os.environ.get("GITHUB_RUN_ID", "local")
 BY_TIMER = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
 
@@ -148,9 +152,14 @@ class Session:
         self.started = time.time()
         self.engine = None
         self.alerts = Alerts(self.tg.send, self.cfg)
-        self.feed = self.store.load_feed()
-        if self.feed.get("schema") != SCHEMA:             # a log from an older version of the tool: start with a clean slate
-            self.feed = {"status": {}, "trades": [], "schema": SCHEMA}
+        self.cost_table = costs.from_config(self.cfg)
+        self.ledger = ledger_mod.Ledger(data_dir)
+        # The journal is on only when JOURNAL_PASSPHRASE is set; its button targets live in the encrypted secure file.
+        self.journal = Journal(data_dir, env.get("JOURNAL_PASSPHRASE", "").strip())
+        self.journal_ui = JournalUI(self.journal, registry=self.secure.setdefault("journal_buttons", {}))
+        # A log from an older version is migrated if a migration exists. Otherwise its settled trades are kept in the ledger and only
+        # then is the feed reset: an upgrade never throws the trade record away.
+        self.feed = migrations.upgrade_feed(self.store.load_feed(), data_dir, self.cost_table)
         self.last_beat = 0
 
     # ── heartbeat: proves this run is alive, and lets only one run work ──
@@ -163,11 +172,26 @@ class Session:
         st = self.feed["status"]
         st.update({"run_id": RUN_ID, "running": running, "heartbeat": clock.now().isoformat(timespec="seconds")})
         self.store.save_feed(self.feed)
+        self.write_live()
         preserve = ("intelligence.json", "supervisor.json") if os.environ.get("SIGNAL_DESK_SHARED_DATA") == "1" else ()
-        self.store.publish(own=ENGINE_FILES, own_prefix=("chartlive_",), preserve_local=preserve)
+        self.store.publish(own=ENGINE_FILES, own_prefix=ENGINE_PREFIXES, preserve_local=preserve)
         if self.engine:
             self.engine.dirty = False
         self.last_beat = time.time()
+
+    # ── live.json and the ledger ─────────────────────────────
+    def write_live(self):
+        """Records newly settled trades in the ledger and rewrites live.json. Never allowed to interrupt the engine."""
+        try:
+            desk_state = getattr(getattr(self, "desk", None), "state", None) or {}
+            ledger_mod.sync(self.ledger, self.feed.get("trades") or [], desk_state.get("trades") or [], self.cost_table)
+            self.store.write_json("live.json", live_mod.build(clock.now(), self.cfg, self.feed, desk_state,
+                                                              extra={"journal": {"enabled": self.journal.enabled}}))
+            if self.journal_ui.changed:
+                self.store.save_secure(self.secure)
+                self.journal_ui.changed = False
+        except Exception as exc:
+            print("live.json not updated:", type(exc).__name__, str(exc)[:160])
 
     # ── who owns the bot ─────────────────────────────────────
     def claim_owner(self, until):
@@ -525,6 +549,10 @@ class Session:
                 continue
             if self._accept_secondary_fyers_code(text):
                 continue
+            reply = self.journal_ui.handle(text)                  # a tap on Took it / Skip, or the reply giving your fill
+            if reply is not None:
+                self.tg.send(reply)
+                continue
             word = text.lower().strip("/ ")
             now = clock.now()
             if word == "skip":
@@ -613,8 +641,25 @@ class Session:
             lead = sorted({w["symbol"] for w in self.results.watch(now.date()) if self.leaders.is_leader(w["symbol"])})
             if lead:
                 lines.append(f"Reporting and also relative-strength leaders: {', '.join(lead)}")
+        swing = self.swing_line(now)
+        if swing:
+            lines.append(swing)
         lines.append(f"Dashboard: {self.url}")
         self.alerts.send("\n".join(lines), "brief")
+
+    def swing_line(self, now, folder=None):
+        """One line about last night's swing setups, if there are any and the file is recent. Never raises."""
+        try:
+            with open(os.path.join(folder or os.path.join(ROOT, "_data"), "swing.json"), encoding="utf-8") as f:
+                doc = json.load(f)
+            asof = datetime.fromisoformat(doc["asof"]).date()
+            names = [t["symbol"] for t in doc.get("triggered") or []]
+            if not names or (now.date() - asof).days > 4:
+                return None
+            return (f"Swing setups at the {asof:%d %b} close (one unproven rule; see the Swing screen): "
+                    + ", ".join(names[:8]) + (f" and {len(names) - 8} more" if len(names) > 8 else ""))
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
 
     def engine_desk_text(self):
         d = getattr(self, "desk", None)
@@ -677,6 +722,9 @@ class Session:
                                  catalysts=self.catalyst_details, leaders=self.leaders,
                                  heartbeat=self.beat, options_trades=lambda: self.feed["trades"],
                                  flush=lambda: (self.desk.save(), setattr(self.desk, "dirty", False), self.beat(force=True)))
+        self.engine.journal = self.journal_ui
+        self.desk.journal = self.journal_ui
+        self.runner = DeskRunner([("rulebook", self.engine), ("strategies", self.desk)])
         if not sess:
             nxt = next((s for s in sessions(self.cfg, now.date()) if s[1] > now), None)
             when = f"today at {clock_text(nxt[1])}" if nxt and now.weekday() < 5 else "on the next trading day"
@@ -712,9 +760,12 @@ class Session:
             try:
                 self.refresh_results(now)
                 self.brief(now)
-                self.engine.tick(now)
-                self.desk.tick(now)
+                failures = self.runner.tick(now)           # each desk is isolated: one failing never skips the other
                 auth_fails = 0
+                for _name, e in failures:
+                    if str(e) != last_error:
+                        last_error = str(e)
+                        self.alerts.send(f"⚠️ I hit a problem and will keep going.\nDetails: {str(e)[:200]}", "faults")
             except AuthError as e:
                 auth_fails += 1
                 print(f"{self.label} problem:", e)

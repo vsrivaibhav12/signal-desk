@@ -665,13 +665,13 @@ class IntelligenceService:
         # GitHub token is injected through process-local Git config, never saved
         # into the repository's remote URL.
         try:
-            from .store import Store
+            from .store import ENGINE_PREFIXES, Store
             store = Store(str(self.data_dir), os.environ.get("FYERS_SECRET_KEY") or os.environ.get("KOTAK_CONSUMER_KEY") or "")
             preserve = ()
             if os.environ.get("SIGNAL_DESK_SHARED_DATA") == "1":
                 preserve = {"feed.json", "secure.bin", "strategies.json", "results.json", "volbase.json",
-                            "holidays.json", "options_tape.jsonl", "supervisor.json"}
-            prefixes = ("chartlive_",) if preserve else ()
+                            "holidays.json", "options_tape.jsonl", "supervisor.json", "live.json", "journal.bin"}
+            prefixes = ENGINE_PREFIXES if preserve else ()
             store.publish(own={"intelligence.json"}, own_prefix=prefixes, preserve_local=preserve)
         except Exception as exc:
             print("Intelligence publish skipped:", type(exc).__name__)

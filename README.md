@@ -1,6 +1,6 @@
-# Signal Desk 4.1.1 — multi-broker paper-trading and market-intelligence platform
+# Signal Desk 5.0.0 — a paper-trading cockpit and market-intelligence platform
 
-**4.1.1 is a live-workflow hotfix for Kotak index mapping/rate limits and clearer Fyers MCX permissions diagnostics. It retains the 4.1.0 persistent services, dual-broker routing and event-driven Impact Radar.** Kotak Neo remains the primary NSE/BSE provider; Fyers can be configured as the dedicated MCX feed. The News Impact Radar runs independently of exchange sessions, maps macro and company headlines to conditional instrument pathways, and can promote relevant Nifty 200 equities into the ordinary strategy watchlist. See [4.1.1 release notes](RELEASE_NOTES.md), [4.1.1 upgrade guide](UPGRADE_4.1.1.md) and [news-intelligence guide](docs/NEWS_INTELLIGENCE.md).
+**5.0.0 turns the tool into a decision cockpit.** One ranked list of what is worth considering across index options, intraday stocks, swing stocks and MCX commodities, each idea with the checks behind its grade and what the research says about that kind of idea; every number carries its age, and the page itself removes TAKE badges when the data goes stale. A permanent ledger of settled paper trades that upgrades never wipe, a nightly swing desk, Telegram *Took it / Skip* buttons with an encrypted journal, one shared portfolio module with an index-correlation cap, and a new typed dashboard built on a published data contract. It retains the 4.1 persistent services, dual-broker routing and Impact Radar. See the [release notes](RELEASE_NOTES.md), [the upgrade guide](docs/upgrades/UPGRADE_5.0.0.md) and [how it is put together](docs/ARCHITECTURE.md).
 
 Signal Desk combines two persistent services, session-aware market engines and its research workflows:
 
@@ -17,7 +17,7 @@ The default broker routing is Kotak Neo for NSE/BSE and Fyers as an optional MCX
 
 - Read **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for the existing GitHub Actions setup, Kotak/Fyers configuration and dashboard.
 - Read **[docs/NEWS_INTELLIGENCE.md](docs/NEWS_INTELLIGENCE.md)** and **[deploy/README.md](deploy/README.md)** to deploy both persistent workers on a Linux VPS or always-on office PC.
-- Review **[RELEASE_NOTES.md](RELEASE_NOTES.md)** and **[UPGRADE_4.1.1.md](UPGRADE_4.1.1.md)** before replacing source files.
+- Review **[RELEASE_NOTES.md](RELEASE_NOTES.md)** and **[docs/upgrades/UPGRADE_5.0.0.md](docs/upgrades/UPGRADE_5.0.0.md)** before replacing source files. Read **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** to see how the parts fit.
 - Runtime settings are in **`config.yaml`**.
 
 ## Main capabilities
@@ -32,7 +32,11 @@ The default broker routing is Kotak Neo for NSE/BSE and Fyers as an optional MCX
 | Research | Three intraday strategies, daily relative strength/breadth, historical replay, results watchlist, archetype/playbook research and trade lifecycle tracking |
 | Data integrity | Exchange/receipt timestamps are separated; stale, malformed and materially future-dated prices/candles are rejected; mandatory unknown data fails closed |
 | Options research capture | Prospective bid/ask, depth, OI and quote-time observations saved for future option-premium research |
-| Dashboard | Decision cockpit, Impact Radar, broker status, market context, data health, filtered candidates/options, open risk, trades and research logs |
+| Cockpit (`web/`) | Today (ranked ideas across every desk), Positions, Market, Swing, Journal and System screens; sample data at `?demo`, stale-data behaviour at `?demo&stale`; light/dark; works on a phone |
+| Swing desk | Each weekday evening: relative-strength leaders breaking out of tight bases while Nifty is above its 200-day average, followed in a paper book. Setups only, never TAKE: the rule is unproven |
+| Journal | *Took it / Skip* buttons under Telegram alerts, your real fill beside the paper price (real slippage), stored encrypted on the public data branch and decrypted in your browser |
+| Permanent record | Every settled paper trade in `ledger-YYYY-MM.jsonl`, with estimated costs; schema upgrades migrate or archive, never wipe |
+| Old dashboard | Kept at `legacy/` on the new site until retired |
 | Automation | 24/7 systemd/Task Scheduler trading supervisor and news worker; GitHub Actions for recovery/research and best-effort news fallback |
 
 ## Always-on means the services stay alive; market scans remain session-aware
@@ -59,6 +63,7 @@ python -m venv .venv
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 python -m compileall -q engine tests
+python -m pytest                  # the whole offline suite (add -x to stop at the first failure)
 python -m tests.test_archetypes
 python -m tests.test_leaders
 python -m tests.test_playbook
@@ -77,13 +82,17 @@ python -m tests.test_engine
 
 `tests.test_engine` is the slower multi-market rulebook replay suite. All listed test suites run offline using the small contract-master fixtures under `tests/fixtures/contract_masters/`. Live Fyers market-data workflows require internet access and your own Fyers credentials.
 
-To preview the static dashboard locally:
+The dashboard (needs Node 20):
 
 ```bash
-python -m http.server 8000
+cd web
+npm ci
+npm run dev          # http://localhost:5173/?demo   sample data;  ?demo&stale shows the engine-has-stopped state
+npm test             # dashboard logic and components
+npm run build        # type-check and build to web/dist
 ```
 
-Open `http://localhost:8000`. A local preview uses clearly-labelled sample data; it does not authenticate to a broker or run the market scanner.
+The sample data is made by the engine's own code: `python -m tests.make_web_fixtures`. A local preview never talks to a broker. The previous single-file dashboard can still be previewed with `python -m http.server 8000` and opening `http://localhost:8000`.
 
 ## Important architecture notes
 
@@ -97,7 +106,13 @@ Open `http://localhost:8000`. A local preview uses clearly-labelled sample data;
 
 | Path | Purpose |
 |---|---|
-| `index.html` / `index.template.html` | Dashboard and template |
+| `web/` | The cockpit (Preact + TypeScript); its types are generated from `contract/` |
+| `contract/schemas/` | JSON Schemas for `live.json`, `manifest.json`, `swing.json` and the ledger: the only thing the engine and the dashboard share |
+| `index.html` / `index.template.html` | The previous dashboard (served at `legacy/`) and its template |
+| `engine/swing.py` | The swing desk: one multi-day rule evaluated nightly, with a paper book |
+| `engine/portfolio.py`, `engine/costs.py`, `engine/domain.py` | The shared portfolio rules, the one cost model, and the shared types |
+| `engine/live.py`, `engine/ledger.py`, `engine/manifest.py`, `engine/migrations.py` | What the cockpit reads, the permanent trade record, the file index, schema upgrades |
+| `engine/journal.py`, `engine/evidence.py`, `engine/desks.py` | The encrypted journal and its buttons, the research record shown beside each idea, isolated desk cycles |
 | `config.yaml` | Market, strategy, cost and risk settings |
 | `engine/core.py` | Rulebook engine and trade lifecycle |
 | `engine/run.py` | GitHub session runner, broker check and Telegram commands |
@@ -120,4 +135,4 @@ Open `http://localhost:8000`. A local preview uses clearly-labelled sample data;
 
 ## Updating
 
-Back up your `config.yaml` and any local `_data` folder before replacing files. Upload the release contents to your repository, including `.github`. Keep your existing GitHub Actions secrets and the `data` branch. Review the new config defaults before enabling the scheduled workflow.
+Back up your `config.yaml` and any local `_data` folder before replacing files (see [the 5.0.0 upgrade guide](docs/upgrades/UPGRADE_5.0.0.md)). Upload the release contents to your repository, including `.github`. Keep your existing GitHub Actions secrets and the `data` branch. Review the new config defaults before enabling the scheduled workflow.

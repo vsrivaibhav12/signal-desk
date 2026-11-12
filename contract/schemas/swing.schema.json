@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "swing.schema.json",
+  "title": "Swing",
+  "description": "Tonight's swing setups from NSE's daily files, the open paper book, and gap-ups under observation. Setups are hypotheses, never takes.",
+  "type": "object",
+  "required": [
+    "schema",
+    "generated_at",
+    "asof",
+    "rules",
+    "regime",
+    "breadth",
+    "triggered",
+    "setups",
+    "positions",
+    "recently_closed",
+    "gap_watch",
+    "ideas",
+    "evidence",
+    "note"
+  ],
+  "properties": {
+    "schema": {
+      "type": "integer",
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "asof": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "rules": {
+      "type": "object"
+    },
+    "regime": {
+      "type": "object",
+      "required": [
+        "nifty_above_200",
+        "nifty_asof"
+      ],
+      "properties": {
+        "nifty_above_200": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "nifty_asof": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "breadth": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "triggered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "close",
+          "pivot",
+          "volx",
+          "rs",
+          "stop_hint",
+          "risk_pct"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "close": {
+            "type": "number"
+          },
+          "pivot": {
+            "type": "number"
+          },
+          "volx": {
+            "type": "number"
+          },
+          "rs": {
+            "type": "number"
+          },
+          "stop_hint": {
+            "type": "number"
+          },
+          "risk_pct": {
+            "type": "number"
+          },
+          "sma20": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "setups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "close",
+          "pivot",
+          "pct_to_pivot",
+          "base_depth_pct",
+          "rs"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "close": {
+            "type": "number"
+          },
+          "pivot": {
+            "type": "number"
+          },
+          "pct_to_pivot": {
+            "type": "number"
+          },
+          "base_depth_pct": {
+            "type": "number"
+          },
+          "rs": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "symbol",
+          "status",
+          "signal_date",
+          "entry_date",
+          "entry",
+          "stop",
+          "breakeven",
+          "last_close",
+          "open_r"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "OPEN",
+              "EXIT_PENDING"
+            ]
+          },
+          "signal_date": {
+            "type": "string"
+          },
+          "entry_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entry": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "stop": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "breakeven": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "last_close": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "open_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "recently_closed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "symbol",
+          "entry_date",
+          "entry",
+          "exit_date",
+          "exit",
+          "reason",
+          "r"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "entry_date": {
+            "type": "string"
+          },
+          "entry": {
+            "type": "number"
+          },
+          "exit_date": {
+            "type": "string"
+          },
+          "exit": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "gap_watch": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "gap_pct",
+          "volx",
+          "close",
+          "results",
+          "stop_hint",
+          "hypothesis"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "gap_pct": {
+            "type": "number"
+          },
+          "volx": {
+            "type": "number"
+          },
+          "close": {
+            "type": "number"
+          },
+          "results": {
+            "type": "boolean"
+          },
+          "stop_hint": {
+            "type": "number"
+          },
+          "hypothesis": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      }
+    },
+    "ideas": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "evidence": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "headline",
+            "avg_r",
+            "trades",
+            "asof",
+            "source"
+          ],
+          "properties": {
+            "headline": {
+              "type": "string"
+            },
+            "avg_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "trades": {
+              "type": "integer"
+            },
+            "asof": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "note": {
+      "type": "string"
+    }
+  }
+}

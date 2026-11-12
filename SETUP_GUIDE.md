@@ -61,6 +61,12 @@ The bundled dashboard preview uses clearly labelled synthetic sample records, in
 
 ---
 
+### Optional: the new cockpit (5.0.0)
+
+Version 5.0.0 ships a new dashboard in `web/`. To use it instead of the old one, in **Settings, Pages** set **Source** to **GitHub Actions**, then in **Settings, Secrets and variables, Actions, Variables** add `PAGES_FROM_ACTIONS` = `true`, and run the **Dashboard** workflow. The old dashboard stays available at `…/legacy/`. Full steps and how to go back: [docs/upgrades/UPGRADE_5.0.0.md](docs/upgrades/UPGRADE_5.0.0.md). Until you do this, the steps above keep working unchanged.
+
+---
+
 ## Part 4: Let the tool read prices from Kotak Neo (3 minutes)
 
 The tool reads prices from **Kotak Neo**. It only reads. It never places an order, so it needs no static IP, no TOTP, no MPIN and no daily login. All it needs is one **Consumer Key**.
@@ -101,6 +107,14 @@ That is all. Do not type your Kotak password, MPIN or TOTP anywhere in this tool
 ## Part 5b: Turn on the leader list (2 minutes, optional)
 
 In the Actions tab choose **Leaders** and press **Run workflow**. It downloads NSE's daily price files (a few minutes the first time), rates every liquid share's relative strength and market health, and publishes the result. It then runs by itself every weekday evening. The Trade engine flags relative-strength leaders on the watchlist, on trade cards, in alerts and in the morning brief. It needs no login and makes no broker requests.
+
+---
+
+## Part 5b-2: Swing setups and the trade journal (optional)
+
+The **Leaders** workflow now also looks for swing setups each weekday evening and follows a paper book (`swing.json`, shown on the Swing screen and in the morning brief). It uses Nifty's daily history from Yahoo Finance for its market filter; if that cannot be read, nothing is marked as a setup.
+
+To record which ideas you take: add a secret **JOURNAL_PASSPHRASE** (a long passphrase you will remember; it cannot be recovered). Telegram alerts then carry **Took it** and **Skip** buttons; after *Took it*, reply with your real fill, for example `182.5 65` (price and quantity) or `-`. The journal is stored encrypted on the data branch and unlocked in the dashboard's Journal screen with the same passphrase.
 
 ---
 
@@ -244,9 +258,9 @@ The strategy desk uses historical underlying candles. Index instruments are mode
 
 ## Local preview and tests
 
-To preview the sample dashboard, run `python -m http.server 8000` in the project folder and open `http://localhost:8000`. The preview uses sample records only.
+To preview the new dashboard with sample data: `cd web`, `npm ci`, `npm run dev`, and open `http://localhost:5173/?demo`. The previous dashboard can still be previewed with `python -m http.server 8000`. Both previews use sample records only.
 
-Run the offline regression checks with `python -m tests.test_archetypes`, `python -m tests.test_leaders`, `python -m tests.test_playbook`, `python -m tests.test_context`, `python -m tests.test_bhav`, `python -m tests.test_daily`, `python -m tests.test_replay`, `python -m tests.test_segments`, `python -m tests.test_kotak`, `python -m tests.test_strategies`, `python -m tests.test_backtest`, `python -m tests.test_store_publish` and `python -m tests.test_lifecycle`. The broader `python -m tests.test_engine` replay is slower because it exercises multiple market sessions and contract paths.
+Run the whole offline suite with `python -m pytest` (and `cd web && npm test` for the dashboard). The individual suites can also be run one at a time, for example `python -m tests.test_archetypes`, `python -m tests.test_leaders`, `python -m tests.test_playbook`, `python -m tests.test_context`, `python -m tests.test_bhav`, `python -m tests.test_daily`, `python -m tests.test_replay`, `python -m tests.test_segments`, `python -m tests.test_kotak`, `python -m tests.test_strategies`, `python -m tests.test_backtest`, `python -m tests.test_store_publish` and `python -m tests.test_lifecycle`. The broader `python -m tests.test_engine` replay is slower because it exercises multiple market sessions and contract paths.
 
 ## Updating to a newer version
 
@@ -262,4 +276,4 @@ Also delete the old file `engine/nifty100.txt` if it is still there (open it, cl
 
 ## 4.1.1 hotfix for Kotak/Fyers workflow errors
 
-For users upgrading from 4.1.0, follow [UPGRADE_4.1.1.md](UPGRADE_4.1.1.md). This patch corrects the exact Kotak Midcap index symbol, adds longer adaptive cooldowns for Kotak HTTP 429 responses, and records Fyers per-symbol quote errors so Market Data permission problems are not mistaken for failed OAuth login. It does not require deleting the `data` branch or resetting saved trades.
+For users upgrading from 4.1.0, follow [docs/upgrades/UPGRADE_4.1.1.md](docs/upgrades/UPGRADE_4.1.1.md). This patch corrects the exact Kotak Midcap index symbol, adds longer adaptive cooldowns for Kotak HTTP 429 responses, and records Fyers per-symbol quote errors so Market Data permission problems are not mistaken for failed OAuth login. It does not require deleting the `data` branch or resetting saved trades.

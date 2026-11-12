@@ -28,7 +28,7 @@ class Alerts:
         self.sent = 0
         self.held = 0
 
-    def send(self, text, kind="info"):
+    def send(self, text, kind="info", buttons=None):
         if not self.on.get(kind, False):
             self.held += 1
             return False
@@ -38,14 +38,17 @@ class Alerts:
                 self.held += 1
                 return False
             self._last[key] = time.time()
-        self._send(text)
+        if buttons:
+            self._send(text, buttons)
+        else:
+            self._send(text)
         self.sent += 1
         return True
 
     def sender(self):
         """A sender that takes (text, kind), for code that names the kind itself. Marked so it can tell."""
-        def send(text, kind="info"):
-            return self.send(text, kind)
+        def send(text, kind="info", buttons=None):
+            return self.send(text, kind, buttons)
         send.takes_kind = True
         return send
 

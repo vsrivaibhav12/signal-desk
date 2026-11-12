@@ -1,0 +1,732 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "live.schema.json",
+  "title": "Live",
+  "description": "The present moment: what is worth considering, what is open, how much risk is used, and how fresh the data is.",
+  "type": "object",
+  "required": [
+    "schema",
+    "generated_at",
+    "date",
+    "thresholds",
+    "session",
+    "health",
+    "freshness",
+    "risk",
+    "desks",
+    "ideas",
+    "positions",
+    "ended",
+    "market",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {
+      "type": "integer",
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "thresholds": {
+      "type": "object",
+      "required": [
+        "price_amber_s",
+        "price_stale_s",
+        "idea_expire_s"
+      ],
+      "properties": {
+        "price_amber_s": {
+          "type": "integer"
+        },
+        "price_stale_s": {
+          "type": "integer"
+        },
+        "idea_expire_s": {
+          "type": "integer"
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "running": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "brokers": {
+      "type": "object"
+    },
+    "health": {
+      "type": "object",
+      "required": [
+        "decision",
+        "asof",
+        "blocking",
+        "items"
+      ],
+      "properties": {
+        "decision": {
+          "enum": [
+            "OK",
+            "WATCH",
+            null
+          ]
+        },
+        "asof": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocking": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "status",
+              "detail"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "required": [
+        "prices_asof",
+        "last_candle_end",
+        "quotes_scan_asof",
+        "desk_updated"
+      ],
+      "properties": {
+        "prices_asof": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_candle_end": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quotes_scan_asof": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "desk_updated": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": [
+        "limits",
+        "open_positions",
+        "open_risk",
+        "realized_pnl",
+        "open_pnl",
+        "day_pnl"
+      ],
+      "properties": {
+        "limits": {
+          "type": "object",
+          "required": [
+            "max_open_positions",
+            "max_open_risk",
+            "max_daily_loss"
+          ],
+          "properties": {
+            "max_open_positions": {
+              "type": "number"
+            },
+            "max_open_risk": {
+              "type": "number"
+            },
+            "max_daily_loss": {
+              "type": "number"
+            }
+          }
+        },
+        "open_positions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open_risk": {
+          "type": "number"
+        },
+        "realized_pnl": {
+          "type": "number"
+        },
+        "open_pnl": {
+          "type": "number"
+        },
+        "day_pnl": {
+          "type": "number"
+        }
+      }
+    },
+    "desks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ideas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/idea"
+      }
+    },
+    "positions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/position"
+      }
+    },
+    "ended": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "desk",
+          "name",
+          "pnl",
+          "r",
+          "result",
+          "exit_type",
+          "exit_time",
+          "pnl_is_net"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "desk": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pnl": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pnl_is_net": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "market": {
+      "type": "object",
+      "required": [
+        "tiles",
+        "regime",
+        "movers",
+        "results",
+        "leaders",
+        "watchlist_count"
+      ],
+      "properties": {
+        "tiles": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "regime": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "movers": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "results": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "leaders": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "watchlist_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "swing": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "evidence": {
+      "type": "object"
+    },
+    "journal": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "na"
+          ]
+        }
+      }
+    },
+    "evidence": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "headline",
+            "avg_r",
+            "trades",
+            "asof",
+            "source"
+          ],
+          "properties": {
+            "headline": {
+              "type": "string"
+            },
+            "avg_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "trades": {
+              "type": "integer"
+            },
+            "asof": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "idea": {
+      "type": "object",
+      "required": [
+        "id",
+        "desk",
+        "source",
+        "name",
+        "symbol",
+        "direction",
+        "action",
+        "grade",
+        "status",
+        "signaled_at",
+        "entry",
+        "stop",
+        "target",
+        "qty",
+        "risk",
+        "cost_ratio",
+        "checks",
+        "blockers",
+        "why",
+        "context",
+        "evidence",
+        "paper_position",
+        "quality"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "desk": {
+          "enum": [
+            "index_options",
+            "intraday_stocks",
+            "index_futures",
+            "mcx",
+            "swing"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            -1,
+            1
+          ]
+        },
+        "action": {
+          "enum": [
+            "BUY",
+            "SELL"
+          ]
+        },
+        "grade": {
+          "enum": [
+            "take",
+            "watch",
+            "setup",
+            "wait"
+          ]
+        },
+        "status": {
+          "enum": [
+            "OPEN",
+            "CANDIDATE"
+          ]
+        },
+        "signaled_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entry": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stop": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "qty": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "risk": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cost_ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/check"
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "why": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context": {
+          "type": "object"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "paper_position": {
+          "type": "boolean"
+        },
+        "quality": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "position": {
+      "type": "object",
+      "required": [
+        "id",
+        "desk",
+        "source",
+        "name",
+        "symbol",
+        "direction",
+        "action",
+        "qty",
+        "entry_price",
+        "entry_time",
+        "stop",
+        "target",
+        "last_price",
+        "last_update",
+        "open_pnl",
+        "risk",
+        "open_r",
+        "quote_status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "desk": {
+          "enum": [
+            "index_options",
+            "intraday_stocks",
+            "index_futures",
+            "mcx",
+            "swing"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            -1,
+            1
+          ]
+        },
+        "action": {
+          "enum": [
+            "BUY",
+            "SELL"
+          ]
+        },
+        "qty": {
+          "type": "number"
+        },
+        "entry_price": {
+          "type": "number"
+        },
+        "entry_time": {
+          "type": "string"
+        },
+        "stop": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "last_price": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "last_update": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "open_pnl": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "risk": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "open_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "quote_status": {
+          "enum": [
+            "FRESH",
+            "STALE",
+            "UNKNOWN"
+          ]
+        },
+        "contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

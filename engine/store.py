@@ -9,7 +9,11 @@ from contextlib import contextmanager
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from . import clock
+from . import clock, manifest
+
+
+# File-name prefixes owned by the live engine: its trade charts and the permanent ledger of settled trades.
+ENGINE_PREFIXES = ("chartlive_", "ledger-")
 
 
 class Store:
@@ -61,6 +65,13 @@ class Store:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(feed, f, ensure_ascii=False, separators=(",", ":"))
         os.replace(tmp, self._path("feed.json"))
+
+    def write_json(self, name, obj):
+        """Atomically writes a published JSON file (a crash never leaves half a file for the dashboard to read)."""
+        tmp = self._path(name + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        os.replace(tmp, self._path(name))
 
     # The private file: login tokens, locked with a key made from your secrets.
     def load_secure(self):
@@ -196,6 +207,10 @@ class Store:
         today = "data " + clock.now().date().isoformat()
         for attempt in range(3):
             tip = refresh_unowned() if own is not None or attempt else None
+            try:
+                manifest.write(self.folder)             # the dashboard's index of what is published, rebuilt after any refresh
+            except Exception as exc:                    # an index problem must never stop the data from being published
+                print("Could not update manifest.json:", type(exc).__name__, str(exc)[:120])
             git("add", "-A")
             dirty = bool(git("status", "--porcelain").stdout.strip())
             if not dirty and attempt == 0:

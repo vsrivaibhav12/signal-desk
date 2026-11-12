@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signal-desk"
+dynamic = ["version"]
+description = "Multi-broker paper-trading and market-intelligence cockpit (research software; it places no orders)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "PyYAML>=6.0",
+    "cryptography>=42.0",
+    "kotakneoapi>=3.0.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "jsonschema>=4.20"]
+
+[tool.setuptools.packages.find]
+include = ["engine*"]
+
+[tool.setuptools.package-data]
+engine = ["nifty200.txt"]
+
+[tool.setuptools.dynamic]
+version = { file = ["VERSION"] }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

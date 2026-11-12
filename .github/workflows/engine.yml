@@ -73,5 +73,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_PAIRING_CODE: ${{ secrets.TELEGRAM_PAIRING_CODE }}
+          JOURNAL_PASSPHRASE: ${{ secrets.JOURNAL_PASSPHRASE }}
           PYTHONUNBUFFERED: "1"
         run: python -m engine.run

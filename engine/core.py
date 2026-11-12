@@ -10,12 +10,18 @@ import html
 import traceback
 from datetime import timedelta
 
-from . import clock, rules
+from . import clock, journal, portfolio, rules
 from .clock import at, ts, clock_text
 from .fyers import AuthError
 from .news import NewsDesk
 
 WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+RULEBOOK_LIMIT_TEXT = {portfolio.DAILY_LOSS: "rulebook daily loss limit reached",
+                       portfolio.POSITIONS: "rulebook maximum concurrent positions reached",
+                       portfolio.OPEN_RISK: "rulebook maximum open risk would be exceeded"}
+SHARED_LIMIT_TEXT = {portfolio.DAILY_LOSS: "shared portfolio daily loss limit reached",
+                     portfolio.POSITIONS: "shared portfolio maximum positions reached",
+                     portfolio.OPEN_RISK: "shared portfolio open risk would be exceeded"}
 NIFTY_SPOT = "NSE:NIFTY50-INDEX"
 
 
@@ -56,6 +62,7 @@ class Engine:
         self.portfolio_provider = portfolio_provider or (lambda: [])
         self.dirty = False
         self._cache = {}
+        self.journal = None                  # set by the session: gives alerts their Took it / Skip buttons
         here = os.path.dirname(__file__)
         with open(os.path.join(here, "nifty200.txt"), encoding="utf-8") as f:
             pairs = [x.strip().split("|") for x in f if x.strip() and not x.startswith("#")]
@@ -81,10 +88,13 @@ class Engine:
         st["note"] = text
         self._log(now, text)
 
-    def notify(self, text, kind="options"):
+    def notify(self, text, kind="options", buttons=None):
         """Sends an alert. `kind` lets the alert policy (engine/alerts.py) decide whether it is wanted; a plain sender ignores it."""
         if getattr(self._notify, "takes_kind", False):
-            self._notify(text, kind)
+            if buttons:
+                self._notify(text, kind, buttons)
+            else:
+                self._notify(text, kind)
         else:
             self._notify(text)
 
@@ -482,12 +492,11 @@ class Engine:
         risk_amount = float(candidate.get("risk_amount", 0) or 0)
         reasons = []
         if limits.get("enabled", True):
-            if realized <= -float(limits.get("max_daily_loss", 3000)):
-                reasons.append("rulebook daily loss limit reached")
-            if len(open_now) >= int(limits.get("max_open_positions", 5)):
-                reasons.append("rulebook maximum concurrent positions reached")
-            if open_risk + risk_amount > float(limits.get("max_open_risk", 15000)):
-                reasons.append("rulebook maximum open risk would be exceeded")
+            for code in portfolio.limit_breaches(
+                    len(open_now), open_risk, realized, risk_amount,
+                    max_positions=int(limits.get("max_open_positions", 5)), max_risk=float(limits.get("max_open_risk", 15000)),
+                    max_daily_loss=float(limits.get("max_daily_loss", 3000))):
+                reasons.append(RULEBOOK_LIMIT_TEXT[code])
 
         # The second guard is shared with the strategy desk. It prevents two
         # independent engines from spending the same capital/risk budget twice.
@@ -498,17 +507,18 @@ class Engine:
                         and t.get("risk_approved", True)]
             external_open = [t for t in external if t.get("status") == "OPEN"]
             external_closed = [t for t in external if t.get("status") == "CLOSED"]
-            combined_positions = len(open_now) + len(external_open)
             combined_risk = (open_risk + sum(float(t.get("risk", t.get("risk_amount", 0)) or 0)
                                              for t in external_open))
             combined_realized = realized + sum(float(t.get("net", t.get("pnl", 0)) or 0)
                                                 for t in external_closed)
-            if combined_realized <= -float(shared.get("max_daily_loss", 3500)):
-                reasons.append("shared portfolio daily loss limit reached")
-            if combined_positions >= int(shared.get("max_open_positions", 8)):
-                reasons.append("shared portfolio maximum positions reached")
-            if combined_risk + risk_amount > float(shared.get("max_open_risk", 17500)):
-                reasons.append("shared portfolio open risk would be exceeded")
+            for code in portfolio.limit_breaches(
+                    len(open_now) + len(external_open), combined_risk, combined_realized, risk_amount,
+                    max_positions=int(shared.get("max_open_positions", 8)), max_risk=float(shared.get("max_open_risk", 17500)),
+                    max_daily_loss=float(shared.get("max_daily_loss", 3500))):
+                reasons.append(SHARED_LIMIT_TEXT[code])
+            if portfolio.correlated_exposure_breached(candidate.get("name"), candidate.get("dir"), open_now + external_open,
+                                                      shared.get("max_same_direction_index_positions")):
+                reasons.append("too many same-direction index positions are already open")
         return reasons
 
     def _open(self, u, st, disc, now, up, close, reasons, v):
@@ -592,12 +602,13 @@ class Engine:
         st["note"] = "In a trade"
         self._event(tr, now, "ENTRY", f"{what} at ₹{num(tr['entry_price'])}", tr["entry_price"])
         x = at(today, u["exit_by"])
+        buttons = self.journal.buttons([journal.summary_from_rulebook(tr)]) if self.journal else None
         self.notify(
             f"{'📈' if up else '📉'} <b>{u['name']}: {what}</b>\n"
             f"Entry near ₹{num(tr['entry_price'])}\n{stop_line}\n{target_line}\n"
             f"Exit by {clock_text(x)} if neither is hit\n"
             f"Planned risk: about {rs(tr['risk_amount'])}\n\n<b>Why this trade</b>\n" +
-            "\n".join("• " + r for r in reasons))
+            "\n".join("• " + r for r in reasons), buttons=buttons)
         return True
 
     def _event(self, tr, now, kind, text, price=None):
