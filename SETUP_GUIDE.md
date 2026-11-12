@@ -130,6 +130,7 @@ Open `config.yaml` in your repository, click the pencil icon, change a value, an
 - **Lots of short runs in the Actions tab:** that is the every-10-minutes knock. Runs that finish in under a minute found the tool already awake.
 - **Bot says Kotak Neo is not giving me prices:** the Consumer Key was not accepted, or Kotak is down. Open the Kotak Neo app, More, Trade API, copy the token again and update the `KOTAK_CONSUMER_KEY` secret. Then run **Kotak check**.
 - **Kotak check says an index name was not found:** Kotak spells index names its own way. The check prints what it tried. Put the right names under `broker: kotak: index_tokens:` in `config.yaml` (examples are in the file).
+- **The log says "Rate limit exceeded":** Kotak limits how fast prices can be asked for. The tool slows itself down and pauses; a few of these lines when it starts are normal. If they never stop, tell me how many per minute you see.
 - **The bot says commodity markets are paused:** Kotak Neo gives no price history for MCX commodities. Use `broker: primary: fyers` if you want crude, gold, silver and natural gas.
 - **Bot says Fyers did not accept the code (Fyers only):** codes expire in a few minutes. Tap the login link again and paste the new code straight away.
 - **The backtest says no Telegram chat is linked yet:** run the Trade engine once first, so the bot knows who you are.

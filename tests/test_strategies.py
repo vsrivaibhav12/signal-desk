@@ -630,6 +630,28 @@ def test_live_signal_not_late():
     check("a finished day (not live) never uses a provisional fill", not past, len(past))
 
 
+def test_backs_off_when_broker_is_limiting():
+    print("The desk stops a pass when the broker says to back off")
+    names = ["AAA", "BBB"]
+    data = {f"NSE:{n}-EQ": walk(weekdays(12), random.Random(i + 5), start=500, vol=0.003) for i, n in enumerate(names)}
+
+    class Limited(FakeBroker):
+        def cooling(self):
+            return 20.0
+
+    folder = tempfile.mkdtemp()
+    try:
+        br = Limited(data)
+        desk = StrategyDesk({"strategies": {"portfolio": {"enabled": False}}}, br, lambda m: None, folder, names, [])
+        now = at(DAY, "09:50") + timedelta(seconds=30)
+        clock.set_fake(now)
+        desk.tick(now)
+        check("no price requests are made while the broker is cooling", br.calls == 0, br.calls)
+    finally:
+        clock.set_fake(None)
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def main():
     test_indicators()
     test_no_lookahead()
@@ -643,6 +665,7 @@ def main():
     test_archive_preserves_unresolved_positions()
     test_next_open_execution()
     test_live_signal_not_late()
+    test_backs_off_when_broker_is_limiting()
     test_trend_setters()
     print("\nALL CHECKS PASSED" if not check.failed else f"\n{check.failed} CHECK(S) FAILED")
     sys.exit(1 if check.failed else 0)

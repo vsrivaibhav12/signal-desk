@@ -171,6 +171,9 @@ class StrategyDesk:
             if time.monotonic() - started > PASS_BUDGET:       # never hold up the rest of the engine; carry on next candle
                 stopped = k
                 break
+            if getattr(self.broker, "cooling", lambda: 0)() > 5:   # the broker told us to back off: stop here, resume next candle
+                stopped = k
+                break
             try:
                 raw = self._history(sym, today)
                 todays = [c for c in raw if clock.from_ts(c[0]).date() == today and c[0] + 300 <= now_ts]

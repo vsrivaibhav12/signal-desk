@@ -1,3 +1,10 @@
+# Signal Desk 2.1.2: Kotak rate limit and index names (from the first live log)
+
+- **Kotak refused almost every history request.** The first live run was turned down with "Rate limit exceeded" (HTTP 429) at the flat 8 requests a second the adapter used. Two faults of mine made it worse: Kotak's refusal has a different shape from the one the adapter expected (`{"code": 429, "error": "Rate limit exceeded", ...}`), so no back-off or retry ever ran, and the pacing was one fixed rate for everything.
+- **Now:** history requests start at 2.5 a second (quotes and contract lists have their own, faster budget). A refusal cuts the rate by 40 percent and pauses every caller for up to 30 seconds (one pause covers all of them); after 40 accepted calls in a row the rate creeps back up, never past a ceiling. The strategy desk stops its pass while Kotak is cooling and carries on at the next candle, and a pause is never long enough to starve the heartbeat.
+- **Midcap Select index.** Kotak answered "Invalid neosymbol" for `NIFTY MIDCAP SELECT`. When an index name is refused, the adapter now looks for the real name in Kotak's cash-market list and retries. If it cannot, it logs the index names Kotak does list. **Kotak check** also prints them.
+- The restart message in that log ("I had stopped and have restarted myself") was most likely the engine being held up by the rate-limit retries; the pauses are now bounded.
+
 # Signal Desk 2.1.1: two fixes to 2.0.0
 
 - **Live signals are no longer a candle late.** With next-candle fills, a signal on the newest closed candle used to wait for the following candle before appearing. It now appears at once, filled at that candle's close as the best estimate of the next open (marked `provisional`). The next pass replays the day and replaces it with the real open; the trade keeps the same id. If the next candle gaps through the stop, the setup is dropped, as it always was. Finished days and backtests still use the real next open only.

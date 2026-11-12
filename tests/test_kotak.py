@@ -23,7 +23,8 @@ CM = ("pSymbol, pGroup ,pExchSeg,pTrdSymbol,pSymbolName,pOptionType,pExpiryDate,
       "2885,EQ,nse_cm,RELIANCE-EQ,RELIANCE,,-1,-1,1\n"
       "1333,EQ,nse_cm,HDFCBANK-EQ,HDFCBANK,,-1,-1,1\n"
       "9999,BL,nse_cm,HDFCBANK-BL,HDFCBANK,,-1,-1,1\n"
-      "Nifty 50,,nse_cm,Nifty 50,Nifty 50,,-1,-1,1\n")
+      "Nifty 50,,nse_cm,Nifty 50,Nifty 50,,-1,-1,1\n"
+      "Nifty Midcap Select,,nse_cm,Nifty Midcap Select,Nifty Midcap Select,,-1,-1,1\n")
 NOV, DEC = ist_epoch(2026, 11, 26), ist_epoch(2026, 12, 31)
 FO = ("pSymbol,pExchSeg,pTrdSymbol,pSymbolName,pOptionType,pExpiryDate,dStrikePrice;,lLotSize\n"
       f"35001,nse_fo,NIFTY26NOVFUT,NIFTY,XX,{NOV},-1,75\n"
@@ -54,6 +55,7 @@ class FakeNeo:
     def __init__(self):
         self.calls, self.script = [], []
         self.candles = {}
+        self.invalid = set()
 
     def _next(self):
         return self.script.pop(0) if self.script else None
@@ -79,6 +81,8 @@ class FakeNeo:
         bad = self._next()
         if bad:
             return bad
+        if neosymbol in self.invalid:
+            return {"status": "ERROR", "fault": {"code": 422, "message": "Invalid neosymbol"}}
         lo, hi = date.fromisoformat(from_date), date.fromisoformat(to_date)
         rows, d = [], lo
         while d <= hi:
@@ -232,6 +236,63 @@ def test_series_from_broker():
     out, missing = series_from_broker(k, ["NSE:RELIANCE-EQ", "NSE:MISSING-EQ"], 250, log=lambda m: None, label="Kotak Neo")
     assert "NSE:RELIANCE-EQ" in out and len(out["NSE:RELIANCE-EQ"].days) > 100, "a year of candles becomes a Series"
     assert missing == ["NSE:MISSING-EQ"], missing
+
+
+def test_rate_limit_and_healing():
+    from engine import kotak as kmod
+    body = {"code": 429, "error": "Rate limit exceeded", "message": "too many request received"}
+    code, msg = kmod._problem(body)
+    assert code == 429 and "rate limit" in msg.lower(), (code, msg)         # the exact reply seen in the first live run
+    k, fake = make()
+    day = date(2026, 11, 12)
+    k.resolve("NSE:RELIANCE-EQ")                       # load the contract list first so the refusal lands on a history call
+    start = k._rate["history"]
+    fake.script = [body]
+    assert k.history("NSE:RELIANCE-EQ", "5", day, day), "one refusal is waited out and retried"
+    assert k._rate["history"] < start and k.cooling() > 0, "it slows down and pauses"
+    # a quiet stretch speeds it up again, but never past the ceiling
+    k2, _ = make()
+    k2._rate["history"] = 1.0
+    for _ in range(400):
+        k2._accepted("history")
+    assert 1.0 < k2._rate["history"] <= kmod.RATE["history"][2], k2._rate
+    # it never goes below the floor, however often it is refused
+    k3, f3 = make()
+    k3.resolve("NSE:RELIANCE-EQ")
+    f3.script = [body] * 20
+    for _ in range(6):
+        try:
+            k3.history("NSE:RELIANCE-EQ", "5", day, day)
+        except KotakError as e:
+            assert "rate limit" in str(e).lower()
+    assert k3._rate["history"] >= kmod.RATE["history"][1]
+    # the pause is bounded, so the engine's heartbeat is never starved
+    waited = []
+    k4, f4 = make()
+    k4._sleep = waited.append
+    k4.resolve("NSE:RELIANCE-EQ")
+    f4.script = [body] * 3
+    try:
+        k4.history("NSE:RELIANCE-EQ", "5", day, day)
+    except KotakError:
+        pass
+    assert all(w <= kmod.MAX_PAUSE for w in waited), waited
+    # a refused index name is looked up in Kotak's own list and retried
+    k5, f5 = make()
+    f5.invalid = {"nse_cm|NIFTY MIDCAP SELECT"}
+    got = k5.history("NSE:MIDCPNIFTY-INDEX", "5", day, day)
+    assert got and k5.resolve("NSE:MIDCPNIFTY-INDEX") == ("nse_cm", "Nifty Midcap Select"), k5.resolve("NSE:MIDCPNIFTY-INDEX")
+    # an index that cannot be matched fails clearly, naming what Kotak does list
+    k6, f6 = make(index_tokens={"NSE:NIFTYBANK-INDEX": "nse_cm|Nope"})
+    f6.invalid = {"nse_cm|Nope"}
+    logged = []
+    k6.log = logged.append
+    try:
+        k6.history("NSE:NIFTYBANK-INDEX", "5", day, day)
+        assert False
+    except KotakError as e:
+        assert "invalid neosymbol" in str(e).lower()
+    assert any("Nifty 50" in m for m in logged), logged
 
 
 def test_broker_choice():

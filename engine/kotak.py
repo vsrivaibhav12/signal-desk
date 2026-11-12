@@ -50,6 +50,22 @@ INTERVAL = {"1": "1min", "3": "3min", "5": "5min", "10": "10min", "15": "15min",
 MAX_DAYS = {"1min": 28, "3min": 28, "5min": 28, "10min": 58, "15min": 58, "30min": 88, "60min": 88, "D": 175}
 MASTER_SEGMENT = {"NSE_FO": "nse_fo", "BSE_FO": "bse_fo", "MCX_COM": "mcx_fo"}
 NO_HISTORY = {"mcx_fo", "nse_com"}     # Kotak does not serve price history for these
+# Calls per second: where to start, the slowest we will go, the fastest we will go. History is limited far more
+# tightly than quotes (the first live run was refused at about 8 a second), so it starts gentle and adapts.
+RATE = {"history": (2.5, 0.4, 6.0), "other": (8.0, 1.0, 15.0)}
+MAX_PAUSE = 30                         # never stop the engine longer than this for one rate-limit pause
+# Words that identify each index in Kotak's cash-market list, used if the built-in name is turned down.
+INDEX_ALIASES = {
+    "NSE:NIFTY50-INDEX": ["nifty50"],
+    "NSE:NIFTYBANK-INDEX": ["niftybank", "banknifty"],
+    "NSE:FINNIFTY-INDEX": ["niftyfinservice", "niftyfinancialservices", "finnifty"],
+    "NSE:MIDCPNIFTY-INDEX": ["niftymidcapselect", "niftymidselect", "midcpnifty"],
+    "BSE:SENSEX-INDEX": ["sensex", "bsesensex", "spbsesensex"],
+}
+
+
+def _norm(x):
+    return "".join(ch for ch in str(x).lower() if ch.isalnum())
 
 
 def _num(x):
@@ -85,7 +101,8 @@ def _problem(body):
     if isinstance(err, list) and err and isinstance(err[0], dict):
         return int(_num(err[0].get("code")) or 0), str(err[0].get("message") or "")
     if isinstance(err, (str, dict)) and err:
-        return 0, str(err)
+        # e.g. {"code": 429, "error": "Rate limit exceeded", "message": "too many request received"}
+        return int(_num(body.get("code")) or 0), f"{err} {body.get('message') or ''}".strip()
     if "Error" in body:
         return int(_num(body.get("StatusCode")) or 0), f"{body.get('Error')} {str(body.get('ResponseText') or '')[:120]}".strip()
     if str(body.get("status", "")).lower() in ("error", "failure", "failed"):
@@ -129,7 +146,12 @@ class Kotak:
         self._http_get = http_get or (lambda url: requests.get(url, timeout=90))
         self._sleep = sleep
         self.log = log
-        self._last = 0.0
+        self._rate = {k: v[0] for k, v in RATE.items()}
+        self._slot = {k: 0.0 for k in RATE}          # when each kind of call may next go out
+        self._calm = {k: 0 for k in RATE}            # successful calls since the last refusal
+        self._pause_until = 0.0
+        self._refusals = 0
+        self._healed = set()
         self._index = dict(DEFAULT_INDEX)
         for k, v in (index_tokens or {}).items():
             self._index[k] = v
@@ -151,37 +173,65 @@ class Kotak:
             self._client = NeoAPI(consumer_key=self.consumer_key, environment=self.environment)
         return self._client
 
-    def _pace(self):
-        # Kotak allows 25 quote requests a second. Stay far below it.
-        wait = 0.12 - (time.monotonic() - self._last)
-        if wait > 0:
-            self._sleep(wait)
-        self._last = time.monotonic()
+    def cooling(self):
+        """Seconds left of a pause that Kotak's rate limit forced. Callers should skip their work while this is above 0."""
+        return max(0.0, self._pause_until - time.monotonic())
+
+    def _pace(self, kind):
+        """Waits for this call's turn: a steady rate per kind of call, and a full stop while Kotak is limiting us."""
+        now = time.monotonic()
+        start = max(now, self._slot[kind], self._pause_until)
+        self._slot[kind] = start + 1.0 / self._rate[kind]
+        if start > now:
+            self._sleep(min(start - now, MAX_PAUSE))
+
+    def _refused(self, kind, retry_after):
+        """Kotak said 'too many requests': slow down and stop for a while. One pause covers every caller."""
+        self._refusals += 1
+        low = RATE[kind][1]
+        self._rate[kind] = max(low, self._rate[kind] * 0.6)
+        self._calm[kind] = 0
+        wait = min(MAX_PAUSE, retry_after or 6 * self._refusals)
+        self._pause_until = max(self._pause_until, time.monotonic() + wait)
+        self.log(f"  Kotak is limiting {kind} requests: slowing to {self._rate[kind]:.1f} a second and pausing {wait:.0f}s")
+
+    def _accepted(self, kind):
+        self._refusals = 0
+        self._calm[kind] += 1
+        if self._calm[kind] >= 40:                   # a quiet stretch: speed up a little, never past the ceiling
+            self._rate[kind] = min(RATE[kind][2], self._rate[kind] * 1.15)
+            self._calm[kind] = 0
 
     def _call(self, method, **kwargs):
         """One SDK call with pacing, retries and the errors turned into ours."""
+        kind = "history" if method == "historical_data" else "other"
         last = None
         for attempt in range(3):
-            self._pace()
+            self._pace(kind)
             try:
                 body = getattr(self.client, method)(**kwargs)
             except KotakError:
                 raise
             except Exception as e:                          # the SDK raises its own exception classes
-                kind = type(e).__name__
-                if kind in ("AuthenticationError", "InvalidSessionError"):
+                name = type(e).__name__
+                if name in ("AuthenticationError", "InvalidSessionError"):
                     raise AuthError(str(e)[:160]) from e
-                last = KotakError(f"Kotak {method} failed ({kind})")
+                if name == "RateLimitError":
+                    self._refused(kind, None)
+                    last = KotakError("Kotak is limiting requests")
+                    continue
+                last = KotakError(f"Kotak {method} failed ({name})")
                 self._sleep(2 + 3 * attempt)
                 continue
             problem = _problem(body)
             if problem is None:
+                self._accepted(kind)
                 return body
             code, message = problem
-            if code == 429 or "too many" in message.lower():
+            if code == 429 or "too many" in message.lower() or "rate limit" in message.lower():
                 retry = _num(((body.get("rateLimit") or {}).get("Retry-After"))) if isinstance(body, dict) else None
-                last = KotakError("Kotak is limiting requests")
-                self._sleep(min(30, retry or 5 * (attempt + 1)))
+                self._refused(kind, retry)
+                last = KotakError("Kotak is limiting requests (rate limit exceeded)")
                 continue
             if _looks_like_login(code, message):
                 raise AuthError(message[:160] or "Kotak turned down the consumer key")
@@ -261,8 +311,44 @@ class Kotak:
         self._reverse[(seg, tok.lower())] = symbol
         return seg, tok
 
+    # ── index names ──────────────────────────────────────────
+    def index_rows(self, segment):
+        """Index entries in a cash-market list: the rows whose token is a name, not a number."""
+        out = []
+        for r in read_rows(self.csv_text(segment)):
+            tok = r.get("pSymbol") or ""
+            if tok and not tok.isdigit():
+                out.append(tok)
+        return out
+
+    def heal_index(self, symbol):
+        """Finds an index's real name in Kotak's list when the built-in one is refused. Returns the new token or None."""
+        seg, current = self._resolved.get(symbol) or self.resolve(symbol)
+        words = INDEX_ALIASES.get(symbol)
+        if not words or symbol in self._healed:
+            return None
+        self._healed.add(symbol)
+        names = self.index_rows(seg)
+        for tok in names:
+            if _norm(tok) in words and tok != current:
+                self.log(f"  {symbol}: Kotak calls this index '{tok}', not '{current}'. Using that.")
+                self._resolved[symbol] = (seg, tok)
+                self._reverse[(seg, tok.lower())] = symbol
+                return tok
+        self.log(f"  {symbol}: '{current}' was refused and no match was found. Kotak's index names: {', '.join(names[:40])}")
+        return None
+
     # ── prices ───────────────────────────────────────────────
     def history(self, symbol, resolution, day_from, day_to):
+        try:
+            return self._history(symbol, resolution, day_from, day_to)
+        except KotakError as e:
+            if ("invalid neosymbol" in str(e).lower() and "|" not in symbol and symbol.upper().endswith("-INDEX")
+                    and self.heal_index(symbol)):
+                return self._history(symbol, resolution, day_from, day_to)
+            raise
+
+    def _history(self, symbol, resolution, day_from, day_to):
         seg, tok = self.resolve(symbol)
         if seg in NO_HISTORY:
             raise KotakError(f"Kotak does not provide price history for {seg}")
@@ -455,6 +541,9 @@ def check(log=print):
             raise KotakError(f"{len(miss)} of {len(names)} shares could not be matched")
         return f"{len(names) - len(miss)} of {len(names)} shares matched"
     step("Nifty 200 shares found in the contract list", stocks)
+
+    step("index names in Kotak's cash lists", lambda: "; ".join(
+        f"{seg}: {', '.join(k.index_rows(seg)[:30]) or 'none found'}" for seg in ("nse_cm", "bse_cm")), essential=False)
 
     today = clock.now().date()
     for sym in list(DEFAULT_INDEX) + ["NSE:RELIANCE-EQ", "NSE:HDFCBANK-EQ"]:

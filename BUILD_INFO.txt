@@ -1,4 +1,4 @@
-Signal Desk 2.1.1
+Signal Desk 2.1.2
 Build date: 2026-11-12
 
 This release package contains the application source, the rebuilt static dashboard,
