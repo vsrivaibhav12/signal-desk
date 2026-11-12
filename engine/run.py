@@ -21,6 +21,12 @@ from . import clock
 from .clock import at, clock_text
 from .core import Engine
 from . import brokers
+from .alerts import Alerts
+from .leaders import Leaders
+from .results import Results
+from .tradingcal import TradingCalendar
+from .schema import SCHEMA
+from .watch import Watch
 from .errors import AuthError
 from .fyers import Fyers
 from .store import Store
@@ -31,7 +37,7 @@ RUN_BUDGET = 5 * 3600 + 5 * 60   # GitHub stops a run at 6 hours, so hand over b
 BEAT_EVERY = 110                 # seconds between heartbeats
 STALE_AFTER = 300                # a heartbeat older than this means the other run is dead
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ENGINE_FILES = {"feed.json", "secure.bin", "strategies.json"}
+ENGINE_FILES = {"feed.json", "secure.bin", "strategies.json", "results.json", "volbase.json", "holidays.json", "options_tape.jsonl"}
 RUN_ID = os.environ.get("GITHUB_RUN_ID", "local")
 BY_TIMER = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
 
@@ -122,7 +128,10 @@ class Session:
         self.url = dashboard_url(self.cfg)
         self.started = time.time()
         self.engine = None
+        self.alerts = Alerts(self.tg.send, self.cfg)
         self.feed = self.store.load_feed()
+        if self.feed.get("schema") != SCHEMA:             # a log from an older version of the tool: start with a clean slate
+            self.feed = {"status": {}, "trades": [], "schema": SCHEMA}
         self.last_beat = 0
 
     # ── heartbeat: proves this run is alive, and lets only one run work ──
@@ -170,9 +179,9 @@ class Session:
                 break
             self.beat()
             time.sleep(15)
-        self.tg.send("⚠️ <b>Kotak Neo is not giving me prices.</b>\nEither the Consumer Key (the KOTAK_CONSUMER_KEY secret) "
+        self.alerts.send("⚠️ <b>Kotak Neo is not giving me prices.</b>\nEither the Consumer Key (the KOTAK_CONSUMER_KEY secret) "
                      "was not accepted, or Kotak is down. Check the key in the Kotak Neo app: More, Trade API. "
-                     "I will try again at the next check.")
+                     "I will try again at the next check.", "faults")
         return False
 
     # ── Fyers login ──────────────────────────────────────────
@@ -257,6 +266,51 @@ class Session:
                              "• strategies: how each strategy is doing today\n"
                              "• skip: no new trades today\n• resume: allow trades again")
 
+    def catalysts(self):
+        """Names of shares with news that can move them today (results, orders, deals, broker calls)."""
+        if not self.engine:
+            return []
+        return [i["symbol"] for i in (self.engine.day.get("news") or []) if i.get("tag") in ("Results", "Order win", "Deal", "Broker view")]
+
+    def refresh_results(self, now):
+        try:                                                      # both run in the background; neither can hold up the engine
+            self.cal.refresh_async(now)
+            self.results.refresh_async(now)
+        except Exception as e:
+            print("Results calendar:", e)
+
+    def brief(self, now):
+        """One message at the open: who reports, and what the tool is watching. Sent once a day."""
+        today = now.date().isoformat()
+        st = self.feed["status"]
+        if st.get("brief_sent") == today or now < at(now.date(), "09:00") or now > at(now.date(), "10:30"):
+            return
+        if not self.cal.is_trading_day(now.date()):
+            return                                                # an exchange holiday: nothing to brief
+        st["brief_sent"] = today
+        g = self.results.groups(now.date())
+        name = lambda ev: ", ".join(sorted({e["symbol"] for e in ev})) or "none"
+        lines = [f"☀️ <b>Today, {now.strftime('%a %d %b')}</b>",
+                 f"Results just out (watch the reaction): {name(g['last'])}",
+                 f"Results today: {name(g['today'])}",
+                 f"Results before the next session: {name(g['next'])}"]
+        heavy = self.results.heavyweights(now.date())
+        if heavy:
+            lines.append(f"⚠️ Index heavyweights reporting: {', '.join(heavy)}. Index moves can be sharper.")
+        if not self.results.state.get("ok"):
+            lines.append("(The results calendar could not be read; the list may be incomplete.)")
+        news = self.catalysts()
+        if news:
+            lines.append(f"In the news: {', '.join(sorted(set(news))[:8])}")
+        health = self.leaders.health_line() if self.leaders.ok(now.date()) else None
+        if health:
+            lines.append(health)
+            lead = sorted({w["symbol"] for w in self.results.watch(now.date()) if self.leaders.is_leader(w["symbol"])})
+            if lead:
+                lines.append(f"Reporting and also relative-strength leaders: {', '.join(lead)}")
+        lines.append(f"Dashboard: {self.url}")
+        self.alerts.send("\n".join(lines), "brief")
+
     def engine_desk_text(self):
         d = getattr(self, "desk", None)
         return d.summary_text(clock.now().date().isoformat()) if d else "The strategy desk has not started yet."
@@ -294,24 +348,31 @@ class Session:
             self.beat(running=False, force=True)
             sys.exit(f"Nobody tapped Start on the Telegram bot @{self.tg.me()}. Open the bot, tap Start, and run again.")
         if not self.login(until):
-            self.tg.send(f"I could not get prices from {self.label}, so I am stopping for this session.")
+            self.alerts.send(f"I could not get prices from {self.label}, so I am stopping for this session.", "faults")
             self.beat(running=False, force=True)
             sys.exit(f"{self.label} prices were not available.")
         feed = self.feed
         self.engine = Engine(
-            self.cfg, self.fy, self.master, self.tg.send, feed,
+            self.cfg, self.fy, self.master, self.alerts.sender(), feed,
             portfolio_provider=lambda: getattr(getattr(self, "desk", None), "state", {}).get("trades", []),
         )
-        self.desk = StrategyDesk(self.cfg, self.fy, self.tg.send, os.path.join(ROOT, "_data"), self.engine.universe,
+        data_dir = os.path.join(ROOT, "_data")
+        self.leaders = Leaders(data_dir)
+        self.cal = TradingCalendar(data_dir, extra=self.cfg.get("holidays"))
+        self.results = Results(data_dir, self.engine.universe, extra=(self.cfg.get("results") or {}).get("extra"), cal=self.cal)
+        self.watch = Watch(data_dir, [f"NSE:{n}-EQ" for n in self.engine.universe], self.cfg)
+        self.desk = StrategyDesk(self.cfg, self.fy, self.tg.send, data_dir, self.engine.universe,
                                  [m for m in self.cfg["markets"] if m.get("kind") == "index"],
+                                 results=self.results, watch=self.watch, master=self.master, alerts=self.alerts,
+                                 catalysts=self.catalysts, leaders=self.leaders,
                                  heartbeat=self.beat, options_trades=lambda: self.feed["trades"],
                                  flush=lambda: (self.desk.save(), setattr(self.desk, "dirty", False), self.beat(force=True)))
         if not sess:
             nxt = next((s for s in sessions(self.cfg, now.date()) if s[1] > now), None)
             when = f"today at {clock_text(nxt[1])}" if nxt and now.weekday() < 5 else "on the next trading day"
-            self.tg.send(f"✅ Setup check passed. {self.label} and Telegram are both working.\n"
+            self.alerts.send(f"✅ Setup check passed. {self.label} and Telegram are both working.\n"
                          f"Markets are outside my working hours right now. I will start by myself {when}.\n"
-                         f"Dashboard: {self.url}")
+                         f"Dashboard: {self.url}", "info")
             feed["status"]["phase"] = "resting"
             self.beat(running=False, force=True)
             return
@@ -322,22 +383,25 @@ class Session:
         if same_session and before.get("handover"):
             pass                                   # a planned hand-over: carry on silently
         elif same_session:
-            self.tg.send(f"🔄 I had stopped and have restarted myself. Carrying on with the {label} markets "
-                         f"from where I left off. Open trades are being followed again.")
+            self.alerts.send(f"🔄 I had stopped and have restarted myself. Carrying on with the {label} markets "
+                             f"from where I left off. Open trades are being followed again.", "info")
         else:
-            self.tg.send(f"🟢 Watching the {label} markets until {clock_text(end)}." + ("\n" + " ".join(self.notes) if self.notes else ""))
+            self.alerts.send(f"🟢 Watching the {label} markets until {clock_text(end)}." + ("\n" + " ".join(self.notes) if self.notes else ""), "info")
         feed["status"].update({"session": f"{today}-{name}", "handover": False, "phase": "watching"})
         auth_fails, last_error = 0, None
         while True:
             now = clock.now()
             if now > end:
                 if feed["status"].get("summary_sent") != f"{today}-{name}":
-                    self.tg.send(self.engine.summary(now))
+                    if any(t.get("date") == today for t in feed["trades"]):       # no options trades today: nothing to say
+                        self.alerts.send(self.engine.summary(now), "summary")
                     feed["status"]["summary_sent"] = f"{today}-{name}"
                 feed["status"]["phase"] = "resting"
                 self.beat(running=False, force=True)
                 return
             try:
+                self.refresh_results(now)
+                self.brief(now)
                 self.engine.tick(now)
                 self.desk.tick(now)
                 auth_fails = 0
@@ -348,13 +412,13 @@ class Session:
                     if not self.login(end):
                         break
                 elif auth_fails == 3:
-                    self.tg.send(f"⚠️ {self.label} keeps turning down my price requests. "
-                                 "I will keep trying every minute.")
+                    self.alerts.send(f"⚠️ {self.label} keeps turning down my price requests. "
+                                     "I will keep trying every minute.", "faults")
             except Exception as e:                 # one bad minute must never stop the engine
                 traceback.print_exc()
                 if str(e) != last_error:
                     last_error = str(e)
-                    self.tg.send(f"⚠️ I hit a problem this minute and will keep going.\nDetails: {str(e)[:200]}")
+                    self.alerts.send(f"⚠️ I hit a problem and will keep going.\nDetails: {str(e)[:200]}", "faults")
             if self.desk.dirty:
                 self.desk.save()
                 self.desk.dirty = False

@@ -1,0 +1,47 @@
+name: Reset data
+
+# Wipes every saved log so the tool starts clean: all trades and signals, strategy and options results, option quote tape,
+# trade charts and backtest results. It keeps your Telegram link, the results calendar and the volume baseline.
+# THIS CANNOT BE UNDONE. First cancel any running "Trade engine" run (Actions tab), or it will write its old log back.
+# Then run this, type RESET in the box, and start the Trade engine again.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RESET to confirm"
+        required: true
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reset-data
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    if: ${{ inputs.confirm == 'RESET' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Wipe the logs on the data branch
+        run: |
+          git config --global user.name "signal-desk"
+          git config --global user.email "signal-desk@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git ls-remote --exit-code --heads "$REMOTE" data > /dev/null; then
+            echo "There is no data branch yet, so there is nothing to wipe."; exit 0
+          fi
+          git clone --quiet --depth 3 --branch data --single-branch "$REMOTE" _data
+          python -m engine.reset _data
+          cd _data
+          git add -A
+          git commit -m "data reset" || { echo "Already clean."; exit 0; }
+          git push origin HEAD:data

@@ -34,6 +34,19 @@ If **Trade engine** is missing, the `.github` folder did not upload. Fix: click 
 
 ---
 
+## Upgrading an existing installation to 4.0.0
+
+1. Download and unzip the 4.0.0 release. Replace the source files on your repository's default branch with the contents of the new release, including the `.github` folder. Do not delete the repository or recreate it.
+2. Keep your existing GitHub Actions secrets and variables. They are stored in repository settings and are not part of the source ZIP.
+3. Keep the existing `data` branch. It contains the Telegram pairing file and persisted trading/research records. The new release adds `options_tape.jsonl` to that branch when complete live option quote observations become available.
+4. Keep GitHub Pages pointed at the same default branch and root folder. The new `index.html`/dashboard template ships with the release.
+5. Run **Kotak check** from Actions before enabling the Trade engine. This build was tested offline; it was not authenticated against your broker account from the build environment.
+6. Open the dashboard and check the **Data health** panel. The first screen shows market posture, data confidence, candidates and open risk. Use the watchlist and options filters, watchlist search/sort, trade detail sheet and trade-log filters when needed. Auto/Dark/Light theme and Compact mode are available in the header.
+
+The 4.0.0 dashboard preview generated in this release uses clearly labelled synthetic sample records. A live GitHub Pages dashboard reads the `data` branch after the first successful workflow run.
+
+---
+
 ## Part 3: Switch on your dashboard (2 minutes)
 
 1. In your repository click **Settings**, then **Pages** in the left menu.
@@ -82,6 +95,12 @@ That is all. Do not type your Kotak password, MPIN or TOTP anywhere in this tool
 
 ---
 
+## Part 5b: Turn on the leader list (2 minutes, optional)
+
+In the Actions tab choose **Leaders** and press **Run workflow**. It downloads NSE's daily price files (a few minutes the first time), rates every liquid share's relative strength and market health, and publishes the result. It then runs by itself every weekday evening. The Trade engine flags relative-strength leaders on the watchlist, on trade cards, in alerts and in the morning brief. It needs no login and makes no broker requests.
+
+---
+
 ## Part 6: Check the connection, then first run (5 minutes)
 
 1. Click the **Actions** tab, click **Kotak check** on the left, then **Run workflow**. After about two minutes open the run and read the last lines. Each line says PASS or FAIL. This tests your own account: the Consumer Key, the share and index names, prices, 5-minute history, futures and an option. It sends nothing and places no order. If any line says FAIL, copy the lines and send them to me.
@@ -101,7 +120,7 @@ From now on it starts by itself on weekdays, before the morning markets and agai
 - **There is no daily login with Kotak Neo.** If you chose Fyers instead, the bot asks for a Fyers login from time to time and tells you how.
 - **Words you can send the bot:**
   - `status` shows what it is watching right now
-  - `strategies` shows how each of the eleven strategies is doing today
+  - `strategies` shows how each of the three strategies is doing today
   - `skip` stops new trades for today (use it on RBI policy, Budget or other event days)
   - `resume` undoes skip
 
@@ -161,56 +180,40 @@ The quick version uses a free price source and covers about the last 60 days of 
 - **Win rate "could be X% to Y%"** shows how uncertain the win rate is with that many trades. Fewer trades means a wider range.
 - **Luck check** reruns the same rules on shuffled prices, which have no real pattern. If the real result is not clearly better than that, there is no sign of a real edge yet.
 - **Does changing the settings help?** compares the current settings with no early exit, and with the old daily limits.
-- The backtest covers indices and stocks. Crude oil, gold, silver and natural gas are left out, because expired commodity contracts have no price history to test on. Option prices are estimated, because brokers keep no history for expired options.
+- The backtest covers indices and stocks. Crude oil, gold, silver and natural gas are left out, because expired commodity contracts have no price history to test on. Option prices are estimated, because brokers keep no history for expired options. 4.0.0 starts a prospective bid/ask/depth/OI tape; it does not backfill expired option chains.
 
-## The strategy desk (eleven strategies, one decision)
+## How the tool fits together (four segments that depend on each other)
 
-Besides the options rulebook, the tool runs **eleven intraday strategies at the same time**, all on the Nifty 200 shares and five indices (as index futures, one lot). Every trade is a **paper trade**: shares bought or sold intraday, sized so a stop-loss costs about ₹500, or one lot of an index future. Nothing is ordered.
+The tool is one decision machine made of four segments. Each feeds the others, so a decision rests on several facts at once.
 
-| Strategy | Where it comes from |
-|---|---|
-| Opening drive | Built from a missed entry: gets in near the start of a thrust in the first 15 minutes |
-| Momentum, Breakout, Reversal, VWAP pullback, Gap and go, Opening range breakout | The Flattrade article on common intraday strategies |
-| Bollinger bounce, Bollinger squeeze breakout | Bollinger bands. The bounce only trades in a ranging market, the squeeze after a quiet period |
-| EMA 9/21 crossover, EMA trend pullback | Moving averages. The crossover looks for a new trend, the pullback only trades an established strong one |
+1. **Results and news.** Every few hours the tool reads NSE's public calendar of board meetings that will consider financial results, and keeps the Nifty 200 companies. A company is watched from the day before its results until the day after: *results just out* (watch the reaction at the open), *results today*, and *results before the next session*. News headlines (results, orders, deals, broker calls) add shares too. These go first on the watchlist, so the tool is already looking when the move starts, not catching up to it.
+2. **Watchlist and load.** Asking the broker for every share's candles every five minutes is what overloaded Kotak. Now one quick quotes pass reads price and volume for all 200 shares, and only the watchlist gets candles and strategy scans: the indices, open trades, results and news shares, and any share on unusual volume (1.5 times normal for the time of day) or moving 1.5 percent or more. A share that is not moving on volume is not in play, and none of the strategies would take it. By estimate this cuts the broker requests by about three quarters (not yet measured live).
+3. **Share strategies (three, not eleven).** Opening range breakout, opening drive and EMA trend pullback, run only on the watchlist. The choice and the evidence are in `docs/STRATEGY_RESEARCH.md`. Each signal is graded **worth taking** or **only watching** by four checks (costs at most 25% of the risk, volume at least twice normal, Nifty on the same side of VWAP, no opposing strategy on the same share), and a share that is on the watchlist carries the reason: *Results today*, *Volume 2.6x normal*, *In the news*.
+4. **Calls and puts.** For Nifty, Bank Nifty, Sensex, Fin Nifty and Midcap Nifty, the tool reads the index candles it already has and scores a call or a put out of five: broke the opening range, above or below VWAP, 9 EMA against 21 EMA, up or down on the day, near the top or bottom of the day's range. At 4 or more, inside the entry window, with costs that fit, it names the contract (at the money, nearest suitable expiry), its premium, stop, target, and the risk and money needed per lot. Banks reporting results today add a warning. The older options rulebook still runs its own paper trades.
 
-**The tool decides what is a candidate and what can enter the paper portfolio.** Every signal is graded either **TAKE** or **WATCH**, using four checks. Missing required data is marked unknown and fails closed to WATCH; it is never treated as a pass:
+Everything is a **paper trade**. The tool never places an order.
 
-1. **Costs:** the round-trip cost is at most 25% of the amount risked. A stop too tight for the costs means the trade starts behind. This was by far the most important check.
-2. **Volume:** the stock trades at 2x its usual volume or more for the time of day (indices pass).
-3. **Nifty agrees:** Nifty is on the same side of its VWAP as the trade.
-4. **No conflict:** no other strategy has already taken the opposite side of the same stock today.
+**What reaches Telegram.** Only what you can act on:
+- one **morning brief** at the open (results just out, due today, due next, index heavyweights reporting, shares in the news);
+- a share **trade worth taking**, and how it ended;
+- a **call or put idea** worth taking, and the options desk's entries and exits;
+- one short **summary after the close**;
+- a **fault** when prices stop arriving (the same fault at most once an hour).
 
-Then the portfolio controller decides whether an otherwise eligible trade can fit the available risk budget:
+Trend-setter notes, news digests and "started" or "restarted" messages are off. Change any of this under `alerts:` in `config.yaml`.
 
-- Strategy-desk sub-limit: five concurrent positions, one per underlying, ₹2,500 aggregate initial risk and ₹1,500 realised daily loss.
-- Shared cross-engine limit: eight concurrent positions and ₹17,500 aggregate initial risk across both engines, with a ₹3,500 combined realised daily-loss stop.
-- Rulebook sub-limit: five concurrent positions, ₹15,000 aggregate open risk and ₹3,000 realised daily loss.
+**What you see.** One page, decision first: *Results and watchlist*, *Worth taking*, *Calls and puts*, *My trades*, *Trend setters*, *Market*, and *More* (collapsed). It re-reads every 2 minutes. **Copy order details** copies quantity, entry, stop and target for pasting into your broker app; **I took this trade** is remembered on this device only.
 
-A rejected candidate remains in research history with its rejection reason, but it is not announced as an approved paper trade. These are simulated admission limits, not broker margin checks or a guarantee against gaps.
+**Starting clean.** The first run of this version replaces any log saved by an older version, so old trades and results disappear. To wipe everything by hand later (all trades, charts and backtests; your Telegram link is kept), cancel any running Trade engine, then run **Reset data** from the Actions tab and type `RESET`. It cannot be undone.
 
-Only risk-approved **TAKE** trades appear at the top of the dashboard and trigger Telegram alerts. Everything else remains available under **More**.
+**Does the whole process have an edge?** Run **Research replay** from the Actions tab. It replays the watchlist, results, volume, strategies and costs on past prices using only what was known at the time, and shows what each piece adds, with ranges and a sealed holdout (leave `final` unticked until the rules are fixed). On the first run, nothing was positive after costs: see `docs/STRATEGY_RESEARCH.md`. **Daily research** (also in the Actions tab, no login needed) tests a daily-timeframe swing method on ten years of prices, where costs matter much less; run on every share that traded (including delisted ones) it shows at best a small, marginal effect that does not beat holding the index, so it is not a recommendation. The first run downloads about 2,500 small NSE files and takes 20 to 40 minutes.
 
-**TAKE is not a profitability claim.** In the research sample reviewed before this release, even the filtered signals did not demonstrate a reliable profitable edge. The backtest now reports standalone strategy candidates separately from the risk-approved portfolio. The chronological 60/20/20 split and stability blocks are descriptive diagnostics, not a parameter-optimised or untouched holdout. Do not change thresholds until you have defined a proper training, validation and untouched test process.
-
-**What you see.** One page, decision first. A line under the title shows how fresh the data is, and the page re-reads it **every 2 minutes** (or press **Refresh now**).
-- **Worth taking:** the trades that passed all four checks, each with entry, stop, target, risk, the four checks, **Copy order details** and **I took this trade**. Tap one for its chart, ladder, reasons and news.
-- **My trades:** every trade you ticked, with its live result, in one place.
-- **Trend setters:** stocks making a **genuine** big move, up or down: 2% or more, on at least twice the usual volume, on the right side of VWAP, and still holding near the day's high or low. Each shows what the tool did with it, and how much of the move had already happened when the first signal came. Spikes that faded, or moves on ordinary volume, are left out.
-- **Market:** Nifty and Bank Nifty, and how many shares are trending.
-- **More** (collapsed): the signals the tool is only watching and why, the strategy scoreboard, the stock watchlist and opening ranges, every trade, news, and the activity log. Tap a strategy in the scoreboard for its rules, live trades and backtest.
-
-**The trade chart.** Opening a trade shows its 5-minute candles with the trigger candle highlighted, the entry, stop and target, any exit, and the levels that made it trigger: the opening range, the tight range before a breakout, the gap levels, VWAP, the moving averages or the Bollinger bands. Charts are kept for the last three days of live trades and the 100 most recent backtest trades of each strategy, and load only when you open a trade. Options desk charts cover indices and shares, not commodity options.
-
-**Taking a trade yourself.** **Copy order details** copies quantity, entry, stop, target and risk, ready to paste when you place it in your broker app. **I took this trade** is remembered on this device only and powers the **My trades** section. The tool never places orders.
-
-**About entry timing.** The strategy desk now models entries at the next five-minute candle open after the signal candle closes. A gap through the original stop invalidates the setup instead of widening the stop. This is still a simulation: spread, queue position, partial fills and market impact are approximated through configured costs. Most strategies wait for a completed-candle confirmation, which can mean entering after part of a move has already happened. The **Opening drive** strategy is intended to research early-session thrusts, but no strategy should be preferred from an older backtest snapshot. Re-run the backtest with this release's next-candle fill model and evaluate it on a genuinely untouched period before drawing conclusions.
+**Honest results.** On 60 sessions of real prices the three strategies lost money after costs, even when only the shares graded "worth taking" are counted: about -0.11R a trade for the opening range breakout (644 trades), -0.06R for the opening drive (190) and +0.10R for the EMA pullback (77, which swung from +0.44R in the first half to -0.24R in the second, so it proves nothing). Nothing here is proven to make money. The research behind the choice is in `docs/STRATEGY_RESEARCH.md`; run the **Strategy backtest** on Kotak's longer history before trusting any of it.
 
 **How it runs**
-- The live desk checks every 5-minute candle from 9:20 am to 3:20 pm inside the same engine run, with the same price source. Each pass looks at the interesting stocks first (open trades, trend setters, indices) and publishes, then does the rest, so important signals appear sooner.
-- **Telegram** sends only trades that are worth taking, plus a note when a new genuine trend setter appears (once per stock per day), plus a summary after the close. To also get every signal, set `alert_grade: all` under `strategies` in `config.yaml`. To limit alerts to some strategies, set `alert_for: [orb, drive]`. Send the bot the word `strategies` for today's tally.
-- The **Strategy backtest** workflow (Actions tab) tests all eleven on past prices. It runs by itself every weekday at 6:00 pm, and on demand with **Run workflow**. With a saved Fyers login it uses Fyers prices (about 365 calendar days (roughly 250 market sessions) is a trading year); without one it uses free Yahoo prices (about 60 days). It runs on its own computer, so it works alongside the live engine.
-- Settings are under `strategies:` in `config.yaml`.
+- The desk checks every 5-minute candle from 9:20 am to 3:20 pm in the same engine run. Each pass takes the watchlist first and publishes, so what matters appears quickly.
+- The **Strategy backtest** workflow (Actions tab) tests the three strategies on past prices. It runs by itself every weekday at 6:00 pm, and on demand.
+- Settings are under `results:`, `watch:`, `options_scan:`, `alerts:` and `strategies:` in `config.yaml`.
 
 ## Portfolio risk, backtesting and limitations
 
@@ -224,7 +227,7 @@ The strategy desk uses historical underlying candles. Index instruments are mode
 
 To preview the sample dashboard, run `python -m http.server 8000` in the project folder and open `http://localhost:8000`. The preview uses sample records only.
 
-Run the offline regression checks with `python -m tests.test_strategies`, `python -m tests.test_backtest`, `python -m tests.test_store_publish` and `python -m tests.test_lifecycle`. The broader `python -m tests.test_engine` replay is slower because it exercises multiple market sessions and contract paths.
+Run the offline regression checks with `python -m tests.test_archetypes`, `python -m tests.test_leaders`, `python -m tests.test_playbook`, `python -m tests.test_context`, `python -m tests.test_bhav`, `python -m tests.test_daily`, `python -m tests.test_replay`, `python -m tests.test_segments`, `python -m tests.test_kotak`, `python -m tests.test_strategies`, `python -m tests.test_backtest`, `python -m tests.test_store_publish` and `python -m tests.test_lifecycle`. The broader `python -m tests.test_engine` replay is slower because it exercises multiple market sessions and contract paths.
 
 ## Updating to a newer version
 

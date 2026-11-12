@@ -55,7 +55,9 @@ def assess(S, i, tr, cost_est, mkt, dc):
             fails.append("mkt")
     fails.extend(unknown)
     return {"g": "watch" if fails else "take", "f": fails, "unknown": unknown,
-            "cr": round(cr, 2), "cv": None if cv is None else round(cv, 1), "nm": nm, "cf": 0}
+            "cr": round(cr, 2), "cv": None if cv is None else round(cv, 1), "nm": nm, "cf": 0,
+            "ip": (dc.get("_play") or {}).get(tr.get("symbol")),        # why the share is in play (results, news, volume), if it is
+            "rs": (dc.get("_rs") or {}).get(tr.get("symbol"))}          # its relative-strength rating (0 to 100), if known
 
 
 def finalize(trades, dc):

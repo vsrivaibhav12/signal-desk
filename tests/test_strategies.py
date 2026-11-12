@@ -338,19 +338,19 @@ def test_alerts_and_heartbeat():
         text = "\n".join(sent)
         seen = {s["name"] for s in STRATEGIES if f"• {s['name']}:" in text}
         trig = {t["strategy"] for t in d.state["trades"]}
-        check("alert messages were sent", any("new strategy signal" in m for m in sent), len(sent))
+        check("alert messages were sent", any("🎯" in m for m in sent), len(sent))
         import re
-        missed = [s["name"] for s in STRATEGIES if s["id"] in trig and not re.search(re.escape(s["name"]) + r" \d+", text)]
-        check("every strategy that triggered a trade was alerted at least once", not missed and len(trig) >= 5, (missed, len(trig)))
+        missed = [s["name"] for s in STRATEGIES if s["id"] in trig and s["name"] not in text]
+        check("every strategy that triggered a trade was alerted at least once", not missed and len(trig) >= 2, (missed, len(trig)))
         check("no message lists more than 10 example signals", all(m.count("\n• ") <= deskmod.MAX_LINES for m in sent))
         check("the heartbeat is called during a pass", len(beats) > 20, len(beats))
         # only some strategies
         sent2 = []
         d2 = StrategyDesk({"strategies": {"alert_for": ["orb"], "alert_grade": "all", "portfolio": {"enabled": False}}}, FakeBroker(data), sent2.append, tempfile.mkdtemp(), names, [])
         replay(d2)
-        body = "\n".join(m for m in sent2 if "new strategy signal" in m)
-        check("alert_for limits the alerts to the chosen strategies", "• Opening range breakout:" in body and
-              not any(f"• {s['name']}:" in body for s in STRATEGIES if s["id"] != "orb"))
+        body = "\n".join(m for m in sent2 if "🎯" in m)
+        check("alert_for limits the alerts to the chosen strategies", "Opening range breakout" in body and
+              not any(s["name"] in body for s in STRATEGIES if s["id"] != "orb"))
         check("telegram: off sends nothing at all", not (lambda s: (replay(StrategyDesk({"strategies": {"telegram": "off"}}, FakeBroker(data),
               s.append, tempfile.mkdtemp(), names, [])), s)[1])([]))
         # a pass that runs out of time keeps what was already found, and carries on next candle
@@ -433,7 +433,7 @@ def test_charts():
             if not (0 <= c["e"] < len(c["k"])):
                 bad.append((strat["id"], "e"))
     check("every indicator line has one value per candle", not bad, bad[:3])
-    check("indicator lines were drawn for the Bollinger, EMA and VWAP strategies", {"vwap", "bb_up", "ema9", "ema20"} <= seen_ov, seen_ov)
+    check("indicator lines were drawn for the EMA strategy", {"ema20", "ema50"} <= seen_ov, seen_ov)
 
     # the desk writes chart files, keeps only recent ones, charts the options desk's trades, and reports market conditions
     names = ["AAA", "BBB", "CCC", "DDD"]

@@ -249,6 +249,46 @@ def scan_orb(S, i, p):
     return None
 
 
+def _daily_atr(S, day, n=14):
+    """Average true range of the previous sessions (up to n), from the candles. None if fewer than five sessions are known."""
+    prior = [d for d in S.days if d < day][-n:]
+    trs = []
+    for d in prior:
+        a, b = S.starts[d], S.ends[d]
+        hi, lo, pc = max(S.h[a:b + 1]), min(S.l[a:b + 1]), S.prev_close.get(d)
+        trs.append(max(hi - lo, abs(hi - pc), abs(lo - pc)) if pc else hi - lo)
+    return sum(trs) / len(trs) if len(trs) >= 5 else None
+
+
+# ── The 5-minute opening range breakout of Zarattini, Barbon and Aziz (2024), as far as our simulator can follow it ──
+def scan_orb5(S, i, p):
+    """The first 5-minute candle sets the direction (green = long, red = short) and the range. The first candle to close beyond its
+    high (or low) in that direction is the signal. The stop is a fraction of the daily ATR (the paper uses 10%); the trade is held to
+    the end of the day. The paper's stop order fills at the break; here the fill is at the next candle's open, which is later and worse."""
+    day = S.day[i]
+    a = S.starts[day]
+    if i - a < 1 or S.slot[a] != 0:
+        return None
+    o, h, l, c0 = S.o[a], S.h[a], S.l[a], S.c[a]
+    if c0 == o or h <= l:
+        return None
+    d = 1 if c0 > o else -1
+    level = h if d == 1 else l
+    c = S.c[i]
+    if d * (c - level) <= 0 or any(d * (S.c[j] - level) > 0 for j in range(a + 1, i)):
+        return None
+    atr = _daily_atr(S, day)
+    if not atr:
+        return None
+    stop = c - d * p["stop_atr"] * atr
+    why = [f"The first 5-minute candle ({'green' if d == 1 else 'red'}) set a range of {n2(l)} to {n2(h)}.",
+           f"A candle closed at {n2(c)}, {_word(d)} the first candle's {'high' if d == 1 else 'low'}, in the direction of that candle.",
+           f"Stop is {p['stop_atr'] * 100:.0f}% of the daily average range ({n2(atr)}) from the entry; the trade is held to the end of the day."]
+    return _sig(d, stop, why, "Opening range breakout (5-minute)",
+                lines=[("First candle high", h), ("First candle low", l)],
+                box={"i0": a, "i1": a, "lo": l, "hi": h, "label": "First 5 minutes"})
+
+
 # ── Opening drive: get in early on a thrust, instead of waiting for the breakout at the high ──
 def scan_drive(S, i, p):
     day = S.day[i]
@@ -421,7 +461,7 @@ EXITS = {"momentum_fade": exit_momentum_fade, "ema_cross_back": exit_ema_cross_b
 
 # ── the catalogue ────────────────────────────────────────────
 # Windows are the times a signal candle may CLOSE in. stock/index hold the numbers for each kind of market.
-STRATEGIES = [
+ALL_STRATEGIES = [
     {"id": "drive", "name": "Opening drive", "source": "Lesson from a missed entry", "scan": scan_drive,
      "window": ["09:20", "09:30"],
      "best_for": "A stock that opens and runs hard in the first 5 to 15 minutes on heavy volume, when waiting for a breakout means buying the high.",
@@ -495,6 +535,14 @@ STRATEGIES = [
                "Stop at the opposite end of the range, target 1.5x the range height beyond the breakout."],
      "stock": {"max_range_pct": 2.5, "target_x": 1.5},
      "index": {"max_range_pct": 0.6, "target_x": 1.5}},
+    {"id": "orb5", "name": "Opening range breakout, 5-minute (research)", "source": "Zarattini, Barbon, Aziz (2024)", "scan": scan_orb5,
+     "window": ["09:20", "11:30"],
+     "best_for": "Research only. The published US version trades the 20 shares with the heaviest first-5-minute volume.",
+     "risk": "Tight ATR-based stops: with Indian costs the stop is so close that costs can be a large part of the risk.",
+     "rules": ["The first 5-minute candle (9:15 to 9:20) sets the direction: green is long, red is short.",
+               "Enter when a candle closes beyond that candle's high (long) or low (short), once per day.",
+               "Stop at 10% of the daily average range from the entry. Hold to the end of the day."],
+     "stock": {"stop_atr": 0.10}, "index": {"stop_atr": 0.10}},
     {"id": "bb_bounce", "name": "Bollinger bounce", "source": "Bollinger bands", "scan": scan_bb_bounce,
      "window": ["10:00", "14:30"],
      "best_for": "Ranging, sideways markets. The strategy switches itself off when the market is trending (ADX 22 or more).",
@@ -541,10 +589,17 @@ STRATEGIES = [
 OVERLAYS = {"drive": ["vwap"], "momentum": ["vwap"], "reversal": ["vwap"], "vwap": ["vwap"], "gap": ["vwap"],
             "bb_bounce": ["bb_up", "bb_mid", "bb_lo"], "bb_squeeze": ["bb_up", "bb_mid", "bb_lo"],
             "ema_cross": ["ema9", "ema21"], "ema_pullback": ["ema20", "ema50"]}
-for _s in STRATEGIES:
+for _s in ALL_STRATEGIES:
     _s["overlay"] = OVERLAYS.get(_s["id"], [])
 
-BY_ID = {s["id"]: s for s in STRATEGIES}
+# Only these run live and in the backtest. The rest stay defined (for research and the tests) but are not run.
+# Chosen from research and our own 60-session test; see docs/STRATEGY_RESEARCH.md.
+#   orb           5/15-minute opening range breakout, traded only on stocks that are "in play" (Zarattini, Barbon, Aziz 2024)
+#   drive         enters the first strong thrust of a stock already moving on heavy volume (results gaps, news)
+#   ema_pullback  buys or sells the first pullback in a strong, established trend
+ACTIVE_IDS = ("orb", "drive", "ema_pullback")
+STRATEGIES = [s for s in ALL_STRATEGIES if s["id"] in ACTIVE_IDS]
+BY_ID = {s["id"]: s for s in ALL_STRATEGIES}
 
 
 def window_minutes(strat):

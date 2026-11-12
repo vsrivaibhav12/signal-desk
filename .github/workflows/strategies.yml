@@ -1,6 +1,6 @@
 name: Strategy backtest
 
-# Tests all eleven strategies on past prices. It runs by itself every weekday evening after the market closes,
+# Tests the three active strategies on past prices. It runs by itself every weekday evening after the market closes,
 # and you can run it by hand from the Actions tab at any time. It runs on its own computer, so it works
 # alongside the live Trade engine without slowing it down.
 #   auto  = Kotak Neo prices if KOTAK_CONSUMER_KEY is set, else a saved Fyers login, else free Yahoo prices (about 60 days)

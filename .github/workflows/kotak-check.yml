@@ -2,7 +2,8 @@ name: Kotak check
 
 # Run by hand from the Actions tab: choose "Kotak check", press "Run workflow".
 # It tests the Kotak Neo connection against your own account: the consumer key, the share and index names,
-# prices, 5-minute history, futures and an option. It sends nothing and places no order.
+# prices, 5-minute and daily history, futures and an option, and whether NSE's results calendar can be read from GitHub.
+# It sends nothing and places no order.
 # Takes about two minutes. If a line says FAIL, copy the output and send it back.
 on:
   workflow_dispatch:
@@ -26,3 +27,5 @@ jobs:
           KOTAK_CONSUMER_KEY: ${{ secrets.KOTAK_CONSUMER_KEY }}
           PYTHONUNBUFFERED: "1"
         run: python -m engine.kotak --check
+      - name: Check the results calendar
+        run: python -m engine.results

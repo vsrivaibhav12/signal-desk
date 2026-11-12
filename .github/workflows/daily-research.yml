@@ -1,0 +1,73 @@
+name: Daily research
+
+# Tests a daily-timeframe base-and-breakout method on about ten years of NSE's own daily price files, which include every share that
+# traded, even the ones later delisted or merged. The universe on each date is the 200 most traded shares then (no survivorship).
+# The rules are fixed in advance (see engine/daily.py), with a placebo of random entry, a portfolio view and a sealed holdout:
+# the last 20% of sessions is cut away before any signal is computed. Leave "final" unticked until the rules are fixed, then run it
+# once with "final" ticked. Needs no login. The first run downloads about 2,500 small files (20 to 40 minutes); later runs reuse them.
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "Years of daily history"
+        default: "10"
+      final:
+        description: "Unseal the holdout (do this once, with the rules fixed)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-research
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open the data folder
+        run: |
+          git config --global user.name "signal-desk"
+          git config --global user.email "signal-desk@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" data > /dev/null; then
+            git clone --quiet --depth 3 --branch data --single-branch "$REMOTE" _data
+          else
+            mkdir _data && cd _data && git init --quiet -b data && git remote add origin "$REMOTE"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install --quiet -r requirements.txt
+
+      - name: Reuse the NSE daily files from earlier runs
+        uses: actions/cache@v4
+        with:
+          path: _bhav
+          key: nse-daily-files-v1-${{ github.run_id }}
+          restore-keys: nse-daily-files-v1-
+
+      - name: Download any missing NSE daily files
+        run: python -m engine.bhav --cache _bhav
+
+      - name: Run the daily research
+        env:
+          PYTHONUNBUFFERED: "1"
+          YEARS: ${{ inputs.years || '10' }}
+          FINAL: ${{ inputs.final }}
+        run: |
+          if [ "$FINAL" = "true" ]; then
+            python -m engine.daily --universe nse --bhav _bhav --years "$YEARS" --final
+          else
+            python -m engine.daily --universe nse --bhav _bhav --years "$YEARS"
+          fi

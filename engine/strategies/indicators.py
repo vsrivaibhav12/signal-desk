@@ -5,11 +5,60 @@ Every function returns one value per candle (None until there is enough history)
 Only past and present candles are ever used for a value, never future ones.
 """
 from collections import deque
+import math
 
 from .. import clock
 
 OPEN_MIN = 9 * 60 + 15          # 9:15 in minutes after midnight
 
+
+
+def normalize_candles(candles):
+    """Keep only structurally valid OHLC bars and return quality metadata.
+
+    Invalid OHLC/timestamp rows are excluded. A bad volume value is set to zero
+    (so that bar cannot masquerade as unusual volume) but the price bar survives.
+    Duplicate timestamps use the last returned row.
+    """
+    clean, invalid_days = {}, set()
+    invalid_unknown = invalid_volume = rejected = 0
+    for row in candles or []:
+        day = None
+        try:
+            if row is None or len(row) < 5:
+                raise ValueError("short candle")
+            raw_ts = float(row[0])
+            if not math.isfinite(raw_ts) or raw_ts <= 0:
+                raise ValueError("invalid timestamp")
+            stamp = int(raw_ts)
+            day = clock.from_ts(stamp).date()
+            o, h, low, close = (float(row[i]) for i in range(1, 5))
+            if not all(math.isfinite(x) and x > 0 for x in (o, h, low, close)):
+                raise ValueError("invalid OHLC")
+            if h < max(o, low, close) or low > min(o, h, close):
+                raise ValueError("inconsistent OHLC")
+            try:
+                volume = float(row[5]) if len(row) > 5 and row[5] is not None else 0.0
+            except (TypeError, ValueError):
+                volume = 0.0
+            if not math.isfinite(volume) or volume < 0:
+                volume = 0.0
+                invalid_volume += 1
+            clean[stamp] = [stamp, o, h, low, close, volume]
+        except (TypeError, ValueError, OverflowError, OSError, IndexError):
+            rejected += 1
+            if day is None:
+                try:
+                    raw_ts = float(row[0])
+                    if math.isfinite(raw_ts) and raw_ts > 0:
+                        day = clock.from_ts(int(raw_ts)).date()
+                except Exception:
+                    day = None
+            if day is None:
+                invalid_unknown += 1
+            else:
+                invalid_days.add(day)
+    return [clean[k] for k in sorted(clean)], rejected, invalid_days, invalid_unknown, invalid_volume
 
 def minute_of_day(t):
     """Minutes after midnight, India time, of a timestamp."""
@@ -55,6 +104,8 @@ def rsi(close, n=14):
 
 
 def true_range(high, low, close):
+    if not high:
+        return []
     out = [high[0] - low[0]]
     for i in range(1, len(close)):
         out.append(max(high[i] - low[i], abs(high[i] - close[i - 1]), abs(low[i] - close[i - 1])))
@@ -147,7 +198,7 @@ class Series:
     """One symbol's candles with every indicator the strategies use, worked out once."""
 
     def __init__(self, candles, vol_days=10):
-        cs = sorted(candles, key=lambda c: c[0])
+        cs, self.invalid_candles, self.invalid_candle_days, self.invalid_unknown_candles, self.invalid_volume_candles = normalize_candles(candles)
         self.t = [c[0] for c in cs]
         self.o = [c[1] for c in cs]
         self.h = [c[2] for c in cs]

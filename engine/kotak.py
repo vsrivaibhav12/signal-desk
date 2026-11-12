@@ -15,7 +15,9 @@ Run  python -m engine.kotak --check  to test every assumption below against your
 """
 import csv
 import io
+import math
 import os
+import re
 import sys
 import time
 from datetime import date, datetime, time as dtime, timedelta, timezone
@@ -64,6 +66,12 @@ INDEX_ALIASES = {
 }
 
 
+# If no alias matches exactly, a row whose names contain all of these words is taken as the index.
+INDEX_WORDS = {"NSE:MIDCPNIFTY-INDEX": ("midcap", "select"), "NSE:FINNIFTY-INDEX": ("fin", "service"),
+               "NSE:NIFTYBANK-INDEX": ("nifty", "bank"), "BSE:SENSEX-INDEX": ("sensex",)}
+SHARE_SUFFIX = re.compile(r"-[A-Z0-9]{1,3}$")        # -EQ, -BE, -BL ... : an ordinary share, not an index
+
+
 def _norm(x):
     return "".join(ch for ch in str(x).lower() if ch.isalnum())
 
@@ -73,7 +81,24 @@ def _num(x):
         v = float(str(x).replace(",", ""))
     except (TypeError, ValueError):
         return None
-    return v
+    return v if math.isfinite(v) else None
+
+
+def _quote_time(raw, now=None, max_future_s=10):
+    """Kotak's 'lstup_time' as epoch seconds, or None if it cannot be trusted.
+
+    Kotak has historically returned both Unix- and 1980-based timestamps. Try both
+    interpretations, but never accept a timestamp materially ahead of our clock:
+    a negative quote age must not make a future quote look exceptionally fresh.
+    """
+    v = _num(raw)
+    if v is None or v <= 0:
+        return None
+    now = time.time() if now is None else now
+    for c in (v, v + EPOCH_1980_OFFSET):
+        if -max_future_s <= now - c <= 36 * 3600:
+            return int(c)
+    return None
 
 
 def _epoch(stamp):
@@ -152,6 +177,9 @@ class Kotak:
         self._pause_until = 0.0
         self._refusals = 0
         self._healed = set()
+        self.stats = {}                                # method -> counts, so the request load is measured, not guessed
+        self.since = time.time()
+        self._dead = set()                           # indices Kotak has no working name for
         self._index = dict(DEFAULT_INDEX)
         for k, v in (index_tokens or {}).items():
             self._index[k] = v
@@ -198,9 +226,23 @@ class Kotak:
     def _accepted(self, kind):
         self._refusals = 0
         self._calm[kind] += 1
-        if self._calm[kind] >= 40:                   # a quiet stretch: speed up a little, never past the ceiling
-            self._rate[kind] = min(RATE[kind][2], self._rate[kind] * 1.15)
+        if self._calm[kind] >= 25:                   # a quiet stretch: speed up a little, never past the ceiling
+            self._rate[kind] = min(RATE[kind][2], self._rate[kind] * 1.2)
             self._calm[kind] = 0
+
+    def _count(self, method, outcome, started):
+        x = self.stats.setdefault(method, {"calls": 0, "ok": 0, "error": 0, "refused": 0, "ms": 0.0})
+        x["calls"] += 1
+        x[outcome] += 1
+        x["ms"] += (time.monotonic() - started) * 1000
+
+    def stats_snapshot(self):
+        """Requests made to Kotak since this run began, by kind of call, with failures and average time."""
+        by = {m: {"calls": x["calls"], "ok": x["ok"], "errors": x["error"], "refused": x["refused"],
+                  "avg_ms": round(x["ms"] / x["calls"]) if x["calls"] else 0} for m, x in sorted(self.stats.items())}
+        return {"since": datetime.fromtimestamp(self.since, IST).isoformat(timespec="seconds"),
+                "total": sum(x["calls"] for x in self.stats.values()), "by_method": by,
+                "history_rate": round(self._rate["history"], 2), "cooling": round(self.cooling())}
 
     def _call(self, method, **kwargs):
         """One SDK call with pacing, retries and the errors turned into ours."""
@@ -208,11 +250,13 @@ class Kotak:
         last = None
         for attempt in range(3):
             self._pace(kind)
+            t0 = time.monotonic()
             try:
                 body = getattr(self.client, method)(**kwargs)
             except KotakError:
                 raise
             except Exception as e:                          # the SDK raises its own exception classes
+                self._count(method, "error", t0)
                 name = type(e).__name__
                 if name in ("AuthenticationError", "InvalidSessionError"):
                     raise AuthError(str(e)[:160]) from e
@@ -225,10 +269,13 @@ class Kotak:
                 continue
             problem = _problem(body)
             if problem is None:
+                self._count(method, "ok", t0)
                 self._accepted(kind)
                 return body
             code, message = problem
-            if code == 429 or "too many" in message.lower() or "rate limit" in message.lower():
+            limited = code == 429 or "too many" in message.lower() or "rate limit" in message.lower()
+            self._count(method, "refused" if limited else "error", t0)
+            if limited:
                 retry = _num(((body.get("rateLimit") or {}).get("Retry-After"))) if isinstance(body, dict) else None
                 self._refused(kind, retry)
                 last = KotakError("Kotak is limiting requests (rate limit exceeded)")
@@ -312,41 +359,76 @@ class Kotak:
         return seg, tok
 
     # ── index names ──────────────────────────────────────────
-    def index_rows(self, segment):
-        """Index entries in a cash-market list: the rows whose token is a name, not a number."""
+    def index_listing(self, segment):
+        """(trading symbol, token) of the rows that look like indices (not ordinary shares) in a cash-market list."""
         out = []
         for r in read_rows(self.csv_text(segment)):
-            tok = r.get("pSymbol") or ""
-            if tok and not tok.isdigit():
-                out.append(tok)
+            names = [r.get("pTrdSymbol") or "", r.get("pSymbolName") or "", r.get("pSymbol") or ""]
+            if any(SHARE_SUFFIX.search(n.upper()) for n in names[:1] if n):
+                continue
+            blob = _norm(" ".join(names))
+            if any(w in blob for w in ("nifty", "sensex", "midcap", "bank")):
+                out.append((names[0] or names[1], r.get("pSymbol") or ""))
         return out
 
-    def heal_index(self, symbol):
-        """Finds an index's real name in Kotak's list when the built-in one is refused. Returns the new token or None."""
+    def index_candidates(self, symbol):
+        """Names or tokens Kotak might use for this index, best guess first (never the one already refused)."""
         seg, current = self._resolved.get(symbol) or self.resolve(symbol)
-        words = INDEX_ALIASES.get(symbol)
-        if not words or symbol in self._healed:
+        words, loose = INDEX_ALIASES.get(symbol, []), INDEX_WORDS.get(symbol)
+        found = []
+        for r in read_rows(self.csv_text(seg)):
+            names = [r.get("pTrdSymbol") or "", r.get("pSymbolName") or "", r.get("pDesc") or "", r.get("pSymbol") or ""]
+            if names[0] and SHARE_SUFFIX.search(names[0].upper()):
+                continue
+            norms = [_norm(n) for n in names]
+            exact = any(n in words for n in norms)
+            near = bool(loose) and all(w in " ".join(norms) for w in loose)
+            if exact or near:
+                for tok in (r.get("pSymbol"), r.get("pTrdSymbol"), r.get("pSymbolName")):
+                    if tok and tok != current and tok not in found:
+                        found.append(tok)
+        return found
+
+    def heal_index(self, symbol, retry):
+        """The built-in name for an index was refused. Tries the names Kotak's own list gives for it.
+
+        `retry` is called as retry() and returns the history, or raises KotakError. Returns that history, or None.
+        """
+        seg, current = self._resolved.get(symbol) or self.resolve(symbol)
+        if symbol in self._healed:
             return None
         self._healed.add(symbol)
-        names = self.index_rows(seg)
-        for tok in names:
-            if _norm(tok) in words and tok != current:
-                self.log(f"  {symbol}: Kotak calls this index '{tok}', not '{current}'. Using that.")
-                self._resolved[symbol] = (seg, tok)
-                self._reverse[(seg, tok.lower())] = symbol
-                return tok
-        self.log(f"  {symbol}: '{current}' was refused and no match was found. Kotak's index names: {', '.join(names[:40])}")
+        for tok in self.index_candidates(symbol):
+            self._resolved[symbol] = (seg, tok)
+            try:
+                got = retry()
+            except KotakError as e:
+                if "invalid neosymbol" in str(e).lower():
+                    continue
+                raise
+            self.log(f"  {symbol}: Kotak calls this index '{tok}', not '{current}'. Using that.")
+            self._reverse[(seg, tok.lower())] = symbol
+            return got
+        self._resolved[symbol] = (seg, current)
+        shown = ", ".join(f"{n} ({t})" for n, t in self.index_listing(seg)[:40])
+        self.log(f"  {symbol}: Kotak refused '{current}' and nothing in its list matched. Names that look like indices: {shown or 'none'}."
+                 f" Put the right one under broker: kotak: index_tokens: in config.yaml. This index is skipped from now on.")
         return None
 
     # ── prices ───────────────────────────────────────────────
     def history(self, symbol, resolution, day_from, day_to):
+        if symbol in self._dead:
+            raise KotakError("Invalid neosymbol (no working name was found for this index)")
         try:
             return self._history(symbol, resolution, day_from, day_to)
         except KotakError as e:
-            if ("invalid neosymbol" in str(e).lower() and "|" not in symbol and symbol.upper().endswith("-INDEX")
-                    and self.heal_index(symbol)):
-                return self._history(symbol, resolution, day_from, day_to)
-            raise
+            if not ("invalid neosymbol" in str(e).lower() and "|" not in symbol and symbol.upper().endswith("-INDEX")):
+                raise
+            got = self.heal_index(symbol, lambda: self._history(symbol, resolution, day_from, day_to))
+            if got is None:
+                self._dead.add(symbol)
+                raise
+            return got
 
     def _history(self, symbol, resolution, day_from, day_to):
         seg, tok = self.resolve(symbol)
@@ -385,6 +467,7 @@ class Kotak:
             batch = want[i:i + 50]
             body = self._call("quotes", instrument_tokens=[{"instrument_token": t, "exchange_segment": g} for _, g, t in batch],
                               quote_type="all")
+            received_at = int(time.time())
             if not isinstance(body, list):
                 continue
             for n, q in enumerate(body):
@@ -396,8 +479,21 @@ class Kotak:
                 lp = _num(q.get("ltp"))
                 if key is None or not lp:
                     continue
-                ohlc = q.get("ohlc") or {}
-                out[key] = {"lp": lp, "prev_close": _num(ohlc.get("close")), "volume": _num(q.get("last_volume"))}
+                ohlc, depth = q.get("ohlc") or {}, q.get("depth") or {}
+                best = lambda side: ((depth.get(side) or [{}])[0] or {})
+                bid, ask = best("buy"), best("sell")
+                raw_stamp = q.get("lstup_time")
+                stamp = _quote_time(raw_stamp, received_at)
+                # A missing exchange timestamp may use local receipt time as a
+                # labelled fallback. A supplied but unparseable/out-of-range
+                # timestamp is not the same thing: do not silently bless it.
+                stamp_invalid = raw_stamp not in (None, "") and stamp is None
+                out[key] = {"lp": lp, "prev_close": _num(ohlc.get("close")), "volume": _num(q.get("last_volume")),
+                            "ts": stamp, "received_ts": received_at, "ts_invalid": stamp_invalid,
+                            "ts_source": "invalid" if stamp_invalid else "exchange" if stamp is not None else "response",
+                            "bid": _num(bid.get("price")) or None, "ask": _num(ask.get("price")) or None,
+                            "bid_qty": _num(bid.get("quantity")), "ask_qty": _num(ask.get("quantity")),
+                            "oi": _num(q.get("open_int"))}
         return out
 
     def probe(self):
@@ -542,8 +638,9 @@ def check(log=print):
         return f"{len(names) - len(miss)} of {len(names)} shares matched"
     step("Nifty 200 shares found in the contract list", stocks)
 
-    step("index names in Kotak's cash lists", lambda: "; ".join(
-        f"{seg}: {', '.join(k.index_rows(seg)[:30]) or 'none found'}" for seg in ("nse_cm", "bse_cm")), essential=False)
+    step("index-like names in Kotak's cash lists", lambda: "; ".join(
+        f"{seg}: " + (", ".join(f"{n} ({t})" for n, t in k.index_listing(seg)[:40]) or "none found")
+        for seg in ("nse_cm", "bse_cm")), essential=False)
 
     today = clock.now().date()
     for sym in list(DEFAULT_INDEX) + ["NSE:RELIANCE-EQ", "NSE:HDFCBANK-EQ"]:
@@ -551,7 +648,8 @@ def check(log=print):
             q = k.quotes([sym]).get(sym)
             if not q:
                 raise KotakError("no price returned")
-            return f"last {q['lp']}, previous close {q['prev_close']}"
+            age = "unknown" if not q.get("ts") else f"{time.time() - q['ts']:.0f}s old"
+            return f"last {q['lp']}, previous close {q['prev_close']}, quote {age}, bid {q.get('bid')} ask {q.get('ask')}"
         step(f"price for {sym}", quote, essential=sym in ("NSE:NIFTY50-INDEX", "NSE:RELIANCE-EQ"))
 
         def hist(sym=sym):
@@ -560,6 +658,14 @@ def check(log=print):
                 raise KotakError("no 5-minute candles in the last week")
             return f"{len(c)} candles, last at {clock.from_ts(c[-1][0]).strftime('%d %b %H:%M')}"
         step(f"5-minute history for {sym}", hist, essential=sym in ("NSE:NIFTY50-INDEX", "NSE:RELIANCE-EQ"))
+
+    def daily():
+        c = k.history("NSE:RELIANCE-EQ", "D", today - timedelta(days=25), today - timedelta(days=1))
+        vols = [x[5] for x in c if len(x) > 5 and x[5]]
+        if len(vols) < 3:
+            raise KotakError("fewer than 3 daily candles with volume (the volume baseline needs them)")
+        return f"{len(c)} daily candles, average volume {sum(vols[-10:]) / len(vols[-10:]):,.0f}"
+    step("daily candles with volume (for the volume baseline)", daily)
 
     def fut(root_name, name):
         f = master.nearest_future(name, root_name, today)

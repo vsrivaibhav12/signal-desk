@@ -14,6 +14,7 @@ import time
 import yaml
 
 from .. import clock
+from ..schema import SCHEMA
 from . import report
 from .data import load_fyers, load_yahoo
 from .luck import luck_check
@@ -145,6 +146,7 @@ def main():
         log("  luck check (same rules on shuffled prices)")
         luck = luck_check(cfg, bars, days, bt, main_trades, runs=a.luck, fine_when_open=fine, log=log)
     result = {
+        "schema": SCHEMA,
         "generated": clock.now().isoformat(timespec="minutes"), "source": source,
         "period": {"from": days[0].isoformat(), "to": days[-1].isoformat(), "days": len(days)},
         "universe": {"stocks": n_stocks, "stocks_missing": len([m for m in missing if m.endswith("-EQ")]),

@@ -4,7 +4,7 @@
 #  Lines starting with # are notes for you. The tool ignores them.
 # ─────────────────────────────────────────────────────────────
 
-# One ceiling shared by the options/cash rulebook and the eleven-strategy paper desk.
+# One ceiling shared by the options/cash rulebook and the three-strategy intraday paper desk.
 # Each engine also has its own tighter sub-limits below.
 portfolio:
   enabled: true
@@ -50,6 +50,48 @@ broker:
 # News: scans free headlines for Nifty 200 stocks and shows why a stock may be moving.
 news:
   enabled: true
+
+# Results: which Nifty 200 companies report, read from NSE's public calendar. They go first on the watchlist, from the day
+# before their results until the day after, so the move is anticipated, not chased.
+results:
+  enabled: true
+  # extra:                       # a result NSE's calendar missed
+  #   - {symbol: HDFCBANK, date: "2026-11-20"}
+
+# Watchlist and load. Only the watchlist gets candles and strategy scans: the indices, open trades, results, news, and any share
+# that a cheap quotes scan finds on unusual volume or moving a lot.
+watch:
+  min_volume_ratio: 1.5          # volume this many times normal for the time of day promotes a share
+  min_move_pct: 1.5              # or a move this big from yesterday's close
+  max_promoted: 30               # at most this many promoted shares are scanned each candle
+  max_quote_age_s: 600           # stale exchange quotes are not used to promote a share
+  max_future_skew_s: 10          # reject broker timestamps materially ahead of our clock
+
+# Options scanner: calls and puts on each index, shown on the dashboard with the contract, stop and target.
+options_scan:
+  min_score: 4                   # of 5 points. Lower it to see more ideas, raise it to see fewer
+  target_r: 1.5                  # target = premium + this many times the risk
+  strike: ATM                    # ATM or ITM1
+  max_cost_ratio: 0.25           # costs, including the bid-ask spread, may be at most this share of the risk
+  max_spread_pct: 5.0            # skip a contract whose bid-ask spread is wider than this % of its price
+  max_quote_age_s: 120           # skip a contract whose price is older than this
+  max_data_age_s: 600            # index candles older than this are not trusted
+  min_open_interest: 1000        # avoid contracts with negligible open interest; tune per market if needed
+
+# What reaches Telegram. Everything not listed as true stays on the dashboard only.
+alerts:
+  brief: true                    # one message at the open: results, news, what is on the watchlist
+  trades: true                   # a share trade worth taking
+  exits: true                    # how those trades ended
+  options: true                  # a call or put idea worth taking, and the options desk's own entries and exits
+  summary: true                  # one message after the close
+  faults: true                   # prices not arriving; the same fault is sent once an hour
+  movers: false                  # trend-setter notes
+  news: false                    # news digests
+  info: false                    # started, restarted, setup check
+
+# Exchange holidays are read from NSE. Add any it misses (YYYY-MM-DD).
+holidays: []
 
 # Days on which the tool should not take new trades (RBI policy, Budget, etc).
 # Format: "YYYY-MM-DD". You can also just send the word  skip  to your Telegram bot on the day.
@@ -191,7 +233,7 @@ markets:
     max_range_pct: 1.5       # natural gas swings more than the others, so it gets a wider limit
 
 stocks:
-  enabled: true
+  enabled: false             # off: the strategy desk below now covers shares, with results and volume built in. true = also run the older stock rulebook
   range: ["09:15", "09:30"]
   entry: ["09:30", "11:30"]
   exit_by: "15:00"
@@ -204,7 +246,7 @@ stocks:
   premium_stop_pct: 30       # used only when trade_as is option
   min_days_to_expiry: 5      # used only when trade_as is option (avoids expiry week)
 
-# Strategy desk: eleven intraday strategies (six from the Flattrade article, two Bollinger, two EMA) that run
+# Strategy desk: three intraday strategies (opening range breakout, opening drive, EMA pullback) chosen from research. They run
 # at the same time on the Nifty 200 shares and five indices. Each is tested on past prices and followed live.
 # Every trade is a paper trade: shares bought or sold intraday, or one lot of an index future. Nothing is ordered.
 strategies:
@@ -220,6 +262,7 @@ strategies:
   #   need_market: true        # Nifty must be on the same side of its VWAP as the trade
   #   no_conflict: true        # no other strategy already on the opposite side of the same stock
   exit_by: "15:15"             # every trade is closed by this time
+  max_candle_age_s: 600         # selected shares with older last-completed 5m candles are skipped
   risk_per_trade: 500          # rupees risked on one share trade (this sets the quantity)
   max_position_value: 40000    # never size a share position above this many rupees
   max_trades_per_symbol_day: 0 # 0 = no limit

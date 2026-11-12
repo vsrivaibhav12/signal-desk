@@ -252,15 +252,16 @@ def market_series(series, insts):
     return None
 
 
-def run_all(series, insts, cfg, days=None, live_day=None, only=None, log=print, chart_from=None):
+def run_all(series, insts, cfg, days=None, live_day=None, only=None, log=print, chart_from=None, strategies=None):
     """series: {symbol: Series}. Returns {strategy id: [trades]}."""
-    res = {s["id"]: [] for s in STRATEGIES if not only or s["id"] in only}
+    pool = strategies or STRATEGIES
+    res = {s["id"]: [] for s in pool if not only or s["id"] in only}
     mkt = market_series(series, insts)
     for n, (sym, S) in enumerate(series.items()):
         inst = insts.get(sym)
         if not inst:
             continue
-        for strat in STRATEGIES:
+        for strat in pool:
             if strat["id"] in res:
                 res[strat["id"]] += simulate(S, inst, strat, cfg, days, live_day, chart_from, mkt)
         if (n + 1) % 50 == 0:

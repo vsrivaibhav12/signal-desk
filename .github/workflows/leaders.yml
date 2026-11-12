@@ -1,0 +1,59 @@
+name: Leaders
+
+# Each weekday evening, after NSE publishes its daily price file, rates every liquid share's relative strength (the percentile of its
+# weighted 3/6/9/12-month return), lists the leaders (strength 80+, above the 200-day average) and measures market health (the share of
+# shares above their 50-day and 200-day averages). One download a day; no broker requests. The Trade engine reads the result and flags
+# leaders on the watchlist, in alerts and in the morning brief. The first run downloads about 300 sessions of files (a few minutes).
+on:
+  schedule:
+    - cron: "45 13 * * 1-5"      # 7:15 pm India time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: leaders
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open the data folder
+        run: |
+          git config --global user.name "signal-desk"
+          git config --global user.email "signal-desk@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" data > /dev/null; then
+            git clone --quiet --depth 3 --branch data --single-branch "$REMOTE" _data
+          else
+            mkdir _data && cd _data && git init --quiet -b data && git remote add origin "$REMOTE"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install --quiet -r requirements.txt
+
+      - name: Reuse the NSE daily files from earlier runs
+        uses: actions/cache@v4
+        with:
+          path: _bhav
+          key: nse-daily-files-v1-${{ github.run_id }}
+          restore-keys: nse-daily-files-v1-
+
+      - name: Download the missing NSE daily files (about 14 months)
+        run: python -m engine.bhav --cache _bhav --from "$(date -d '430 days ago' +%F)"
+
+      - name: Rate relative strength and publish the leaders
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python -m engine.leaders --bhav _bhav --out _data/leaders.json

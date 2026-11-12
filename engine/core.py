@@ -51,7 +51,7 @@ class Engine:
         self.cfg = cfg
         self.broker = broker
         self.master = master
-        self.notify = notify
+        self._notify = notify
         self.feed = feed
         self.portfolio_provider = portfolio_provider or (lambda: [])
         self.dirty = False
@@ -80,6 +80,13 @@ class Engine:
         st["done"] = True
         st["note"] = text
         self._log(now, text)
+
+    def notify(self, text, kind="options"):
+        """Sends an alert. `kind` lets the alert policy (engine/alerts.py) decide whether it is wanted; a plain sender ignores it."""
+        if getattr(self._notify, "takes_kind", False):
+            self._notify(text, kind)
+        else:
+            self._notify(text)
 
     def _candles(self, symbol, start):
         key = (symbol, ts(start))
@@ -120,7 +127,7 @@ class Engine:
             traceback.print_exc()
             if st["errors"] == 5:
                 self.notify(f"⚠️ I have not been able to read prices for {name} for 5 minutes. "
-                            f"I will keep trying.\nReason: {e}")
+                            f"I will keep trying.\nReason: {e}", "faults")
                 self._log(now, f"Trouble reading prices for {name}: {e}", "warn")
 
     # ── one pass over everything ─────────────────────────────
@@ -162,7 +169,7 @@ class Engine:
                     lines.append(f"• <b>{html.escape(i['name'])}</b> ({html.escape(i['tag'])}): "
                                  f"{html.escape(i['title'])} [{html.escape(i['source'])}]")
             self.notify("📰 <b>Stocks in the news today</b>\n" + "\n".join(lines) +
-                        "\n\nThese are only headlines. A stock still has to pass the scan and the rules to become a trade.")
+                        "\n\nThese are only headlines. A stock still has to pass the scan and the rules to become a trade.", "news")
             self._log(now, f"News scan: {len(seen)} Nifty 200 stocks are in today's headlines.")
 
     def _news_for(self, symbol):
@@ -198,7 +205,7 @@ class Engine:
                 self._event(t, now, "UNRESOLVED", "Paper position retained as unresolved; no exit price or P&L was invented.")
                 self.notify(f"⚠️ <b>{t['name']}: paper trade unresolved</b>\n"
                             "The tool rolled to a new day without a verified option exit price. "
-                            "The position is retained in the trade log without realised P&L.")
+                            "The position is retained in the trade log without realised P&L.", "faults")
             else:
                 self._close(t, None, None, now, t.get("last_price", t["entry_price"]),
                             "Closed at the last known underlying price because the tool was offline at exit time")
@@ -341,7 +348,7 @@ class Engine:
         self._log(now, "Stock watchlist: " + "; ".join(
             f"{p['name']} {'up' if p['chg'] > 0 else 'down'} {abs(p['chg'])}% on {p['volx']}x volume" for p in picks))
         self.notify("👀 <b>Stock watchlist for today</b>\n" + "\n".join(lines) +
-                    "\nI will alert you if any of them breaks out with the market's support.")
+                    "\nI will alert you if any of them breaks out with the market's support.", "news")
 
     # ── the rulebook for one thing being watched ─────────────
     def _tick_unit(self, u, st, disc, now):
@@ -614,7 +621,7 @@ class Engine:
                     tr["quote_warning_sent"] = True
                     self.notify(f"⚠️ <b>{tr['name']}: option quote unavailable</b>\n"
                                 f"The last premium ₹{num(tr['last_price'])} is stale. The premium stop cannot be verified; "
-                                f"this paper trade is marked UNMONITORED until a fresh quote returns.")
+                                f"this paper trade is marked UNMONITORED until a fresh quote returns.", "faults")
                     self._log(now, f"{tr['name']}: option quote unavailable; premium-based trade management paused.", "warn")
                 self.dirty = True
                 return

@@ -163,6 +163,7 @@ def main():
     # 7c. news reaches the watchlist, the alert and the trade's reasons
     cfgn = copy.deepcopy(base)
     cfgn["markets"] = only(["NIFTY"])
+    cfgn["stocks"]["enabled"] = True                 # off by default now, but this older rulebook path is still supported
     hit = False
     for seed in range(1, 40):
         plan = {"NIFTY": "up", "stocks": {"TATASTEEL": ("up", 1.9, 3.0)}}

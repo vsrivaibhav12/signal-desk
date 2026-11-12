@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Signal Desk</title>
+<title>Signal Desk 4.0.0</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -254,13 +254,146 @@ details.blk[open]>summary::after{content:"\2212"}
 .blk-body{padding:0 16px 16px}
 .blk-body .sec-head{display:none}
 .take .what small{white-space:normal;overflow:visible}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:8px}
+.rcol{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.rcol h3{margin:0 0 2px;font:600 1rem var(--body)} .rcol p{margin:4px 0}
+.opt{padding:12px 14px;margin-bottom:10px} .opt .idea{margin:6px 0}
+.opt.take{border-left:5px solid var(--gain)}
+
+
+.overview-blockers{margin-top:13px;padding:9px 11px;border:1px solid var(--live);background:var(--live-soft);border-radius:9px;font-size:.78rem;color:var(--ink)}
+.overview-blockers button{border:0;background:transparent;color:var(--accent);font-weight:700;padding:0 0 0 5px;font-size:inherit}
+
+/* Signal Desk 4.0 — decision cockpit */
+:root{
+  --paper:#F2F5F7; --surface:#FFFFFF; --sunk:#E9EFF1; --line:#D7E0E3;
+  --ink:#12252B; --muted:#5B7076; --gain:#087B60; --gain-soft:#E0F3EC;
+  --loss:#B93838; --loss-soft:#FBE8E6; --live:#986600; --live-soft:#FFF2D7; --accent:#087F78;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0D171B;--surface:#142228;--sunk:#1B3037;--line:#2A4249;--ink:#E7F0F1;--muted:#9CB0B4;
+  --gain:#55D7AC;--gain-soft:#153B32;--loss:#FF8B82;--loss-soft:#482725;--live:#F3C66D;--live-soft:#403319;--accent:#5DC8BD;
+}}
+:root[data-theme="dark"]{--paper:#0D171B;--surface:#142228;--sunk:#1B3037;--line:#2A4249;--ink:#E7F0F1;--muted:#9CB0B4;--gain:#55D7AC;--gain-soft:#153B32;--loss:#FF8B82;--loss-soft:#482725;--live:#F3C66D;--live-soft:#403319;--accent:#5DC8BD;color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
+body{background:var(--paper);color:var(--ink)}
+.wrap{max-width:1440px;padding:18px clamp(14px,2.4vw,34px) 64px}
+.top{padding:4px 0 10px;align-items:center}
+.brand{display:flex;align-items:center;gap:10px;font-size:1.35rem;letter-spacing:-.03em}
+.brand:before{content:"";width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,#0B8A80,#135E67);box-shadow:0 5px 14px rgba(8,127,120,.22)}
+.brand-version{font:600 .7rem var(--body);letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);padding:3px 7px;border-radius:999px}
+.top-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.top-actions{display:flex;gap:6px}
+.top-actions .chip{padding:5px 10px;font-size:.78rem}
+.pulse{font-size:.82rem}
+#fresh{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 11px;margin:4px 0 0;font-size:.79rem}
+.jump{margin:12px calc(clamp(14px,2.4vw,34px)*-1) 18px;padding:9px clamp(14px,2.4vw,34px);background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);gap:7px}
+.jump .chip{font-size:.82rem;padding:6px 13px;background:transparent}
+.jump .chip:hover,.top-actions .chip:hover{border-color:var(--accent);color:var(--accent)}
+section{scroll-margin-top:76px}
+.overview{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,.8fr);gap:12px;margin:16px 0 28px}
+.overview-main,.overview-side{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:clamp(18px,2.4vw,30px)}
+.overview-main{position:relative;overflow:hidden;isolation:isolate}
+.overview-main:after{content:"";position:absolute;width:360px;height:360px;border-radius:50%;right:-155px;top:-190px;background:radial-gradient(circle,rgba(8,127,120,.13),transparent 68%);z-index:-1}
+.eyebrow{font:700 .68rem var(--body);letter-spacing:.13em;color:var(--accent);text-transform:uppercase}
+.eyebrow span{padding:0 5px;color:var(--muted)}
+.overview-title{font:700 clamp(2rem,4vw,3.25rem)/1.05 var(--display);letter-spacing:-.045em;margin-top:12px}
+.overview-copy{max-width:58ch;color:var(--muted);margin:10px 0 16px;font-size:.96rem}
+.decision-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.83rem;color:var(--muted)}
+.decision-row b{color:var(--ink)}
+.decision-divider{color:var(--line)}
+.status-dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.status-dot.good{background:var(--gain);box-shadow:0 0 0 4px var(--gain-soft)}
+.status-dot.warn{background:var(--live);box-shadow:0 0 0 4px var(--live-soft)}
+.overview-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+.primary-action,.secondary-action{border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:.85rem;font-weight:700}
+.primary-action{background:#087F78;color:#fff;border-color:#087F78}
+.primary-action:hover{background:#066B65}
+.secondary-action{background:var(--surface);color:var(--ink)}
+.overview-side{display:grid;grid-template-columns:1fr;align-content:stretch;gap:0;padding:8px 20px}
+.side-stat{padding:13px 0;border-bottom:1px solid var(--line)}
+.side-stat:last-child{border-bottom:0}
+.side-stat span,.side-stat small{display:block;color:var(--muted);font-size:.75rem}
+.side-stat b{display:block;font:700 1.35rem var(--display);margin:3px 0;letter-spacing:-.02em}
+.side-stat small{font-size:.72rem}
+.kpi-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.kpi-grid .kpi{font:inherit;text-align:left;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:13px 15px;display:flex;flex-direction:column;align-items:flex-start;transition:border-color .15s,transform .15s}
+.kpi-grid .kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
+.kpi-grid .kpi span{font-size:.75rem;color:var(--muted)}
+.kpi-grid .kpi b{font:700 1.55rem var(--display);letter-spacing:-.025em;margin:4px 0 1px;white-space:nowrap}
+.kpi-grid .kpi small{font-size:.72rem;color:var(--muted);line-height:1.35}
+.sec-head{margin:30px 0 12px;align-items:center}
+.sec-head h2{font-size:1.42rem;letter-spacing:-.025em}
+.card{border-radius:14px}
+.market-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(250px,.8fr);gap:12px}
+.market-main,.market-gates{padding:16px}
+.posture-row{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}
+.posture{font:700 1.3rem var(--display);letter-spacing:-.02em;margin-top:3px}
+.posture.good{color:var(--gain)}.posture.bad{color:var(--loss)}.posture.warn{color:var(--live)}
+.posture-note{font-size:.75rem;text-align:right}
+.mkgrid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+.mk{border:1px solid var(--line);background:var(--sunk);padding:10px 12px}
+.mk-title{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.intraday-strip{display:flex;gap:8px 20px;flex-wrap:wrap;margin:13px 0 5px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:.78rem;color:var(--muted)}
+.intraday-strip b{color:var(--ink);font-size:.95rem}
+.breadth-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.breadth-item{min-width:0;border:1px solid var(--line);border-radius:10px;padding:10px}
+.breadth-item span{display:block;font-size:.72rem;color:var(--muted)}
+.breadth-item b{display:block;font:700 1.12rem var(--display);margin:3px 0}
+.breadth-item i{display:block;height:5px;border-radius:4px;background:var(--sunk);overflow:hidden}
+.breadth-item em{display:block;height:100%;background:var(--accent);border-radius:4px}
+.market-gates h3{margin-bottom:10px}
+.market-gates .gate{padding:8px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.market-gates .gate:last-of-type{border-bottom:0}
+.rgrid.event-grid{grid-template-columns:repeat(3,minmax(0,1fr));margin:0 0 17px}
+.event-grid .rcol{padding:12px 14px;border-radius:12px}
+.event-grid .rcol h3{font-size:.91rem}
+.event-grid .rcol p{font-size:.82rem}
+.watchlist-subhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:19px 0 9px}
+.watchlist-subhead .muted{font-size:.75rem;font-weight:400}
+.watch-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:10px 0}
+.searchbox{display:flex;gap:8px;align-items:center;min-width:min(100%,280px);flex:1;max-width:460px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:0 11px;color:var(--muted)}
+.searchbox input{width:100%;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:.85rem;padding:9px 0}
+.searchbox input:focus{outline:0}
+.sortbox{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.78rem}
+.sortbox select{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:8px 10px;font:inherit}
+.watch-filters{margin:9px 0}
+.watch-filters .chip{font-size:.76rem;padding:5px 11px}
+.watch-meta,.watch-foot{display:flex;justify-content:space-between;gap:8px 18px;flex-wrap:wrap;color:var(--muted);font-size:.73rem;margin:8px 1px}
+.table-card{padding:4px 0}
+.table-card table{min-width:760px}
+.table-card tbody tr:hover{background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.watch-foot{padding-top:5px;border-top:1px solid var(--line)}
+#more{margin-top:28px}
+#more .sec-head{margin-top:34px}
+#more details.blk{margin-bottom:8px}
+footer{border-top:1px solid var(--line);padding-top:16px;margin-top:38px}
+body.compact .wrap{padding-top:10px;padding-bottom:36px}
+body.compact .overview{gap:8px;margin:8px 0 18px}
+body.compact .overview-main{padding:17px}
+body.compact .overview-side{padding:4px 14px}
+body.compact .side-stat{padding:8px 0}
+body.compact .kpi-grid .kpi{padding:9px 12px}
+body.compact .sec-head{margin:20px 0 8px}
+body.compact .card{padding:12px}
+body.compact .jump{margin-top:6px;padding-top:6px;padding-bottom:6px}
+body.compact .rgrid{gap:7px}
+@media(max-width:900px){.overview{grid-template-columns:minmax(0,1.4fr) minmax(200px,.8fr)}.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.market-layout{grid-template-columns:1fr}}
+@media(max-width:650px){
+  .wrap{padding:12px 12px 40px}.top{align-items:flex-start}.top-right{width:100%;justify-content:space-between;gap:8px}.top-actions{gap:4px}.top-actions .chip{padding:4px 8px;font-size:.72rem}
+  .overview{grid-template-columns:1fr;gap:8px;margin-top:8px}.overview-main{padding:17px}.overview-side{grid-template-columns:repeat(3,minmax(0,1fr));padding:5px 12px;gap:10px}.side-stat{border-bottom:0;padding:8px 0}.side-stat b{font-size:1.05rem}.side-stat small{font-size:.65rem}
+  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.kpi-grid .kpi{padding:10px 11px}.kpi-grid .kpi b{font-size:1.3rem}.kpi-grid .kpi small{font-size:.67rem}
+  .jump{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}.rgrid.event-grid{grid-template-columns:1fr}.breadth-grid{gap:6px}.breadth-item{padding:8px}.breadth-item span{font-size:.66rem}.breadth-item b{font-size:1rem}.posture-row{align-items:flex-start}.posture-note{max-width:100px}.watch-toolbar{align-items:stretch}.sortbox{justify-content:space-between}.sortbox select{flex:1}.searchbox{max-width:none}
+}
+@media(prefers-reduced-motion:reduce){.kpi-grid .kpi{transition:none}}
+
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand">Signal Desk</div>
-    <div class="pulse" id="pulse"><span class="dot"></span><span>Loading</span></div>
+    <div class="brand">Signal Desk <span class="brand-version">4.0.0</span></div>
+    <div class="top-right"><div class="pulse" id="pulse"><span class="dot"></span><span>Loading</span></div><div class="top-actions"><button class="chip" data-theme-toggle="1" id="themeToggle" aria-label="Change dashboard theme">Theme: Auto</button><button class="chip" data-compact-toggle="1" id="compactToggle" aria-pressed="false">Compact: Off</button></div></div>
   </header>
   <div id="banner"></div>
   <div id="fresh" class="fresh"></div>
@@ -284,6 +417,8 @@ const dataRepository = () => {
 const BT_DEMO = /*__BT__*/null;
 const STRATS = /*__STRATS__*/[];
 const SB_DEMO = /*__SB__*/null;
+const RP_DEMO = /*__RP__*/null;
+const DR_DEMO = /*__DR__*/null;
 const SL_DEMO = /*__SL__*/null;
 
 // The original options rulebook is just one more strategy: same signal idea (a breakout from the opening range),
@@ -302,7 +437,9 @@ const srcMeta = id => SOURCES.find(s => s.id === id) || { id, name: id, rules: [
 const hashSheet = () => { const m = location.hash.match(/^#s=([\w]+)/); return m && SOURCES.some(s => s.id === m[1]) ? m[1] : null; };
 const state = { feed: null, bt: null, btAt: 0, sb: null, sbAt: 0, sl: null, slAt: 0, slError: false, error: null,
   open: new Set(), openGroups: new Set(), lshown: 25, sshown: 25, openAll: false, sheet: hashSheet(), sheetFrom: null,
-  logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "", charts: {}, det: new Set(), loadedAt: 0, loading: false, showEnded: false };
+  logSrc: "all", logStatus: "all", logPeriod: "all", logQ: "", charts: {}, det: new Set(), loadedAt: 0, loading: false, showEnded: false,
+  wlQ: "", wlFilter: "all", wlSort: "priority", optFilter: "all", theme: (() => { try { return localStorage.getItem("sd_theme") || "auto"; } catch (_) { return "auto"; } })(),
+  compact: (() => { try { return localStorage.getItem("sd_compact") === "1"; } catch (_) { return false; } })() };
 const REFRESH_MS = 120000;                 // the page re-reads the data every 2 minutes
 let INNER = false;                         // while true, a section returns only its content (used inside the collapsed blocks)
 const $ = id => document.getElementById(id);
@@ -310,6 +447,14 @@ const ROWS = new Map();           // trade id -> trade, filled while rendering, 
 // "I took this" marks live in this browser only (the tool itself never places orders)
 const takenSet = (() => { try { return new Set(JSON.parse(localStorage.getItem("sd_taken") || "[]")); } catch (e) { return new Set(); } })();
 const saveTaken = () => { try { localStorage.setItem("sd_taken", JSON.stringify([...takenSet].slice(-500))); } catch (e) { /* private window */ } };
+function applyPreferences() {
+  if (state.theme === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = state.theme;
+  document.body.classList.toggle("compact", !!state.compact);
+  const theme = $("themeToggle"), compact = $("compactToggle");
+  if (theme) theme.textContent = `Theme: ${state.theme[0].toUpperCase()}${state.theme.slice(1)}`;
+  if (compact) { compact.textContent = `Compact: ${state.compact ? "On" : "Off"}`; compact.setAttribute("aria-pressed", state.compact ? "true" : "false"); }
+}
 
 const inr = (x, d = 2) => Number(x).toLocaleString("en-IN", { maximumFractionDigits: d, minimumFractionDigits: 0 });
 const rupee = x => (x < 0 ? "−" : "") + "₹" + inr(Math.abs(x), Math.abs(x) >= 1000 ? 0 : 2);
@@ -335,7 +480,7 @@ async function loadBt() {
   if (!base) { state.error = "unreachable"; return; }
   try {
     const r = await fetch(`${base}backtest.json?t=${Math.floor(Date.now() / 6e5)}`);
-    if (r.ok) state.bt = await r.json();
+    if (r.ok) { const j = await r.json(); if (j.schema === 3) state.bt = j; }
   } catch (e) { /* the section simply stays empty */ }
 }
 
@@ -347,15 +492,23 @@ const dataBase = () => {
 };
 
 async function loadStrat() {
-  if (!LIVE) { state.sb = SB_DEMO; state.sl = SL_DEMO; return; }
+  if (!LIVE) { state.sb = SB_DEMO; state.sl = SL_DEMO; state.rp = RP_DEMO; state.dr = DR_DEMO; return; }
   const base = dataBase();
   if (Date.now() - state.sbAt > 15 * 60e3) {
     state.sbAt = Date.now();
-    try { const r = await fetch(`${base}strategies_backtest.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) state.sb = await r.json(); } catch (e) { /* stays empty */ }
+    try { const r = await fetch(`${base}strategies_backtest.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) { const j = await r.json(); if (j.schema === 3) state.sb = j; } } catch (e) { /* stays empty */ }
+  }
+  if (Date.now() - (state.rpAt || 0) > 15 * 60e3) {
+    state.rpAt = Date.now();
+    try { const r = await fetch(`${base}replay.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) { const j = await r.json(); if (j.schema === 3) state.rp = j; } } catch (e) { /* stays empty */ }
+  }
+  if (Date.now() - (state.drAt || 0) > 15 * 60e3) {
+    state.drAt = Date.now();
+    try { const r = await fetch(`${base}daily_research.json?t=${Math.floor(Date.now() / 6e5)}`); if (r.ok) { const j = await r.json(); if (j.schema === 3) state.dr = j; } } catch (e) { /* stays empty */ }
   }
   {
     state.slAt = Date.now();
-    try { const r = await fetch(`${base}strategies.json?t=${Date.now()}`, { cache: "no-store" }); if (r.ok) { state.sl = await r.json(); state.slError = false; } } catch (e) { state.slError = true; }
+    try { const r = await fetch(`${base}strategies.json?t=${Date.now()}`, { cache: "no-store" }); if (r.ok) { const j = await r.json(); if (j.schema === 3) { state.sl = j; state.slError = false; } } } catch (e) { state.slError = true; }
   }
 }
 
@@ -629,6 +782,7 @@ function decChips(t) {
   if (d.cv != null) out.push(c(!d.f.includes("vol"), d.f.includes("vol") ? `Volume only ${d.cv}x normal` : `Volume ${d.cv}x normal`));
   if (d.nm != null) out.push(c(!d.f.includes("mkt"), d.f.includes("mkt") ? "Nifty is against it" : "Nifty agrees"));
   out.push(c(!d.f.includes("conf"), d.f.includes("conf") ? `${d.cf} opposite signal${d.cf > 1 ? "s" : ""} in this stock` : "No conflicting signal"));
+  if (d.rs != null) out.push(`<span class="dchip ${d.rs >= 80 ? "ok" : ""}" title="Relative strength: percentile of its 3/6/9/12-month return among liquid NSE shares. A flag, not a rule.">${d.rs >= 80 ? "★ Leader" : "Strength"} ${Math.round(d.rs)}</span>`);
   return `<div class="dchips">${out.join("")}</div>`;
 }
 
@@ -905,18 +1059,34 @@ function exposure(rows) {
 
 function marketSection() {
   const rg = state.sl && state.sl.regime, skip = state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.skip;
-  if (!rg) return sec("market", "Market", "", `<div class="empty">The market read appears after the first 5-minute pass of the day (about 9:20 am).</div>`);
-  const mk = rg.markets.map(m => `<div class="mk"><div><b>${esc(m.name)}</b> <span class="num">${inr(m.price)}</span> ${m.chg == null ? "" : `<span class="${cls(m.chg)}">${m.chg >= 0 ? "+" : "−"}${Math.abs(m.chg).toFixed(2)}%</span>`}</div>
-    <div class="muted">${esc(m.label)} (ADX ${m.adx}) · ${m.vwap} VWAP</div></div>`).join("");
-  const b = rg.breadth, f = rg.filters;
-  const gate = (id, name) => { const x = f[id], on = x.share != null && x.share >= 50; return `<div class="gate"><span class="vchip ${on ? "good" : "few"}">${esc(name)}: ${x.share == null ? "n/a" : x.share + "% of shares pass"}</span><span class="muted">${esc(x.gate)}</span></div>`; };
-  return sec("market", "Market", `as of ${hhmm(rg.asof)}`, `<div class="card">
-    ${skip ? `<p class="alarm" style="margin:0 0 12px">New options trades are paused for today (skip day).</p>` : ""}
-    <div class="mkgrid">${mk || '<div class="muted">Index data is not available yet.</div>'}</div>
-    ${b.stocks ? `<p class="note" style="margin:10px 0 0"><b>${b.trending}%</b> of shares are trending, <b>${b.above_vwap}%</b> trade above VWAP, <b>${b.up_on_day}%</b> are up on the day.</p>` : ""}
-    <details style="margin-top:8px"><summary class="muted" style="cursor:pointer;font-size:.9rem">Which strategies the conditions favour</summary>
-      <div class="gates" style="margin-top:8px">${gate("bb_bounce", "Bollinger bounce")}${gate("ema_pullback", "EMA trend pullback")}${gate("ema_cross", "EMA 9/21 crossover")}</div>
-      <p class="note">Three strategies only trade in the right conditions, checked on each share. This describes the conditions; it is not a forecast.</p></details></div>`);
+  const L = state.sl && state.sl.leaders, b = L && L.breadth;
+  if (!rg && !b) return sec("market", "Market pulse", "", `<div class="empty">The market read appears after the first 5-minute pass and the daily Leaders job.</div>`);
+  const mk = rg && rg.markets ? rg.markets.map(m => `<div class="mk"><div class="mk-title"><b>${esc(m.name)}</b> <span class="num">${inr(m.price)}</span> ${m.chg == null ? "" : `<span class="${cls(m.chg)}">${m.chg >= 0 ? "+" : "−"}${Math.abs(m.chg).toFixed(2)}%</span>`}</div>
+    <div class="muted">${esc(m.label)} (ADX ${m.adx}) · ${esc(m.vwap)} VWAP</div></div>`).join("") : "";
+  const ib = rg && rg.breadth, f = rg && rg.filters;
+  const pct = v => v == null || !Number.isFinite(Number(v)) ? "n/a" : `${Math.round(Number(v) * 100)}%`;
+  let posture = "Insufficient data", postureTone = "neutral";
+  if (b && L.ok) {
+    if (b.bear_phase || (b.above200 < 0.35 && b.advancing < 0.45)) { posture = "Defensive"; postureTone = "bad"; }
+    else if (b.above200 >= 0.60 && b.above50 >= 0.50 && b.advancing >= 0.50) { posture = "Supportive"; postureTone = "good"; }
+    else { posture = "Mixed"; postureTone = "warn"; }
+  } else if (b) { posture = "Daily breadth stale"; postureTone = "warn"; }
+  const breadthTiles = b ? `<div class="breadth-grid">
+      <div class="breadth-item"><span>Above 200-day</span><b>${pct(b.above200)}</b><i><em style="width:${Math.max(0,Math.min(100,Number(b.above200||0)*100))}%"></em></i></div>
+      <div class="breadth-item"><span>Above 50-day</span><b>${pct(b.above50)}</b><i><em style="width:${Math.max(0,Math.min(100,Number(b.above50||0)*100))}%"></em></i></div>
+      <div class="breadth-item"><span>Advancing today</span><b>${pct(b.advancing)}</b><i><em style="width:${Math.max(0,Math.min(100,Number(b.advancing||0)*100))}%"></em></i></div>
+    </div><p class="note">Daily breadth: ${L.universe} liquid shares · ${esc(L.asof)}${L.ok ? "" : " · stale; shown for context only"}. This is descriptive market context, not a trade signal.</p>` : `<p class="note">Daily breadth is not available. Run the Leaders workflow after the close.</p>`;
+  const intraday = ib && ib.stocks ? `<div class="intraday-strip"><span><b>${ib.trending}%</b> trending</span><span><b>${ib.above_vwap}%</b> above VWAP</span><span><b>${ib.up_on_day}%</b> up on the day</span></div><p class="note">Intraday sample: ${ib.stocks} shares scanned by the strategy desk, not the full NSE market. Use daily breadth above for the wider-market view.</p>` : "";
+  const gates = f ? Object.entries(f).map(([id,x]) => `<div class="gate"><span class="vchip ${x.share != null && x.share >= 50 ? "good" : "few"}">${esc(id.replaceAll("_"," "))}: ${x.share == null ? "n/a" : x.share + "%"}</span><span class="muted">${esc(x.gate || "")}</span></div>`).join("") : "";
+  return sec("market", "Market pulse", rg && rg.asof ? `intraday as of ${hhmm(rg.asof)}` : (L && L.asof ? `daily as of ${L.asof}` : ""), `<div class="market-layout">
+    <div class="card market-main">
+      <div class="posture-row"><div><span class="eyebrow">DAILY BREADTH POSTURE</span><div class="posture ${postureTone}">${posture}</div></div><span class="muted posture-note">Context only · not a prediction</span></div>
+      ${skip ? `<p class="alarm" style="margin:0 0 12px">New options trades are paused for today (skip day).</p>` : ""}
+      <div class="mkgrid">${mk || '<div class="muted">Intraday index data is not available yet.</div>'}</div>
+      ${intraday}${breadthTiles}
+    </div>
+    ${gates ? `<div class="card market-gates"><h3>Intraday filters</h3>${gates}<p class="note">These are the desk's live filters. They are not a substitute for checking the underlying chart.</p></div>` : ""}
+  </div>`);
 }
 
 function watchSection() {
@@ -931,8 +1101,7 @@ function watchSection() {
     : `<div class="empty">${esc(stocks.note || "No Nifty 200 stock has passed the scan yet.")} The scan picks shares that are up or down 1% or more with about double their usual early volume, and runs at 9:30 am.</div>`;
   const rg = state.sl && state.sl.status;
   return sec("watch", "What's being watched", rg && rg.scanned ? `strategies scan ${rg.scanned} shares and indices every 5 minutes` : "", `
-    <p class="subhead" style="margin-top:0">Stock watchlist (options desk scan)</p>${wl}
-    <p class="subhead" style="margin-top:18px">Indices and commodities (opening ranges)</p>
+    <p class="subhead" style="margin-top:0">Indices and commodities (opening ranges)</p>
     ${marketTiles.length ? `<div class="tiles">${marketTiles.map(tile).join("")}</div>` : `<div class="empty">The market list appears when the engine starts its next session.</div>`}`);
 }
 
@@ -1163,7 +1332,7 @@ function closeSheet() {
   if (state.sheetFrom && document.contains(state.sheetFrom)) state.sheetFrom.focus();
 }
 
-const NAV = [["take", "Worth taking"], ["mine", "My trades"], ["movers", "Trend setters"], ["market", "Market"], ["more", "More"]];
+const NAV = [["overview", "Overview"], ["take", "Share ideas"], ["options", "Calls & puts"], ["watchlist", "Watchlist"], ["market", "Market"], ["mine", "My trades"], ["more", "Research & logs"]];
 
 function freshness() {
   const el = $("fresh"), sl = state.sl && state.sl.status;
@@ -1188,9 +1357,228 @@ async function refresh() {
   render();
 }
 
+// ── Results and watchlist: who reports, and what the tool is watching because of it ──
+function resultsSection(rows) {
+  const r = state.sl && state.sl.results, wl = (state.sl && state.sl.watchlist) || [], sc = state.sl && state.sl.scan;
+  const names = ev => ev.length ? ev.map(e => `<b>${esc(e.symbol)}</b>`).join(", ") : `<span class="muted">none</span>`;
+  const col = (title, sub, ev) => `<div class="rcol"><h3>${title}</h3><p class="muted">${sub}</p><p>${names(ev)}</p></div>`;
+  const cal = r ? `<div class="rgrid event-grid">${col("Just reported", "Watch the first reaction", r.last)}${col("Reporting today", "Potential event-day volatility", r.today)}${col("Before next session", "Overnight event risk", r.next)}</div>${r.later && r.later.length ? `<p class="note">Coming later: ${r.later.map(e => `${esc(e.symbol)} (${esc(e.date.slice(5))})`).join(", ")}</p>` : ""}`
+    : `<div class="empty">The results calendar appears after the engine's first pass of the day.</div>`;
+  const fresh = r ? (r.ok ? `<span class="muted">NSE calendar checked ${r.fetched_at ? hhmm(r.fetched_at) : "today"}</span>` : `<span class="alarm" style="padding:2px 8px">NSE calendar unavailable${r.error ? ": " + esc(r.error) : ""}; event list may be incomplete.</span>`) : "";
+  const inTrade = new Set(rows.filter(t => t.status === "OPEN").map(t => t.name));
+  const board = new Map(((sc && sc.board) || []).map(x => [x.name || String(x.symbol || "").replace(/^NSE:/, "").replace(/-EQ$/, ""), x]));
+  const classify = w => {
+    const why = String(w.why || "").toLowerCase(), name = w.name;
+    if (inTrade.has(name)) return "trade";
+    if (why.includes("result")) return "results";
+    if (why.includes("news") || why.includes("headline")) return "news";
+    if (why.includes("volume") || why.includes("moved") || why.includes("move")) return "volume";
+    if (w.rs != null && w.rs >= 80) return "leaders";
+    return "other";
+  };
+  const filtered = wl.map((w,i) => ({...w, _i:i, _kind:classify(w), _board:board.get(w.name)}))
+    .filter(w => (!state.wlQ || `${w.name} ${w.why}`.toLowerCase().includes(state.wlQ.toLowerCase())) &&
+      (state.wlFilter === "all" || w._kind === state.wlFilter || (state.wlFilter === "leaders" && w.rs >= 80)))
+    .sort((a,b) => state.wlSort === "rs" ? ((b.rs ?? -1) - (a.rs ?? -1)) : state.wlSort === "name" ? a.name.localeCompare(b.name) : a._i-b._i);
+  const filters = [["all","All"],["results","Results"],["news","News"],["volume","Volume / move"],["leaders","RS leaders"],["trade","In a trade"]];
+  const list = wl.length ? `<div class="watch-toolbar"><label class="searchbox"><span>⌕</span><input id="wlq" type="search" aria-label="Search the watchlist" placeholder="Find a share or catalyst…" value="${esc(state.wlQ)}" autocomplete="off"></label><label class="sortbox">Sort <select id="wlsort"><option value="priority" ${state.wlSort === "priority" ? "selected" : ""}>Priority</option><option value="rs" ${state.wlSort === "rs" ? "selected" : ""}>Relative strength</option><option value="name" ${state.wlSort === "name" ? "selected" : ""}>Name</option></select></label></div>
+    <div class="filters watch-filters" role="group" aria-label="Filter watchlist">${filters.map(([id,label]) => `<button class="chip" data-wlf="${id}" aria-pressed="${state.wlFilter === id}">${label}${id === "all" ? ` · ${wl.length}` : ""}</button>`).join("")}</div>
+    <div class="watch-meta"><span>${filtered.length} of ${wl.length} shares</span><span>Search and filters are local to this dashboard</span></div>
+    ${filtered.length ? `<div class="card table-card"><div class="scroll"><table class="watch"><thead><tr><th>Share</th><th>Why in play</th><th>RS</th><th>Move</th><th>Relative volume</th><th>Status</th></tr></thead><tbody>${filtered.map(w => { const q = w._board || {}; return `<tr><td><b>${esc(w.name)}</b></td><td>${esc(w.why)}</td><td class="num">${w.rs == null ? "—" : `${w.rs >= 80 ? "★ " : ""}${Math.round(w.rs)}`}</td><td class="num ${cls(q.move)}">${q.move == null ? "—" : `${q.move >= 0 ? "+" : "−"}${Math.abs(q.move).toFixed(2)}%`}</td><td class="num">${q.volx == null ? "—" : `${q.volx}×`}</td><td>${inTrade.has(w.name) ? `<span class="vchip good">Open trade</span>` : `<span class="muted">Watching</span>`}</td></tr>`; }).join("")}</tbody></table></div></div>` : `<div class="empty">No shares match these filters. Clear the search or choose All.</div>`}`
+    : `<div class="empty">The watchlist fills in after the first 5-minute pass.</div>`;
+  const quality = sc && sc.quality ? sc.quality : null;
+  const note = sc ? `<div class="watch-foot"><span>${sc.have_baseline} / ${sc.of} normal-volume baselines ready</span>${quality ? `<span>${quality.fresh} / ${quality.expected} fresh quotes · ${quality.exchange_timestamps || 0} exchange-timestamped</span>` : ""}</div>` : "";
+  return sec("watchlist", "Watchlist & catalysts", fresh, `${cal}<div class="subhead watchlist-subhead">On the watchlist now <span class="muted">Ranked by catalyst, participation and context</span></div>${list}${note}${leadersBlock()}`);
+}
+
+function leadersBlock() {
+  const L = state.sl && state.sl.leaders;
+  if (!L || !L.asof) return `<p class="note">Relative-strength leaders and market health appear once the daily Leaders job has run (Actions tab, Leaders). It reads NSE's daily price file after the close and needs no broker requests.</p>`;
+  const b = L.breadth, pct = x => Math.round(x * 100) + "%";
+  const gauge = (label, v, warn) => `<div class="rcol"><h3>${label}</h3><p class="mv-pct ${warn ? "neg" : ""}">${pct(v)}</p></div>`;
+  const scanned = new Set(((state.sl && state.sl.watchlist) || []).map(w => w.name));
+  return `<p class="subhead">Market health and relative-strength leaders <span class="muted" style="font-weight:400">as of ${esc(L.asof)}${L.ok ? "" : " · STALE — context only"}</span></p>
+    <div class="rgrid">${gauge("Above 200-day average", b.above200, b.bear_phase)}${gauge("Above 50-day average", b.above50, false)}${gauge("Advancing today", b.advancing, false)}</div>
+    <p class="note">${!L.ok ? "<b>Stale data:</b> these ratings are not used for live signal decisions. " : ""}${b.bear_phase ? "<b>Bear phase</b> by the playbook's rule (under 20% above their 200-day average). " : ""}Measured across ${L.universe} shares trading at least Rs 10 crore a day. The research found this gauge almost never fires among the 200 most traded shares, and that relative strength helps a breakout in some markets and not others, so these are shown as flags, not rules.</p>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Leader (strength ${L.rs_min}+, above 200-day)</th><th>Strength</th><th>3 months</th><th>Below its 52-week high</th><th>Turnover (Rs cr/day)</th></tr></thead><tbody>${L.leaders.slice(0, 15).map(x => `<tr><td><b>${esc(x.symbol)}</b>${scanned.has(x.symbol) ? "<small>on the watchlist</small>" : ""}</td><td class="num">${x.rs}</td><td class="num ${cls(x.ret3m_pct)}">${x.ret3m_pct >= 0 ? "+" : "−"}${Math.abs(x.ret3m_pct)}%</td><td class="num">${x.off_high_pct}%</td><td class="num">${x.turnover_cr}</td></tr>`).join("")}</tbody></table></div></div>
+    <p class="note">${L.n_leaders} leaders in all; the top 15 are shown. Many are smaller shares that this tool does not scan.</p>`;
+}
+
+// ── Calls and puts: what each index is doing and the contract that would be used ──
+function optionsSection() {
+  const o = state.sl && state.sl.options_scan;
+  if (!o || !o.items || !o.items.length) return sec("options", "Calls and puts", "", `<div class="empty">Call and put ideas for Nifty, Bank Nifty and the other indices appear once each index's opening range has formed (about 9:45 am).</div>`);
+  const all = o.items;
+  const counts = { all: all.length, take: all.filter(x => x.grade === "take").length,
+    watch: all.filter(x => x.grade === "watch").length, wait: all.filter(x => x.grade === "wait").length };
+  const labels = [["all", "All"], ["take", "Passed"], ["watch", "Watch"], ["wait", "Waiting"]];
+  const filters = `<div class="filters" role="group" aria-label="Filter options ideas">${labels.map(([id, label]) => `<button class="chip" data-optf="${id}" aria-pressed="${state.optFilter === id}">${label} · ${counts[id]}</button>`).join("")}</div>`;
+  const visible = all.filter(x => state.optFilter === "all" || x.grade === state.optFilter);
+  const card = x => {
+    const take = x.grade === "take", i = x.idea || {}, side = x.side === "CE" ? "Call" : x.side === "PE" ? "Put" : "";
+    const broke = (x.state || "").endsWith("broke out");
+    const factors = (x.factors || []).map(f => `<span class="dchip ${f.ok ? "ok" : "no"}">${esc(f.text)}</span>`).join("");
+    const idea = i.premium ? `<p class="idea"><b>${esc(i.contract)}</b> · buy at ask ₹${inr(i.premium)} (bid ₹${inr(i.bid)}, spread ${i.spread_pct == null ? "n/a" : i.spread_pct + "%"}) · lot ${i.lot} · stop ₹${inr(i.stop)} · target ₹${inr(i.target)}<br><span class="muted">Risk ₹${inr(i.risk_per_lot, 0)} per lot · capital ₹${inr(i.capital_per_lot, 0)} · estimated costs ${i.cost_ratio == null ? "n/a" : Math.round(i.cost_ratio * 100) + "% of risk"} · depth bid ${i.bid_qty == null ? "n/a" : inr(i.bid_qty, 0)} / ask ${i.ask_qty == null ? "n/a" : inr(i.ask_qty, 0)} · OI ${i.oi == null ? "n/a" : inr(i.oi, 0)} · quote ${i.quote_age_s == null ? "timestamp unknown" : i.quote_age_s + "s old"} · expiry ${esc(i.expiry)}</span></p>`
+      : i.error ? `<p class="muted">${esc(i.error)}</p>` : "";
+    const verdict = take ? `<p><span class="vchip good">${side} idea worth taking</span> <span class="muted">${x.score} of 5 points</span></p>`
+      : broke ? `<p><span class="vchip few">${side} only watching</span> <span class="muted">${esc((x.why_not || []).join("; "))}</span></p>` : "";
+    return `<div class="card opt${take ? " take" : ""}"><div class="mover-top"><b>${esc(x.name)}</b><span><span class="num">${x.spot ? inr(x.spot) : ""}</span> ${x.change == null ? "" : `<span class="${cls(x.change)}">${x.change >= 0 ? "+" : "−"}${Math.abs(x.change).toFixed(2)}%</span>`}</span></div>
+      <p class="muted" style="margin:2px 0 6px">${esc(x.state)}${x.range_high ? ` · range ${inr(x.range_low)} to ${inr(x.range_high)}` : ""}</p>
+      ${broke || x.side && x.score >= 3 ? `<div class="dchips" style="padding:0 0 8px">${factors}</div>` : ""}${verdict}${idea}
+      ${(x.warnings || []).map(w => `<p class="alarm" style="margin:6px 0 0">${esc(w)}</p>`).join("")}</div>`;
+  };
+  const heavy = (o.heavy || []).length ? `<p class="note">Index heavyweights reporting: ${o.heavy.map(esc).join(", ")}. Index moves can be sharper than usual.</p>` : "";
+  return sec("options", "Calls and puts", `as of ${hhmm(o.asof)}`, `${filters}${visible.length ? visible.map(card).join("") : `<div class="empty">No option ideas in this filter. Choose All to see every index.</div>`}${heavy}
+    <p class="note">An index scores up to 5 points: broke the opening range, above (or below) VWAP, 9 EMA against 21 EMA, up (or down) on the day, and near the top (or bottom) of the day's range. 4 or more, inside the entry window, with costs that fit, is worth taking. These are paper ideas for judging the rules; the tool places no orders.</p>`);
+}
+
+function replayBlock() {
+  const r = state.rp;
+  if (!r) return `<div class="empty">The research replay has not been run yet. Open the Actions tab, choose Research replay, and press Run workflow.</div>`;
+  const pct = x => x == null ? "n/a" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2) + "R";
+  const ci = b => b && b.ci_avg_r ? `${pct(b.ci_avg_r[0])} to ${pct(b.ci_avg_r[1])}` : "n/a";
+  const cell = b => b && b.n ? `<td class="num ${cls(b.avg_r)}">${pct(b.avg_r)}<small>${b.n} trades</small></td>` : `<td class="muted">none</td>`;
+  const rows = r.experiments.map(e => `<tr><td><b>${esc(e.name)}</b><small>${esc(e.desc)}</small></td>${cell(e.all)}<td>${ci(e.all)}</td>${cell(e.development)}${cell(e.validation)}</tr>`).join("");
+  const cs = (r.cost_sensitivity || []).filter(x => x.n).map(x => `${x.cost_factor}× costs: <b class="${cls(x.avg_r)}">${pct(x.avg_r)}</b>`).join(" · ");
+  const w = r.watchlist_load || {};
+  return `<p class="note">${esc(r.period.from)} to ${esc(r.period.to)}: ${r.period.sessions} sessions after warm-up, source ${esc(r.source || "")}. Each row adds one piece of the live decision process, using only what was known at the time. <b>R</b> is the amount risked on a trade; every number is after costs.</p>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>What is included</th><th>All sessions</th><th>95% range</th><th>Development</th><th>Validation</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <p class="note"><b>How costs change the full system:</b> ${cs}. The gap between no costs and full costs is what the broker, taxes and slippage take.</p>
+    ${w.avg_shares_scanned_per_candle ? `<p class="note"><b>Load:</b> the watchlist scanned about ${w.avg_shares_scanned_per_candle} of ${w.all_shares} shares per 5-minute candle (${w.share_of_universe}%).</p>` : ""}
+    <p class="note"><b>Holdout:</b> ${esc(r.holdout.note)}</p>
+    <ul class="why">${r.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`;
+}
+
+function archetypesBlock(r) {
+  const A = r.archetypes;
+  if (!A) return "";
+  const sg = (x, u) => x == null ? "n/a" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(u === "pct" ? 2 : 2) + (u === "pct" ? "%" : "R");
+  const rowFor = (e, plc) => {
+    const u = e.unit, a = e.all || {}, k = u === "pct" ? "avg_pct" : "avg_r";
+    const pb = plc && plc[e.id] && plc[e.id].placebo;
+    const beat = plc && plc[e.id] ? (plc[e.id].beats_random ? "beats random entry" : "does not beat random") : "";
+    return `<tr><td><b>${esc(e.name)}</b></td><td class="num ${cls(a[k])}">${sg(a[k], u)}<small>${a.n || 0} trades</small></td><td class="num">${a.win_rate != null ? a.win_rate + "%" : ""}</td><td class="num">${e.development ? sg(e.development[k], u) : ""}</td><td class="num">${e.validation ? sg(e.validation[k], u) : ""}</td><td>${pb ? sg(pb.mean, u) + "<small>" + beat + "</small>" : ""}</td></tr>`;
+  };
+  const fam = (f) => { const F = A[f] || {}; const plc = Object.fromEntries((F.placebo || []).map(x => [x.id, x])); return (F.experiments || []).map(e => rowFor(e, plc)).join(""); };
+  const rows = fam("mean_reversion") + fam("burst") + fam("episodic") + fam("exits");
+  const rp = A.rolling_profit_factor || {};
+  const rpRows = Object.entries(rp).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${Math.round(v.share_above_bar * 100)}%</td><td class="num">${v.median_pf}</td><td class="num">${v.worst_pf}</td></tr>`).join("");
+  return `<p class="subhead">The "Market research" document, tested</p>
+    <p class="note">An AI-written report named five setup types and some pass marks. Each was written down as an exact rule first (engine/archetypes.py) and run on the survivor-free universe with costs. Rows are average per trade after costs.</p>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Test</th><th>All</th><th>Win rate</th><th>Development</th><th>Validation</th><th>Random entry</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    ${rpRows ? `<div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Share of 12-month windows with profit factor above ${(rp.tight && rp.tight.bar) || 1.25} (the report wanted 75%)</th><th>Above bar</th><th>Median</th><th>Worst</th></tr></thead><tbody>${rpRows}</tbody></table></div></div>` : ""}`;
+}
+
+function playbookBlock(r) {
+  const P = r.playbook;
+  if (!P) return "";
+  const pct = x => x == null ? "n/a" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2) + "R";
+  const cell = b => b && b.n ? `<td class="num ${cls(b.avg_r)}">${pct(b.avg_r)}<small>${b.n} trades</small></td>` : `<td class="muted">none</td>`;
+  const plc = Object.fromEntries((P.placebo || []).map(x => [x.id, x]));
+  const rows = P.experiments.map(e => { const x = plc[e.id], pb = x && x.placebo; return `<tr><td><b>${esc(e.name)}</b></td>${cell(e.all)}${cell(e.development)}${cell(e.validation)}<td>${pb ? `${pct(pb.mean)}<small>${x.beats_random ? "breakout beats random" : "does not beat random"}</small>` : ""}</td></tr>`; }).join("");
+  const sz = (P.sizing && P.sizing.ctx_rs_t) || [];
+  const szRows = sz.map(x => `<tr><td>${x.risk_pct}% of equity per trade</td><td class="num ${cls(x.cagr_pct)}">${x.cagr_pct}%</td><td class="num">${x.max_drawdown_pct}%</td><td class="num">${x.development ? x.development.cagr_pct + "%" : ""}</td><td class="num">${x.validation ? x.validation.cagr_pct + "%" : ""}</td></tr>`).join("");
+  const bg = P.bear_gauge || {};
+  return `<p class="subhead">The Leader Playbook ideas, tested</p>
+    <p class="note">From study notes of a trader's podcast: a tight pivot breakout, a pullback to the 21-day average, and a partial-profit exit, all on relative-strength leaders in an uptrend. Rules fixed in advance (engine/playbook.py). 25 tests have now been looked at, so a lone near-miss means little.</p>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Test</th><th>All</th><th>Development</th><th>Validation</th><th>Random entry, same shares</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <p class="note"><b>Bear gauge</b> (under ${Math.round((bg.threshold || 0.2) * 100)}% of shares above their 200-day average): it fired on ${bg.days_flagged} of ${bg.days_measured} days, so it barely changes anything in the 200 most traded shares.</p>
+    ${szRows ? `<div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Relative-strength tight-base breakout, 3R target: position size</th><th>Per year</th><th>Worst fall</th><th>2017 to Apr 2023</th><th>Apr 2023 to Jan 2025</th></tr></thead><tbody>${szRows}</tbody></table></div></div>
+    <p class="note">Halving the risk about halves both the return and the fall, so sizing changes the ride, not the quality. Nifty itself: ${(r.books && r.books.nifty_buy_hold) ? r.books.nifty_buy_hold.cagr_pct + "% a year with a " + r.books.nifty_buy_hold.max_drawdown_pct + "% fall" : ""}.</p>` : ""}`;
+}
+
+function ctxBlock(r) {
+  const pct = x => x == null ? "n/a" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2) + "R";
+  const base = Object.fromEntries(r.experiments.map(e => [e.id, e]));
+  const rows = [["tight", base.tight, base.tight_t], ...r.context_experiments.filter(e => e.exit === "trail").map(e => [e.id, e, r.context_experiments.find(x => x.id === e.id + "_t")])];
+  const beats = id => { const p = r.placebo.find(x => x.id === id); return p && p.placebo ? (p.breakout_beats_random ? "yes" : "no") : ""; };
+  const ctxRows = rows.map(([id, a, b]) => `<tr><td><b>${esc(a.name)}</b></td><td class="num ${cls(a.all.avg_r)}">${pct(a.all.avg_r)}<small>${a.all.n} trades · random ${beats(id) || "n/a"}</small></td><td class="num ${cls(b.all.avg_r)}">${pct(b.all.avg_r)}<small>${b.all.n} trades · random ${beats(id + "_t") || "n/a"}</small></td></tr>`).join("");
+  const names = {mom_classic: "Strongest 20: 12-month return, skipping the last month", mom_classic_regime: "... and cash when Nifty is below its 200-day", mom_ms: "Strongest 20: weighted 3/6/9/12-month score", mom_ms_regime: "... and cash when Nifty is below its 200-day", equal_weight: "All members, equal weight", nifty_trend_hold: "Nifty, held only above its 200-day average", nifty_buy_hold: "Nifty buy and hold"};
+  const b = r.books || {};
+  const bookRows = Object.keys(names).filter(k => b[k]).map(k => `<tr><td>${esc(names[k])}</td><td class="num ${cls(b[k].cagr_pct)}">${b[k].cagr_pct}%</td><td class="num">${b[k].max_drawdown_pct}%</td><td class="num">${b[k].development ? b[k].development.cagr_pct + "%" : ""}</td><td class="num">${b[k].validation ? b[k].validation.cagr_pct + "%" : ""}</td></tr>`).join("");
+  return `<p class="subhead">Market context: does relative strength or breadth help?</p>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Tight-base breakout, plus</th><th>20-day exit</th><th>3R target</th></tr></thead><tbody>${ctxRows}</tbody></table></div></div>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Portfolio (monthly, equal weight, costs paid)</th><th>Per year</th><th>Worst fall</th><th>2017 to Apr 2023</th><th>Apr 2023 to Jan 2025</th></tr></thead><tbody>${bookRows}</tbody></table></div></div>
+    <p class="note">Relative strength is the percentile of the weighted 3/6/9/12-month return among the 200 most traded shares on that date. Breadth is the share of them above their 50-day average. Sector rotation is not tested: no free, point-in-time sector classification exists.</p>`;
+}
+
+function dailyBlock() {
+  const r = state.dr;
+  if (!r) return `<div class="empty">The daily research has not been run yet. Open the Actions tab, choose Daily research, and press Run workflow.</div>`;
+  const pct = x => x == null ? "n/a" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2) + "R";
+  const ci = b => b && b.ci_avg_r ? `${pct(b.ci_avg_r[0])} to ${pct(b.ci_avg_r[1])}` : "n/a";
+  const cell = b => b && b.n ? `<td class="num ${cls(b.avg_r)}">${pct(b.avg_r)}<small>${b.n} trades</small></td>` : `<td class="muted">none</td>`;
+  const table = rule => `<div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>${rule === "trail" ? "Exit: 20-day average" : "Exit: 3R target or 60 days"}</th><th>All</th><th>95% range</th><th>Development</th><th>Validation</th></tr></thead><tbody>${r.experiments.filter(e => e.exit === rule).map(e => `<tr><td><b>${esc(e.name.replace(" (3R target)", ""))}</b></td>${cell(e.all)}<td>${ci(e.all)}</td>${cell(e.development)}${cell(e.validation)}</tr>`).join("")}</tbody></table></div></div>`;
+  const pl = r.placebo.filter(p => p.placebo).map(p => `<tr><td><b>${esc(p.id)}</b> (${p.exit === "trail" ? "20-day exit" : "3R target"})</td><td class="num ${cls(p.real.avg_r)}">${pct(p.real.avg_r)}</td><td class="num">${pct(p.placebo.mean)}<small>${pct(p.placebo.ci[0])} to ${pct(p.placebo.ci[1])}</small></td><td>${p.breakout_beats_random ? "<b>yes</b>" : "no"}</td></tr>`).join("");
+  const pf = r.portfolio || {}, nb = r.nifty_buy_and_hold || {}, sp = r.survivor_probe || {}, c = r.concentration_full_system || {};
+  const yr = Object.entries(r.by_year_full_system || {}).map(([y, b]) => `${y}: <b class="${cls(b.avg_r)}">${pct(b.avg_r)}</b> (${b.n})`).join(" · ");
+  const surv = (r.universe || "").includes("survivors only");
+  const ended = r.ended_shares || {};
+  return `<p class="note">${esc(r.period.from)} to ${esc(r.period.to)}, ${r.period.shares} shares, daily prices. <b>Universe:</b> ${esc(r.universe || "today's Nifty 200")}. <b>Rules fixed before any result was seen; nothing tuned.</b> R is the 8% stop. Every number is after an estimated 0.40% round-trip cost.</p>
+    ${table("trail")}${table("target")}
+    ${r.context_experiments ? ctxBlock(r) : ""}
+    ${playbookBlock(r)}
+    ${archetypesBlock(r)}
+    <p class="subhead">Does the breakout beat entering at random?</p>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><thead><tr><th>Test</th><th>Breakout</th><th>Random entry, same shares, same exit</th><th>Beats random?</th></tr></thead><tbody>${pl}</tbody></table></div></div>
+    <p class="note">${pf.full_t ? `<b>As a portfolio</b> (1.5% risked per trade, 5 positions): the 3R-target version grew ${pf.full_t.cagr_pct}% a year with a ${pf.full_t.max_drawdown_pct}% drawdown; the 20-day-exit version ${pf.full.cagr_pct}% with ${pf.full.max_drawdown_pct}%. Nifty itself: ${nb.cagr_pct}% with ${nb.max_drawdown_pct}%.` : ""}</p>
+    <p class="note"><b>By year (full system, 20-day exit):</b> ${yr}</p>
+    ${c.total_r ? `<p class="note"><b>Concentration:</b> the 10 best trades made ${c.top10_trades_r}R of the ${c.total_r}R total; without them the average is ${pct(c.avg_r_without_top10)}. The 5 best shares made ${c.top5_shares_r}R.</p>` : ""}
+    ${!surv && ended.shares_that_stopped_trading ? `<p class="note"><b>No survivorship filter:</b> ${ended.shares_that_stopped_trading} of the ${r.period.shares} shares later stopped trading (delisted, merged or bankrupt); a trade open when one stopped is closed at its last price. ${ended.trades_closed_at_delisting && ended.trades_closed_at_delisting.n ? `There were ${ended.trades_closed_at_delisting.n} such trades in the full system, averaging ${pct(ended.trades_closed_at_delisting.avg_r)}.` : ""}</p>` : ""}
+    ${surv && sp.shares ? `<p class="alarm" style="margin:8px 0"><b>Survivorship:</b> the shares in today's index grew ${sp.average_share_cagr_pct}% a year on average (median ${sp.median_share_cagr_pct}%) over this period, against ${sp.nifty_cagr_pct}% for Nifty. The list is tilted towards past winners, which flatters any method that buys strength. Treat the results as an upper bound.</p>` : ""}
+    <p class="note"><b>Holdout:</b> ${esc(r.holdout.note)}</p>
+    <ul class="why">${r.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`;
+}
+
+function healthBlock() {
+  const h = state.sl && state.sl.health, st = state.sl && state.sl.status, api = state.sl && state.sl.api;
+  if (!h) return `<div class="empty">Data health appears after the first 5-minute pass.</div>`;
+  const tone = x => ["fresh", "ok", "complete"].includes(x) ? "good" : x === "invalid" ? "bad" : ["partial", "slowed"].includes(x) ? "mixed" : ["stale", "missing", "unavailable"].includes(x) ? "few" : "";
+  const calls = st && st.cycle_calls != null ? `<p class="note">The last 5-minute pass made <b>${st.cycle_calls}</b> broker requests in ${st.cycle_seconds}s.${api ? ` This run: ${api.total} requests in all (${Object.entries(api.by_method).map(([m, x]) => `${esc(m)} ${x.calls}${x.refused ? `, ${x.refused} refused` : ""}${x.errors ? `, ${x.errors} failed` : ""}`).join("; ")}).` : ""}</p>` : "";
+  return `<p>Decision: <span class="vchip ${h.decision === "OK" ? "good" : "few"}">${h.decision}</span> <span class="muted">${h.decision === "OK" ? "every input the decisions need is recent" : "not recent: " + esc((h.blocking || []).join(", ")) + ". New ideas are only watched until it clears."}</span></p>
+    <div class="card" style="padding:6px 0"><div class="scroll"><table class="watch"><tbody>${h.items.map(x => `<tr><td><b>${esc(x.name)}</b></td><td><span class="vchip ${tone(x.status)}">${esc(x.status)}</span></td><td class="muted">${esc(x.detail)}</td></tr>`).join("")}</tbody></table></div></div>${calls}`;
+}
+
+function overviewSection(lead, takeOpen, optIdeas, open, watchCount, mineOpen, hd) {
+  const health = state.sl && state.sl.health, decision = health ? health.decision : "UNKNOWN";
+  const status = decision === "OK" ? "Data checks passing" : decision === "WATCH" ? "Data quality: WATCH" : "Data health pending";
+  const statusTone = decision === "OK" ? "good" : decision === "WATCH" ? "warn" : "neutral";
+  const totalIdeas = takeOpen.length + optIdeas;
+  const risk = exposure(open).risk, pnl = exposure(open).pnl;
+  const wl = (state.sl && state.sl.watchlist) || [];
+  const q = state.sl && state.sl.scan && state.sl.scan.quality;
+  const coverage = q && q.expected ? Math.round(q.fresh / q.expected * 100) : null;
+  const regime = state.sl && state.sl.leaders, breadth = regime && regime.breadth;
+  const posture = breadth && regime.ok ? (breadth.bear_phase ? "Defensive" : breadth.above200 >= .6 && breadth.above50 >= .5 ? "Supportive" : "Mixed") : "Not yet confirmed";
+  const engine = hd.running ? "ENGINE RUNNING" : hd.waitingLogin ? "LOGIN REQUIRED" : hd.missing ? "ENGINE CHECK-IN MISSED" : "ENGINE RESTING";
+  const action = totalIdeas ? `${totalIdeas} idea${totalIdeas === 1 ? "" : "s"} passed the current rules` : "No setup has passed every required check";
+  return `<section id="overview" class="overview">
+    <div class="overview-main">
+      <div class="eyebrow">INDIA MARKETS <span>·</span> PAPER-TRADING DECISION SYSTEM</div>
+      <div class="overview-title">Decision cockpit</div>
+      <p class="overview-copy">${esc(lead)} ${watchCount ? `${watchCount} open signal${watchCount === 1 ? "" : "s"} remain WATCH.` : "Review the market, data quality and open risk before acting."}</p>
+      <div class="decision-row"><span class="status-dot ${statusTone}"></span><b>${esc(status)}</b><span class="decision-divider">·</span><span>${esc(engine)}</span></div>
+      ${decision === "WATCH" ? `<div class="overview-blockers"><b>Decision blocked by:</b> ${esc((health.blocking || []).join(", ") || "data-quality checks")} <button data-jump="more">View diagnostics →</button></div>` : ""}
+      <div class="overview-actions"><button class="primary-action" data-jump="${totalIdeas ? (takeOpen.length ? "take" : "options") : "watchlist"}">${totalIdeas ? "Review actionable ideas" : "Review watchlist"} <span>→</span></button><button class="secondary-action" data-jump="market">Market pulse</button></div>
+    </div>
+    <div class="overview-side">
+      <div class="side-stat"><span>Market posture</span><b>${posture}</b><small>Daily breadth · descriptive only</small></div>
+      <div class="side-stat"><span>Quote coverage</span><b>${coverage == null ? "—" : coverage + "%"}</b><small>${q ? `${q.fresh} of ${q.expected} fresh quotes` : "Waiting for the universe scan"}</small></div>
+      <div class="side-stat"><span>Strategy universe</span><b>${wl.length}</b><small>Shares currently in play</small></div>
+    </div>
+    <div class="kpi-grid">
+      <button class="kpi" data-jump="take"><span>Share setups</span><b>${takeOpen.length}</b><small>Passed all current gates</small></button>
+      <button class="kpi" data-jump="options"><span>Options ideas</span><b>${optIdeas}</b><small>Passed contract checks</small></button>
+      <button class="kpi" data-jump="mine"><span>Open positions</span><b>${open.length}</b><small>${mineOpen} marked as yours</small></button>
+      <button class="kpi" data-jump="mine"><span>Open risk budget</span><b>${rupee(risk)}</b><small>Recorded initial risk</small></button>
+      <button class="kpi" data-jump="mine"><span>Open P&amp;L</span><b class="${cls(pnl)}">${signed(pnl)}</b><small>Model mark, not broker statement</small></button>
+    </div>
+  </section>`;
+}
+
 function render() {
   const keep = document.querySelector(".sheet-body"), sy = keep ? keep.scrollTop : 0;
-  const hd = renderHeader();
+  const hd = renderHeader(); applyPreferences();
   if (!state.feed && !state.sl && !state.sb) {
     $("app").innerHTML = state.error === "none-yet"
       ? `<p class="lead">Nothing to show yet.</p><p class="sublead">The engine has not run for the first time. Open your GitHub page, go to Actions, choose Trade engine, and press Run workflow. This page fills in a minute after it starts.</p>`
@@ -1207,28 +1595,33 @@ function render() {
   const watchOpen = open.filter(t => gradeOf(t) !== "take");
   const S = SOURCES.map(s => srcStats(s.id)), trig = S.reduce((a, s) => a + s.today.n, 0);
   const mineOpen = open.filter(t => takenSet.has(t.id)).length;
-  const lead = takeOpen.length ? `${takeOpen.length} trade${takeOpen.length > 1 ? "s" : ""} worth taking right now.` : hd.waitingLogin ? "Waiting for your Fyers login."
-    : hd.missing ? "The engine is not checking in." : hd.running ? "Nothing worth taking right now." : "Markets are resting.";
+  const optItems = (state.sl && state.sl.options_scan && state.sl.options_scan.items) || [];
+  const optIdeas = optItems.filter(x => x.grade === "take").length;
+  const lead = takeOpen.length || optIdeas ? `${takeOpen.length ? takeOpen.length + " share setup" + (takeOpen.length > 1 ? "s" : "") : ""}${takeOpen.length && optIdeas ? " · " : ""}${optIdeas ? optIdeas + " option idea" + (optIdeas > 1 ? "s" : "") : ""} passed the rules.` : hd.waitingLogin ? "Waiting for broker login." : hd.missing ? "The engine is not checking in." : hd.running ? "No trade currently passes every check." : "Markets are resting.";
   const genuine = ((state.sl && state.sl.movers && state.sl.movers.list) || []).filter(m => m.genuine).length;
   $("app").innerHTML = `<nav class="jump" aria-label="Sections">${NAV.map(([id, l]) => `<button class="chip" data-jump="${id}">${l}</button>`).join("")}</nav>
-    <p class="lead">${lead}</p>
-    <p class="sublead">${trig} signals triggered today across the options desk and ${STRATS.length} strategies. The tool is recommending ${takeOpen.length + takeEnded.length} of them. ${genuine ? `${genuine} genuine trend setter${genuine > 1 ? "s" : ""} on the move.` : ""}${mineOpen ? ` You are in ${mineOpen} trade${mineOpen > 1 ? "s" : ""}.` : ""}</p>
-    ${takeSection(takeOpen, takeEnded, watchOpen.length)}${mineSection(rows)}${moversSection(rows)}${marketSection()}
-    <section id="more"><div class="sec-head"><h2>More</h2><span class="muted" style="font-size:.88rem">everything the tool is doing, if you want to look</span></div>
-      ${det("watching", "Signals the tool is only watching", `${watchOpen.length} open, not recommended`, () => watchingBlock(watchOpen))}
-      ${det("board", "Which strategy is working?", `${SOURCES.length} strategies, backtest and live`, () => scoreboard(S))}
-      ${det("portfolio", "Portfolio risk and validation", "What survives overlapping signals and risk limits", () => `${portfolioLiveBlock()}${state.sb ? portfolioBacktestBlock() : `<div class="empty">The strategy backtest has not reported a portfolio result yet.</div>`}`)}
-      ${det("watch", "Stock watchlist and opening ranges", "", () => watchSection())}
-      ${det("log", "Every trade", `${rows.length} in the log`, () => logSection())}
-      ${det("news", "In the news", `${newsList().length} headlines`, () => newsSection())}
+    ${overviewSection(lead, takeOpen, optIdeas, open, watchOpen.length, mineOpen, hd)}
+    ${marketSection()}${takeSection(takeOpen, takeEnded, watchOpen.length)}${optionsSection()}${resultsSection(rows)}
+    ${mineSection(rows)}${moversSection(rows)}
+    <section id="more"><div class="sec-head"><h2>Research &amp; logs</h2><span class="muted" style="font-size:.88rem">Deeper evidence and diagnostics, when you need them</span></div>
+      ${det("daily", "Daily research: base-and-breakout over ten years", state.dr ? `${state.dr.period.shares} shares` : "not run yet", () => dailyBlock())}
+      ${det("replay", "Research replay: does the whole process have an edge?", state.rp ? `${state.rp.period.sessions} sessions` : "not run yet", () => replayBlock())}
+      ${det("health", "Data health & broker diagnostics", state.sl && state.sl.health ? state.sl.health.decision : "", () => healthBlock())}
+      ${det("watching", "Signals being watched, not recommended", `${watchOpen.length} open`, () => watchingBlock(watchOpen))}
+      ${det("board", "Strategy scoreboard", `${SOURCES.length} strategies, backtest and live`, () => scoreboard(S))}
+      ${det("portfolio", "Portfolio risk & validation", "Overlapping signals and risk limits", () => `${portfolioLiveBlock()}${state.sb ? portfolioBacktestBlock() : `<div class="empty">The strategy backtest has not reported a portfolio result yet.</div>`}`)}
+      ${det("watch", "Index opening ranges", "", () => watchSection())}
+      ${det("log", "Trade ledger", `${rows.length} records`, () => logSection())}
+      ${det("news", "News feed", `${newsList().length} headlines`, () => newsSection())}
       ${(state.feed && state.feed.status && state.feed.status.day && state.feed.status.day.log || []).length ? det("alog", "Options desk activity log", "", () => `<ol class="timeline">${state.feed.status.day.log.slice().reverse().map(e => `<li><time>${hhmm(e.t)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>`) : ""}
-      ${state.sb ? det("assume", "What the backtests assume", "", () => `<ul class="why">${state.sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`) : ""}</section>`;
+      ${state.sb ? det("assume", "Backtest assumptions & limitations", "", () => `<ul class="why">${state.sb.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`) : ""}</section>`;
   $("sheet").innerHTML = sheetHtml();
   const nb = document.querySelector(".sheet-body"); if (nb) nb.scrollTop = sy;
   document.documentElement.style.overflow = state.sheet ? "hidden" : "";
   freshness(); tickCountdown();
   hydrateCharts();
 }
+
 const rerender = () => { const y = scrollY; render(); scrollTo(0, y); };
 
 document.addEventListener("click", e => {
@@ -1239,6 +1632,10 @@ document.addEventListener("click", e => {
   if (b.dataset.ended) { state.showEnded = !state.showEnded; rerender(); return; }
   if (b.dataset.sheet) { openSheet(b.dataset.sheet, b.tagName === "BUTTON" ? b : null); return; }
   if (b.dataset.jump) { const el = $(b.dataset.jump); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  if (b.dataset.themeToggle) { state.theme = state.theme === "auto" ? "dark" : state.theme === "dark" ? "light" : "auto"; try { localStorage.setItem("sd_theme", state.theme); } catch (_) {} applyPreferences(); return; }
+  if (b.dataset.compactToggle) { state.compact = !state.compact; try { localStorage.setItem("sd_compact", state.compact ? "1" : "0"); } catch (_) {} applyPreferences(); return; }
+  if (b.dataset.wlf) { state.wlFilter = b.dataset.wlf; rerender(); return; }
+  if (b.dataset.optf) { state.optFilter = b.dataset.optf; rerender(); return; }
   if (b.dataset.group) { const k = b.dataset.group; state.openGroups.has(k) ? state.openGroups.delete(k) : state.openGroups.add(k); rerender(); return; }
   if (b.dataset.openall) { state.openAll = !state.openAll; rerender(); return; }
   if (b.dataset.took) { const id = b.dataset.took; takenSet.has(id) ? takenSet.delete(id) : takenSet.add(id); saveTaken(); rerender(); return; }
@@ -1257,12 +1654,13 @@ document.addEventListener("click", e => {
   if (b.dataset.trade) { const id = b.dataset.trade; state.open.has(id) ? state.open.delete(id) : state.open.add(id); rerender(); }
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && state.sheet) closeSheet(); });
-document.addEventListener("change", e => { if (e.target.id === "logsrc") { state.logSrc = e.target.value; state.lshown = 25; rerender(); } });
+document.addEventListener("change", e => { if (e.target.id === "logsrc") { state.logSrc = e.target.value; state.lshown = 25; rerender(); } else if (e.target.id === "wlsort") { state.wlSort = e.target.value; rerender(); } });
 document.addEventListener("input", e => {
-  if (e.target.id !== "logq") return;
-  state.logQ = e.target.value; state.lshown = 25;
-  const pos = e.target.selectionStart; rerender();
-  const box = $("logq"); if (box) { box.focus(); box.setSelectionRange(pos, pos); }
+  if (e.target.id !== "logq" && e.target.id !== "wlq") return;
+  const id = e.target.id, value = e.target.value, pos = e.target.selectionStart;
+  if (id === "logq") { state.logQ = value; state.lshown = 25; } else state.wlQ = value;
+  rerender();
+  const box = $(id); if (box) { box.focus(); box.setSelectionRange(pos, pos); }
 });
 document.addEventListener("toggle", e => {          // remember which blocks are open, so a refresh does not close them
   const d = e.target;

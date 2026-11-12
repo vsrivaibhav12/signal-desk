@@ -1,0 +1,76 @@
+name: Research replay
+
+# Replays the whole decision process on past prices, bar by bar, using only what was known at the time: NSE's results calendar for
+# those dates, each share's volume against its normal, the watchlist limits, then the strategies and costs. It shows what each
+# piece adds, with 95% ranges, a development and a validation period, and sensitivity to costs. The last 20% of sessions is a
+# sealed holdout: leave "final" unticked until the rules are fixed, then run it once with "final" ticked.
+#   auto = Kotak Neo prices if KOTAK_CONSUMER_KEY is set, else a saved Fyers login, else free Yahoo prices (about 60 sessions)
+on:
+  schedule:
+    - cron: "45 12 * * 6"        # Saturday 6:15 pm India time
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "auto, yahoo, kotak or fyers"
+        type: choice
+        options: [auto, yahoo, kotak, fyers]
+        default: auto
+      days:
+        description: "Calendar days of history to ask the broker for"
+        default: "365"
+      final:
+        description: "Unseal the holdout (do this once, with the rules fixed)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-replay
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open the data folder
+        run: |
+          git config --global user.name "signal-desk"
+          git config --global user.email "signal-desk@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" data > /dev/null; then
+            git clone --quiet --depth 3 --branch data --single-branch "$REMOTE" _data
+          else
+            mkdir _data && cd _data && git init --quiet -b data && git remote add origin "$REMOTE"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install --quiet -r requirements.txt
+
+      - name: Replay
+        env:
+          KOTAK_CONSUMER_KEY: ${{ secrets.KOTAK_CONSUMER_KEY }}
+          FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
+          FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
+          FYERS_PIN: ${{ secrets.FYERS_PIN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          PYTHONUNBUFFERED: "1"
+          SOURCE: ${{ inputs.source || 'auto' }}
+          DAYS: ${{ inputs.days || '365' }}
+          FINAL: ${{ inputs.final }}
+        run: |
+          if [ "$FINAL" = "true" ]; then
+            python -m engine.replay --source "$SOURCE" --days "$DAYS" --final
+          else
+            python -m engine.replay --source "$SOURCE" --days "$DAYS"
+          fi

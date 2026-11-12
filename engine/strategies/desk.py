@@ -1,8 +1,8 @@
 """The live strategy desk.
 
-Every time a 5-minute candle closes it takes today's candles for each share and index, runs all ten
-strategies over them with the same code the backtest uses, and compares the result with what it already
-knows. A trade it has not seen before is a new signal. A trade that was open and has now ended is a result.
+Every time a 5-minute candle closes it takes today's candles for the watchlist (indices, open trades, results,
+news, and shares whose volume or price is out of the ordinary), runs the active strategies over them with the same
+code the backtest uses, and compares the result with what it already knows. A trade it has not seen before is a new signal. A trade that was open and has now ended is a result.
 Because the answer is always worked out afresh from the day's candles, a restart loses nothing.
 It never places an order.
 """
@@ -12,12 +12,14 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
-from .. import clock
+from .. import clock, optscan
+from ..errors import BrokerError
+from ..schema import SCHEMA
 from ..clock import at, ts
 from ..fyers import AuthError
 from . import decide, sim, risk
 from .defs import STRATEGIES
-from .indicators import Series
+from .indicators import Series, normalize_candles
 
 KEEP_DAYS = 10            # trades older than this are folded into running totals
 CHART_DAYS = 3            # calendar days of trade charts kept (today, and the last session or two)
@@ -25,7 +27,7 @@ LATE_AFTER = 600          # a signal found more than this many seconds after its
 WARM_DAYS = 10            # calendar days of earlier candles kept for the indicators
 PASS_BUDGET = 200         # seconds one pass may take; the rest waits for the next candle
 MAX_LINES = 10            # example signals listed in one Telegram message
-HOT_MAX = 45              # symbols looked at first in each pass: open trades, recent movers, indices
+HOT_MAX = 45              # symbols looked at first in each pass: indices, open trades, results, news, recent movers
 
 
 def rs(x):
@@ -36,8 +38,18 @@ def px(x):
     return f"{x:,.2f}".rstrip("0").rstrip(".")
 
 
+def candle_is_fresh(candle_end_ts, now_ts, max_age_s=600, future_skew_s=10):
+    """True only for a completed candle whose end time is recent and not implausibly in the future."""
+    try:
+        age = float(now_ts) - float(candle_end_ts)
+    except (TypeError, ValueError):
+        return False
+    return -future_skew_s <= age <= max_age_s
+
+
 class StrategyDesk:
-    def __init__(self, cfg, broker, notify, folder, universe, master_markets, heartbeat=None, options_trades=None, flush=None):
+    def __init__(self, cfg, broker, notify, folder, universe, master_markets, heartbeat=None, options_trades=None, flush=None,
+                 results=None, watch=None, master=None, alerts=None, catalysts=None, leaders=None):
         self.cfg = sim.settings(cfg)
         self.shared_portfolio = cfg.get("portfolio") or {}
         sc = cfg.get("strategies") or {}
@@ -52,6 +64,13 @@ class StrategyDesk:
         self.alert_grade = sc.get("alert_grade", "take")           # "take": only trades that pass the checks. "all": every signal
         self.rotate = 0                                            # where the next pass starts, so no symbol is always last
         self.broker, self.notify = broker, notify
+        self.alerts = alerts
+        self.say = alerts.send if alerts else (lambda text, kind="info": notify(text))
+        self.results, self.watch, self.master = results, watch, master
+        self.leaders = leaders                                      # relative-strength ratings from NSE's daily files (engine/leaders.py)
+        self.catalysts = catalysts or (lambda: [])                  # names of shares with a news catalyst today
+        self.markets = [m for m in master_markets if m.get("kind") == "index" and m.get("enabled", True)]
+        self.oscfg = optscan.settings(cfg)
         self.folder = folder
         self.path = os.path.join(folder, "strategies.json")
         lots = self.cfg["index_lots"]
@@ -61,10 +80,14 @@ class StrategyDesk:
         self.warm = {}                     # symbol -> earlier candles
         self.warm_day = None
         self.series = {}                   # symbol -> today's Series from the latest pass
+        self._bad_current_candles = {}
+        self._invalid_candle_symbols = []
         self.dirty = False
         self.state = self._load()
         self.charts = self._load_charts()  # source id -> {trade id: chart}
         self._charts_changed = set()
+        self._stale_symbols = []
+        self.option_tape_path = os.path.join(folder, "options_tape.jsonl")
 
     # ── saved state ──────────────────────────────────────────
     def _load(self):
@@ -73,6 +96,15 @@ class StrategyDesk:
                 st = json.load(f)
         except (OSError, ValueError):
             st = {}
+        if st and st.get("schema") != SCHEMA:                 # a file from an older layout: start clean, drop its charts too
+            st = {}
+            for f in os.listdir(self.folder):
+                if f.startswith("chartlive_"):
+                    try:
+                        os.remove(os.path.join(self.folder, f))
+                    except OSError:
+                        pass
+        st["schema"] = SCHEMA
         st.setdefault("trades", [])
         st.setdefault("archive", {})
         st.setdefault("status", {})
@@ -132,17 +164,22 @@ class StrategyDesk:
         if now >= at(today, "15:20") and stt.get("summary_for") != today.isoformat():
             stt["summary_for"] = today.isoformat()
             if self.tg_on:
-                self.notify(self.summary_text(today.isoformat()))
+                self.say(self.summary_text(today.isoformat()), "summary")
         self.dirty = True
 
     def _history(self, sym, today):
         if self.warm_day != today:
             self.warm, self.warm_day = {}, today
+            self._bad_current_candles = {}
         if sym not in self.warm:
             raw = self.broker.history(sym, "5", today - timedelta(days=WARM_DAYS), today)
-            self.warm[sym] = [c for c in raw if clock.from_ts(c[0]).date() < today]
-            return raw
-        return self.broker.history(sym, "5", today, today)
+        else:
+            raw = self.broker.history(sym, "5", today, today)
+        clean, _, invalid_days, invalid_unknown, _ = normalize_candles(raw)
+        self._bad_current_candles[sym] = today in invalid_days or bool(invalid_unknown)
+        if sym not in self.warm:
+            self.warm[sym] = [c for c in clean if clock.from_ts(c[0]).date() < today]
+        return clean
 
     def _hot(self, today):
         """Symbols to look at first: indices (the market read), open trades, recent movers, the options desk's trades."""
@@ -176,11 +213,28 @@ class StrategyDesk:
                 break
             try:
                 raw = self._history(sym, today)
+                if self._bad_current_candles.get(sym):
+                    self._invalid_candle_symbols.append({"symbol": sym, "reason": "invalid timestamp or OHLC row in the current history response"})
+                    self.series.pop(sym, None)
+                    failed += 1
+                    continue
                 todays = [c for c in raw if clock.from_ts(c[0]).date() == today and c[0] + 300 <= now_ts]
                 if not todays:
+                    self.series.pop(sym, None)
+                    continue
+                # A successful history response can still end on an old candle.
+                # Skip that symbol rather than promoting stale prices into a live signal.
+                max_age = int(self.cfg.get("max_candle_age_s", 600))
+                candle_end = todays[-1][0] + 300
+                candle_age = now_ts - candle_end
+                if not candle_is_fresh(candle_end, now_ts, max_age, 10):
+                    self._stale_symbols.append({"symbol": sym, "age_s": int(candle_age)})
+                    self.series.pop(sym, None)
+                    failed += 1
                     continue
                 S = Series(self.warm[sym] + todays)
                 if S.n < self.cfg["min_bars"]:
+                    self.series.pop(sym, None)
                     continue
                 done.add(sym)
                 self.series[sym] = S
@@ -190,29 +244,256 @@ class StrategyDesk:
             except AuthError:
                 raise
             except Exception as e:
+                self.series.pop(sym, None)
                 failed += 1
                 if failed <= 3:
                     print(f"Strategy desk: no data for {sym}: {e}")
         decide.finalize(fresh, self.cfg["decide"])              # the "conflicting signal" check needs every strategy's trades for the stock
         return fresh, done, failed, stopped
 
+    def _plan(self, now, today):
+        """Who to scan this candle. Returns (hot, rest, play): the shares that matter most, the shares promoted by the quotes
+        scan, and a reason for each share that is in play (results, news, heavy volume, a big move)."""
+        hot, play = self._hot(today), {}
+        names = {}
+        if self.results:
+            self.state["results"] = self.results.public(today)
+            for w in self.results.watch(today):
+                sym = self.by_name.get(w["symbol"])
+                if sym:
+                    play[sym] = w["why"]
+                    if sym not in hot:
+                        hot.append(sym)
+        for name in list(self.catalysts())[:10]:
+            sym = self.by_name.get(name)
+            if sym:
+                play.setdefault(sym, "In the news")
+                if sym not in hot:
+                    hot.append(sym)
+        if self.watch is not None:
+            try:
+                board = self.watch.scan(self.broker, now)
+            except AuthError:
+                raise
+            except BrokerError as e:
+                print(f"Strategy desk: quotes scan failed: {e}")
+                board = self.watch.board
+            for r in board:
+                play.setdefault(r["symbol"], f"Volume {r['volx']}x normal" if r.get("volx") else f"Moved {r['move']:+.1f}%")
+            rest = [r["symbol"] for r in board if r["symbol"] in self.insts and r["symbol"] not in hot]
+        else:
+            rest = [n for n in self.insts if n not in hot]
+            k = self.rotate % max(1, len(rest)) if rest else 0
+            rest = rest[k:] + rest[:k]
+        hot = hot[:HOT_MAX]
+        for sym in hot + rest:
+            names[sym] = play.get(sym) or ("Index" if self.insts[sym]["kind"] == "index" else "Open trade or mover")
+        rs = {}
+        if self.leaders is not None and self.leaders.data and self.leaders.ok(today):
+            rs = {sym: self.leaders.rs(self.insts[sym]["name"]) for sym in hot + rest if sym in self.insts}
+            rs = {k: v for k, v in rs.items() if v is not None}
+        if self.leaders is not None and self.leaders.data:
+            self.state["leaders"] = self.leaders.public(today)
+        self.cfg["decide"]["_rs"] = rs                              # tags each trade with the share's rating (a flag, not a gate)
+        self.state["watchlist"] = [{"symbol": sym, "name": self.insts[sym]["name"], "why": names[sym], "rs": rs.get(sym)} for sym in hot + rest
+                                   if sym in self.insts]
+        if self.watch is not None:
+            self.state["scan"] = self.watch.public()
+        return hot, rest, play
+
+    def _calls(self):
+        snap = getattr(self.broker, "stats_snapshot", None)
+        return snap()["total"] if snap else None
+
     def _cycle(self, now, today, bar_end):
         now_ts, iso = ts(bar_end), today.isoformat()
-        names = list(self.insts)
-        hot = self._hot(today)
-        rest = [n for n in names if n not in hot]
-        rest = rest[self.rotate % max(1, len(rest)):] + rest[:self.rotate % max(1, len(rest))] if rest else rest
+        self._stale_symbols = []
+        self._invalid_candle_symbols = []
+        # Every pass must stand on data fetched in this pass. Keeping an old
+        # index Series after an empty/failed response could otherwise let a
+        # previous Nifty read leak into the options confirmation.
+        self.series = {}
+        calls0, t0 = self._calls(), time.monotonic()
+        hot, rest, play = self._plan(now, today)
+        self.cfg["decide"]["_play"] = play                           # lets the decision tag trades on shares that are in play
         started = time.monotonic()
         totals = {"scanned": 0, "failed": 0}
         for phase, group in enumerate((hot, rest)):
             fresh, done, failed, stopped = self._scan(group, today, now_ts, started)
-            if phase == 1:
+            if phase == 1 and self.watch is None:
                 self.rotate = (self.rotate + stopped) % max(1, len(rest)) if stopped else 0
             totals["scanned"] += len(done)
             totals["failed"] += failed
             self._apply(now, today, bar_end, fresh, done, totals)
             if phase == 0 and hot:
                 self.flush()                                    # the stocks that matter are visible before the full pass finishes
+        try:
+            self._options_scan(now, today)
+        except AuthError:
+            raise
+        except Exception as e:                                  # the scanner must never stop the strategy desk
+            traceback.print_exc()
+            self.state["options_scan"] = {"asof": now.isoformat(timespec="minutes"), "items": [], "error": str(e)[:120]}
+        calls1 = self._calls()
+        if calls0 is not None and calls1 is not None:           # how many broker requests this candle really cost
+            self.state["status"]["cycle_calls"] = calls1 - calls0
+            self.state["status"]["cycle_seconds"] = round(time.monotonic() - t0, 1)
+            self.state["api"] = self.broker.stats_snapshot()
+        try:
+            self.state["health"] = self._health(now, today)
+        except Exception:
+            traceback.print_exc()
+
+    # ── data health ──────────────────────────────────────────
+    def _health(self, now, today):
+        """Is every input the decisions rely on present and recent? Anything not fresh means the desk says WATCH."""
+        items, limit = [], self.oscfg["max_data_age_s"]
+        for m in self.markets:
+            S = self.series.get(m["spot"])
+            if S is None or not S.n or S.day[-1] != today:
+                items.append({"name": f"{m['name']} candles", "status": "missing", "detail": "no candles from today"})
+                continue
+            age = int(optscan._age(S, now))
+            fresh = -10 <= age <= limit
+            detail = f"newest candle finished {age // 60} min ago" if age >= 0 else f"newest candle timestamp is {abs(age)}s in the future"
+            items.append({"name": f"{m['name']} candles", "status": "fresh" if fresh else "stale", "detail": detail})
+        if self.watch is not None:
+            sc = self.watch.public()
+            age = None if not sc["at"] else int((now - datetime.fromisoformat(sc["at"])).total_seconds())
+            items.append({"name": "Quotes scan", "status": "missing" if age is None else "fresh" if age <= 600 else "stale",
+                          "detail": "not run yet" if age is None else f"{age // 60} min ago"})
+            quality = sc.get("quality") or {}
+            total, good = int(quality.get("expected", 0)), int(quality.get("fresh", 0))
+            coverage = good / max(1, total)
+            items.append({"name": "Quote coverage", "status": "complete" if coverage >= 0.95 else "partial" if good else "missing",
+                          "detail": f"{good} of {total} fresh quotes; {quality.get('exchange_timestamps', 0)} exchange-stamped, "
+                                    f"{quality.get('response_timestamps', 0)} response-time fallback, "
+                                    f"{quality.get('stale', 0)} stale, {quality.get('future', 0)} future, "
+                                    f"{quality.get('invalid', 0)} invalid"})
+            frac = sc["have_baseline"] / max(1, sc["of"])
+            items.append({"name": "Normal-volume baseline", "status": "complete" if frac >= 0.95 else "partial" if frac > 0 else "missing",
+                          "detail": f"{sc['have_baseline']} of {sc['of']} shares" + (f", {sc['baseline_backing_off']} backing off" if sc["baseline_backing_off"] else "")})
+        if self.results:
+            st = self.results.state
+            items.append({"name": "Results calendar", "status": "fresh" if st.get("ok") else "unavailable",
+                          "detail": (st.get("fetched_at") or "never read")[:16].replace("T", " ") + ("" if st.get("ok") else f"; {st.get('error') or 'not read yet'}")})
+        tape_status = self.state.get("options_tape_status")
+        if tape_status:
+            items.append({"name": "Option quote capture", "status": "ok" if tape_status.get("ok") else "unavailable",
+                          "detail": tape_status.get("detail", "no status")})
+        api = self.state.get("api")
+        if api:
+            items.append({"name": "Broker", "status": "slowed" if api["cooling"] else "ok",
+                          "detail": f"{api['total']} requests this run, history {api['history_rate']}/s"
+                                    + (f", paused {api['cooling']}s" if api["cooling"] else "")})
+        if self._stale_symbols:
+            items.append({"name": "Selected stock candles", "status": "stale",
+                          "detail": f"{len(self._stale_symbols)} selected symbol(s) skipped because their last completed candle was too old"})
+        invalid_candles = getattr(self, "_invalid_candle_symbols", [])
+        if invalid_candles:
+            items.append({"name": "Selected stock candle integrity", "status": "invalid",
+                          "detail": f"{len(invalid_candles)} selected symbol(s) skipped because the broker returned malformed timestamps or OHLC values"})
+        bad = [i for i in items if i["status"] in ("missing", "stale", "invalid") and ("candles" in i["name"] or "candle" in i["name"] or i["name"] == "Quotes scan")]
+        quote_coverage = next((i for i in items if i["name"] == "Quote coverage"), None)
+        if quote_coverage:
+            q = self.watch.public().get("quality", {}) if self.watch else {}
+            total, good = int(q.get("expected", 0)), int(q.get("fresh", 0))
+            if total and good / total < 0.90:
+                bad.append(quote_coverage)
+        return {"asof": now.isoformat(timespec="minutes"), "decision": "WATCH" if bad else "OK", "items": items,
+                "blocking": [i["name"] for i in bad]}
+
+    # ── options scanner ──────────────────────────────────────
+    def _options_scan(self, now, today):
+        if not (self.master and self.markets):
+            return
+        iso = today.isoformat()
+        nm = next((m for m in self.markets if m["id"] == "NIFTY"), None)
+        nifty = optscan.nifty_vwap_side(self.series.get(nm["spot"]), today, now, self.oscfg["max_data_age_s"]) if nm else None
+        heavy = self.results.heavyweights(today) if self.results else []
+        seen = self.state.setdefault("opt_seen", {})
+        if seen.get("date") != iso:
+            seen.clear()
+            seen["date"] = iso
+            seen["keys"] = []
+        items = []
+        for m in self.markets:
+            read = optscan.read_index(self.series.get(m["spot"]), today, m, now, nifty, self.oscfg["max_data_age_s"],
+                                      self.oscfg["max_skew_s"])
+            if read["state"].endswith("broke out") and read["score"] >= self.oscfg["min_score"] and optscan.in_window(m, now):
+                try:
+                    optscan.suggest(read, m, self.master, self.broker, today, self.oscfg, now)
+                except AuthError:
+                    raise
+                except Exception as e:
+                    read["idea"] = {"error": f"contract lookup failed ({type(e).__name__})"}
+            read["grade"], read["why_not"] = optscan.grade(read, m, now, self.oscfg, heavy)
+            items.append(read)
+            key = f"{m['id']}:{read.get('side')}"
+            if read["grade"] == "take" and key not in seen["keys"]:
+                seen["keys"].append(key)
+                self._tell_option(read, m)
+        self.state["options_scan"] = {"asof": now.isoformat(timespec="minutes"), "items": items, "heavy": heavy}
+        self._record_option_quotes(now, items)
+
+    def _record_option_quotes(self, now, items):
+        """Append live option quote observations for prospective premium research.
+
+        Older option backtests are underlying-price proxies. This tape captures
+        real bid/ask and depth from this release onward; it does not backfill or
+        pretend to contain historical option-chain data.
+        """
+        import json
+        rows = []
+        for r in items:
+            idea = r.get("idea") or {}
+            if not idea.get("symbol") or idea.get("bid") is None or idea.get("ask") is None:
+                continue
+            rows.append({"schema": 1, "observed_at": now.isoformat(timespec="seconds"),
+                         "underlying": r.get("id"), "underlying_spot": r.get("spot"), "direction": r.get("side"),
+                         "score": r.get("score"), "grade": r.get("grade"), "reasons": r.get("why_not", []),
+                         "contract": idea.get("contract"), "symbol": idea.get("symbol"), "strike": idea.get("strike"),
+                         "expiry": idea.get("expiry"), "lot": idea.get("lot"), "bid": idea.get("bid"), "ask": idea.get("ask"),
+                         "bid_qty": idea.get("bid_qty"), "ask_qty": idea.get("ask_qty"), "open_interest": idea.get("oi"),
+                         "quote_ts": idea.get("quote_ts"), "quote_age_s": idea.get("quote_age_s"), "premium_entry": idea.get("premium"),
+                         "stop": idea.get("stop"), "target": idea.get("target"), "risk_per_lot": idea.get("risk_per_lot"),
+                         "cost_ratio": idea.get("cost_ratio")})
+        if not rows:
+            return
+        os.makedirs(os.path.dirname(self.option_tape_path) or ".", exist_ok=True)
+        try:
+            with open(self.option_tape_path, "a", encoding="utf-8") as f:
+                for row in rows:
+                    f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+            self.state["options_tape_status"] = {"ok": True, "asof": now.isoformat(timespec="seconds"),
+                                                  "detail": f"{len(rows)} option quote observation(s) captured"}
+        except OSError as e:
+            # Research capture must never interrupt a market-data/decision cycle.
+            self.state["options_tape_status"] = {"ok": False, "asof": now.isoformat(timespec="seconds"),
+                                                  "detail": f"could not write option quote tape: {str(e)[:120]}"}
+            return
+        # Bound repository growth. Keep the most recent ~12 MB if this tape grows
+        # beyond 24 MB; at typical scan volume this preserves many months of data.
+        try:
+            if os.path.getsize(self.option_tape_path) > 24 * 1024 * 1024:
+                with open(self.option_tape_path, "rb") as f:
+                    f.seek(-12 * 1024 * 1024, os.SEEK_END)
+                    tail = f.read()
+                tail = tail[tail.find(b"\n") + 1:]
+                tmp = self.option_tape_path + ".tmp"
+                with open(tmp, "wb") as f:
+                    f.write(tail)
+                os.replace(tmp, self.option_tape_path)
+        except OSError:
+            pass
+
+    def _tell_option(self, r, m):
+        i = r["idea"]
+        side = "CALL" if r["side"] == "CE" else "PUT"
+        warn = ("\n⚠️ " + ", ".join(r["warnings"])) if r.get("warnings") else ""
+        self.say(f"🎯 <b>{m['name']}: {side} idea</b> ({r['score']} of 5)\n{i['contract']} at ₹{px(i['premium'])}, lot {i['lot']}\n"
+                 f"Stop ₹{px(i['stop'])}, target ₹{px(i['target'])}. Risk about {rs(i['risk_per_lot'])} a lot."
+                 f"{warn}\nPaper idea; check the dashboard before acting.", "options")
 
     def _apply(self, now, today, bar_end, fresh, done_syms, totals):
         stt = self.state["status"]
@@ -344,7 +625,7 @@ class StrategyDesk:
             lines.append(f"• <b>{r['name']}</b> {'up' if r['dir'] == 1 else 'down'} {abs(r['move']):.1f}% on {r['vol']}x its usual volume, "
                          f"price ₹{px(r['price'])}, above/below VWAP and holding near the {'high' if r['dir'] == 1 else 'low'}")
         lines.append("\nBig move, real volume, and still going. Open the dashboard to see what the tool is doing with each.")
-        self.notify("\n".join(lines))
+        self.say("\n".join(lines), "movers")
 
     # ── charts ───────────────────────────────────────────────
     def _option_charts(self, today):
@@ -457,33 +738,22 @@ class StrategyDesk:
 
     def _tell(self, new, done):
         names = {s["id"]: s["name"] for s in STRATEGIES}
-        lines = []
         if new:
-            by = {}
-            for t in sorted(new, key=lambda x: x["entry_ts"]):
-                by.setdefault(t["strategy"], []).append(t)
-            counts = ", ".join(f"{names[k]} {len(v)}" for k, v in by.items())
-            lines.append(f"🧭 <b>{len(new)} new strategy signal{'s' if len(new) > 1 else ''}</b>: {counts}")
-            shown, queues = [], [list(v) for v in by.values()]
-            while queues and len(shown) < MAX_LINES:        # one from each strategy in turn, so none is drowned out
-                for q in list(queues):
-                    shown.append(q.pop(0))
-                    if not q:
-                        queues.remove(q)
-                    if len(shown) >= MAX_LINES:
-                        break
-            for t in shown:
+            lines = []
+            for t in sorted(new, key=lambda x: x["entry_ts"])[:MAX_LINES]:
                 tgt = f"target {px(t['target'])}" if t["target"] else "no fixed target"
-                lines.append(f"• {names[t['strategy']]}: {'BUY' if t['dir'] == 1 else 'SELL'} {t['qty']} {t['name']} near "
-                             f"₹{px(t['entry'])}, stop {px(t['stop'])}, {tgt}")
-            if len(new) > len(shown):
-                lines.append(f"… and {len(new) - len(shown)} more, all on the dashboard.")
+                tag = (t.get("dec") or {}).get("ip")
+                strength = (t.get("dec") or {}).get("rs")
+                lines.append(f"🎯 <b>{'BUY' if t['dir'] == 1 else 'SELL'} {t['qty']} {t['name']}</b> near ₹{px(t['entry'])} · "
+                             f"stop {px(t['stop'])} · {tgt} · {names[t['strategy']]}" + (f" · {tag}" if tag else "")
+                             + (f" · RS leader {strength:.0f}" if strength is not None and strength >= 80 and t["dir"] == 1 else ""))
+            if len(new) > MAX_LINES:
+                lines.append(f"… and {len(new) - MAX_LINES} more on the dashboard.")
+            lines.append("Paper trades. Reasons and chart on the dashboard.")
+            self.say("\n".join(lines), "trades")
         if done:
-            lines.append(f"\n<b>{len(done)} ended</b>: " + ", ".join(
-                f"{names[t['strategy']]} {t['name']} {rs(t['net'])}" for t in sorted(done, key=lambda x: x["exit_ts"])[:5])
-                + (f", and {len(done) - 5} more" if len(done) > 5 else ""))
-        lines.append("\nThese are paper trades for judging each strategy. Open the dashboard for the reasons.")
-        self.notify("\n".join(lines))
+            self.say("<b>Ended:</b> " + ", ".join(f"{t['name']} {rs(t['net'])}" for t in sorted(done, key=lambda x: x["exit_ts"])[:6])
+                     + (f", and {len(done) - 6} more" if len(done) > 6 else ""), "exits")
 
     def summary_text(self, iso):
         names = {s["id"]: s["name"] for s in STRATEGIES}

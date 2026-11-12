@@ -16,7 +16,7 @@ def test_option_without_verified_exit_is_unresolved():
     }
     engine.dirty = False
     alerts = []
-    engine.notify = alerts.append
+    engine._notify = alerts.append
 
     Engine._roll_day(engine, datetime(2026, 11, 12, 9, 0))
 

@@ -104,9 +104,34 @@ class Fyers:
         symbols = list(symbols)
         for i in range(0, len(symbols), 50):
             j = self._get(f"{DATA}/quotes", {"symbols": ",".join(symbols[i:i + 50])})
+            received_at = int(time.time())
             for d in j.get("d") or []:
                 v = d.get("v") or {}
                 if d.get("s") == "ok" or v.get("lp"):
+                    # Fyers quote responses expose exchange feed/trade timestamps on
+                    # supported feeds. Keep both the exchange clock and receipt time;
+                    # the latter is only a fallback, never mislabelled as exchange time.
+                    raw_stamp = v.get("exch_feed_time") or v.get("exch_trade_time") or v.get("tt") or v.get("last_traded_time")
+                    stamp_invalid = False
+                    try:
+                        stamp = int(float(raw_stamp)) if raw_stamp not in (None, "") else None
+                        if raw_stamp not in (None, "") and stamp is None:
+                            stamp_invalid = True
+                        # Some Fyers fields are formatted as milliseconds.
+                        if stamp and stamp > 10_000_000_000:
+                            stamp //= 1000
+                    except (TypeError, ValueError, OverflowError):
+                        stamp, stamp_invalid = None, raw_stamp not in (None, "")
+                    depth = v.get("depth") or {}
+                    buys = depth.get("buy") or []
+                    sells = depth.get("sell") or []
+                    bid = buys[0] if buys else {}
+                    ask = sells[0] if sells else {}
                     out[d.get("n")] = {"lp": v.get("lp"), "prev_close": v.get("prev_close_price"),
-                                       "volume": v.get("volume")}
+                                       "volume": v.get("volume"), "ts": stamp, "ts_invalid": stamp_invalid,
+                                       "received_ts": received_at, "ts_source": "invalid" if stamp_invalid else "exchange" if stamp else "response",
+                                       "bid": bid.get("price"), "ask": ask.get("price"),
+                                       "bid_qty": bid.get("volume") or bid.get("qty"),
+                                       "ask_qty": ask.get("volume") or ask.get("qty"),
+                                       "oi": v.get("oi") or v.get("open_interest")}
         return out

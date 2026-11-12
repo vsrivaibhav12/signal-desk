@@ -14,6 +14,7 @@ from collections import defaultdict
 import yaml
 
 from .. import clock
+from ..schema import SCHEMA
 from ..backtest import report
 from . import data, sim, risk
 from .defs import STRATEGIES
@@ -192,24 +193,9 @@ def stability_blocks(trades, blocks=5):
     return out
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=["auto", "yahoo", "kotak", "fyers"], default="auto")
-    ap.add_argument("--days", type=int, default=365, help="calendar days of history to ask the broker for (about 250 market sessions)")
-    ap.add_argument("--out", default=os.path.join(ROOT, "_data", "strategies_backtest.json"))
-    ap.add_argument("--cache", default=None)
-    ap.add_argument("--stocks", type=int, default=0, help="only the first N stocks (quick tests)")
-    ap.add_argument("--entry-mode", choices=["next_open", "signal_close"], default=None,
-                    help="execution assumption; next_open is the recommended conservative default")
-    a = ap.parse_args(argv)
-    log = lambda m: print(m, flush=True)
-    cfg = load_config()
-    sc = sim.settings(cfg)
-    if a.entry_mode:
-        sc["execution"]["entry_mode"] = a.entry_mode
-    uni = universe()[:a.stocks] if a.stocks else universe()
-    markets = [m for m in cfg["markets"] if m.get("kind") == "index" and m.get("enabled", True)]
-    insts = sim.build_instruments(markets, uni, sc["index_lots"])
+def load_series(source, days, insts, markets, uni, cache, log):
+    """Five-minute candles for every instrument: Kotak Neo or Fyers if available, otherwise Yahoo. Returns (series, source text)."""
+    a = argparse.Namespace(source=source, days=days, cache=cache)
     series, source, missing = {}, "", []
     fy, label = None, ""
     if a.source in ("auto", "kotak"):
@@ -237,6 +223,28 @@ def main(argv=None):
         log("Loading about 60 days of 5-minute candles from Yahoo Finance ...")
         series, missing = data.series_from_yahoo(insts, markets, uni, a.cache, log)
         source = "Yahoo Finance, 5-minute candles"
+    return series, source
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--source", choices=["auto", "yahoo", "kotak", "fyers"], default="auto")
+    ap.add_argument("--days", type=int, default=365, help="calendar days of history to ask the broker for (about 250 market sessions)")
+    ap.add_argument("--out", default=os.path.join(ROOT, "_data", "strategies_backtest.json"))
+    ap.add_argument("--cache", default=None)
+    ap.add_argument("--stocks", type=int, default=0, help="only the first N stocks (quick tests)")
+    ap.add_argument("--entry-mode", choices=["next_open", "signal_close"], default=None,
+                    help="execution assumption; next_open is the recommended conservative default")
+    a = ap.parse_args(argv)
+    log = lambda m: print(m, flush=True)
+    cfg = load_config()
+    sc = sim.settings(cfg)
+    if a.entry_mode:
+        sc["execution"]["entry_mode"] = a.entry_mode
+    uni = universe()[:a.stocks] if a.stocks else universe()
+    markets = [m for m in cfg["markets"] if m.get("kind") == "index" and m.get("enabled", True)]
+    insts = sim.build_instruments(markets, uni, sc["index_lots"])
+    series, source = load_series(a.source, a.days, insts, markets, uni, a.cache, log)
     if not series:
         sys.exit("No price data could be loaded.")
     ref = next((s for s in series.values() if len(s.days) > 20), next(iter(series.values())))
@@ -274,6 +282,7 @@ def main(argv=None):
                           "conf": "No other strategy is already on the opposite side of the same stock today"}}
     out = {
         "decision": decision,
+        "schema": SCHEMA,
         "generated": clock.now().isoformat(timespec="minutes"), "source": source,
         "period": {"from": days[0].isoformat(), "to": days[-1].isoformat(), "days": len(days)},
         "universe": {"stocks": sum(1 for s in series if s.endswith("-EQ")), "indices": [i["name"] for s, i in insts.items()
