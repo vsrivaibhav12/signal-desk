@@ -32,7 +32,12 @@ jobs:
       - name: Compile
         run: python -m compileall -q engine tests
       - name: Tests (engine, research, contract)
-        run: python -m pytest -q
+        run: |
+          status=0
+          python -m pytest -q -p no:cacheprovider --junitxml=report.xml || status=$?
+          # List any failing tests as annotations, so the run's summary page says which failed and why.
+          python tests/ci_report.py report.xml
+          exit $status
 
   web:
     runs-on: ubuntu-latest
