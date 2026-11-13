@@ -112,7 +112,12 @@ def main():
     S = Series(nifty_session())
     a = S.starts[DAY]
     hi, lo = max(S.h[a:a + 6]), min(S.l[a:a + 6])
-    nifty_trade = next(t for t in feed["trades"] if t["date"] == DAY.isoformat() and t["name"] == "Nifty 50")
+    nifty_trade = next((t for t in feed["trades"] if t["date"] == DAY.isoformat() and t["name"] == "Nifty 50"), None)
+    if nifty_trade is None:                                         # the simulated days move with the calendar, so make one if need be
+        base = next(t for t in feed["trades"] if t["date"] == DAY.isoformat() and t.get("kind") == "option")
+        nifty_trade = {**base, "id": f"{DAY.isoformat()}-NIFTY-1", "unit": "NIFTY", "name": "Nifty 50", "book": "Index options",
+                       "contract": "NIFTY 17 Nov 26 24200 CE"}
+        feed["trades"].append(nifty_trade)
     j = 11                                                          # the 10:10 candle, which closes at 10:15
     nifty_trade.update({                                            # the Nifty trade is still open in the sample, so it has a chart and a plan
         "status": "OPEN", "dir": 1, "action": "BUY", "option_type": "CE", "entry_min": clock.ts(at(DAY, "10:17")), "entry_time": at(DAY, "10:17").isoformat(),

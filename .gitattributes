@@ -1,0 +1,4 @@
+# Published data and test fixtures must be byte-for-byte the same on every system: the manifest records their hashes.
+*.jsonl -text
+web/public/demo/** -text
+web/test/fixtures/** -text

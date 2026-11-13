@@ -90,7 +90,7 @@ class Ledger:
                     needs_break = f.read(1) != b"\n"     # heal a torn last line so the new row starts on its own line
         except OSError:
             pass
-        with open(path, "a", encoding="utf-8") as f:
+        with open(path, "a", encoding="utf-8", newline="\n") as f:        # always LF, so the file's bytes (and its hash) match on every system
             if needs_break:
                 f.write("\n")
             f.write(line)

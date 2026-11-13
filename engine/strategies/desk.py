@@ -478,7 +478,7 @@ class StrategyDesk:
             return
         os.makedirs(os.path.dirname(self.option_tape_path) or ".", exist_ok=True)
         try:
-            with open(self.option_tape_path, "a", encoding="utf-8") as f:
+            with open(self.option_tape_path, "a", encoding="utf-8", newline="\n") as f:
                 for row in rows:
                     f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
             self.state["options_tape_status"] = {"ok": True, "asof": now.isoformat(timespec="seconds"),
