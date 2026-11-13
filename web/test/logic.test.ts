@@ -51,6 +51,42 @@ describe("trust", () => {
     expect(assessTrust(live, NOW).state).toBe("closed");
   });
 
+  describe("a session that should be running but is not", () => {
+    const windows = [{ name: "day", start: "08:30", end: "15:23" }, { name: "evening", start: "17:15", end: "22:38" }];
+    const resting = (over = {}) => makeLive({ session: { phase: "resting", running: false }, generated_at: iso(18 * 3600), session_windows: windows, ...over });
+
+    it("is a fault, not a closed market, when the engine last published long ago", () => {
+      const t = assessTrust(resting(), NOW);                       // NOW is a Wednesday, 10:00 India time
+      expect(t.state).toBe("stale");
+      expect(t.reasons[0]).toMatch(/should be running now \(day session, 08:30 to 15:23/);
+      expect(t.reasons[0]).toMatch(/Start the Trade engine|start the Trade engine/);
+    });
+
+    it("is simply closed between sessions, at weekends, and when the engine finished moments ago", () => {
+      const sixThirty = Date.parse("2026-11-11T16:30:00+05:30");
+      expect(assessTrust(resting(), sixThirty).state).toBe("closed");
+      const saturday = Date.parse("2026-11-14T10:00:00+05:30");
+      expect(assessTrust(resting(), saturday).state).toBe("closed");
+      expect(assessTrust(resting({ generated_at: iso(60) }), NOW).state).toBe("closed");
+    });
+
+    it("an older file with no session windows keeps the old behaviour", () => {
+      expect(assessTrust(resting({ session_windows: undefined }), NOW).state).toBe("closed");
+    });
+
+    it("a starting engine is degraded while fresh and stale if it never got going", () => {
+      expect(assessTrust(makeLive({ session: { phase: "starting", running: true }, generated_at: iso(40), session_windows: windows }), NOW).state).toBe("degraded");
+      expect(assessTrust(makeLive({ session: { phase: "starting", running: true }, generated_at: iso(3000), session_windows: windows }), NOW).state).toBe("stale");
+    });
+
+    it("works out the window in India time whatever the viewer's own time zone", () => {
+      const evening = Date.parse("2026-11-11T20:00:00+05:30");
+      expect(assessTrust(resting(), evening).reasons[0]).toMatch(/evening session, 17:15 to 22:38/);
+      expect(assessTrust(resting(), Date.parse("2026-11-11T08:29:00+05:30")).state).toBe("closed");
+      expect(assessTrust(resting(), Date.parse("2026-11-11T08:31:00+05:30")).state).toBe("stale");
+    });
+  });
+
   it("an engine that says it is watching but has stopped publishing is stale", () => {
     const t = assessTrust(makeLive({ generated_at: iso(1200) }), NOW);
     expect(t.state).toBe("stale");

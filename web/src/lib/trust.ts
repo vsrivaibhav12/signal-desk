@@ -4,6 +4,21 @@ import { ageSeconds, DEFAULT_THRESHOLDS, humanAge } from "./time";
 
 export type TrustState = "ok" | "degraded" | "stale" | "closed" | "offline";
 
+export interface SessionWindow { name: string; start: string; end: string }
+
+const IST_OFFSET_MS = 19_800_000;
+const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/** The market session that should be running at `nowMs` (India time, Monday to Friday), or null. Exchange holidays are not known here. */
+export function sessionDueNow(nowMs: number, windows: SessionWindow[] | undefined): SessionWindow | null {
+  if (!windows?.length) return null;
+  const d = new Date(nowMs + IST_OFFSET_MS);
+  const weekday = d.getUTCDay();
+  if (weekday === 0 || weekday === 6) return null;
+  const minute = d.getUTCHours() * 60 + d.getUTCMinutes();
+  return windows.find((w) => minute >= minutesOf(w.start) && minute <= minutesOf(w.end)) ?? null;
+}
+
 export interface Trust {
   state: TrustState;
   /** Plain-language reasons, shown in the banner. */
@@ -29,7 +44,20 @@ export function assessTrust(live: Live | undefined, nowMs: number): Trust {
   if (phase === "login") {
     return { state: "degraded", reasons: ["The engine is waiting for a broker login. No new prices are arriving."], priceAge, publishAge };
   }
+  if (phase === "starting" && publishAge !== null && publishAge < 600) {
+    return { state: "degraded", reasons: ["The engine is starting up and has not fetched prices yet."], priceAge, publishAge };
+  }
   if (phase !== "watching") {
+    // Closed only when no session is due. If one should be running but the engine has not published, say so: that is a fault, not a holiday.
+    const due = sessionDueNow(nowMs, live.session_windows);
+    if (due && (publishAge === null || publishAge > th.price_stale_s)) {
+      return {
+        state: "stale",
+        reasons: [`A market session should be running now (${due.name} session, ${due.start} to ${due.end} India time), but the engine's last update was ${humanAge(publishAge)}. `
+          + "It has probably not started. On a market holiday this is expected; otherwise open the Actions tab on GitHub and start the Trade engine."],
+        priceAge, publishAge,
+      };
+    }
     return { state: "closed", reasons: ["No market session is running. These are the last values from the previous session."], priceAge, publishAge };
   }
 

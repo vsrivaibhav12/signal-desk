@@ -13,7 +13,7 @@ from datetime import date, datetime
 
 from engine import charts, clock, contract, journal, ledger, live, manifest
 from engine.clock import at
-from engine.run import load_config
+from engine.run import load_config, session_windows
 from engine.strategies import sim
 from engine.strategies.indicators import Series
 from tests import test_swing as ts
@@ -132,7 +132,7 @@ def main():
             "idea": {"contract": "BANKNIFTY 54000 CE", "symbol": "NSE_FO|777", "premium": 412.5, "stop": 309.4, "target": 567.2, "lot": 30, "risk_per_lot": 3093,
                      "cost_ratio": 0.11, "spread_pct": 0.9, "oi": 48210, "quote_age_s": 14, "expiry": "2026-11-18"}}
     desk["options_scan"] = {"asof": stamp(45), "items": [read], "heavy": []}
-    doc = live.build(NOW, cfg, feed, desk, extra={"journal": {"enabled": True}})
+    doc = live.build(NOW, cfg, feed, desk, extra={"journal": {"enabled": True}, "session_windows": session_windows(cfg, DAY)})
     for idea, minutes in zip(doc["ideas"], (2, 4, 7, 11)):          # the sample's signals are from this morning; make a few recent
         idea["signaled_at"] = stamp(minutes * 60)
     contract.assert_valid("live", doc)

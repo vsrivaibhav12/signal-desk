@@ -483,3 +483,12 @@ def test_the_dashboards_sample_data_follows_the_contract():
     for name in ledger_files:
         for line in open(os.path.join(demo, name), encoding="utf-8"):
             contract.assert_valid("ledger-trade", json.loads(line))
+
+
+def test_the_published_session_windows_are_the_ones_the_engine_works_to():
+    from engine.run import load_config, session_windows
+    windows = session_windows(load_config(), datetime(2026, 11, 11).date())
+    assert windows == [{"name": "day", "start": "08:30", "end": "15:23"}, {"name": "evening", "start": "17:15", "end": "22:38"}]
+    assert session_windows({}, datetime(2026, 11, 11).date()) == []                       # an odd config never stops publishing
+    doc = live.build(NOW, {}, None, None, extra={"session_windows": windows})
+    contract.assert_valid("live", doc)

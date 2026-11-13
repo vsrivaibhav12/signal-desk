@@ -72,6 +72,14 @@ def sessions(cfg, day):
     return out
 
 
+def session_windows(cfg, day):
+    """The working windows as clock times, for the dashboard: it uses them to tell "closed" from "the engine has not started"."""
+    try:
+        return [{"name": n, "start": s.strftime("%H:%M"), "end": e.strftime("%H:%M")} for n, s, e in sessions(cfg, day)]
+    except Exception:                                   # an odd config must not stop publishing
+        return []
+
+
 def current_session(cfg, now):
     if now.weekday() >= 5:
         return None
@@ -186,7 +194,8 @@ class Session:
             desk_state = getattr(getattr(self, "desk", None), "state", None) or {}
             ledger_mod.sync(self.ledger, self.feed.get("trades") or [], desk_state.get("trades") or [], self.cost_table)
             self.store.write_json("live.json", live_mod.build(clock.now(), self.cfg, self.feed, desk_state,
-                                                              extra={"journal": {"enabled": self.journal.enabled}}))
+                                                              extra={"journal": {"enabled": self.journal.enabled},
+                                                                      "session_windows": session_windows(self.cfg, clock.now().date())}))
             if self.journal_ui.changed:
                 self.store.save_secure(self.secure)
                 self.journal_ui.changed = False
