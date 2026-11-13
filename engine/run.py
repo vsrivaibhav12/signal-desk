@@ -115,6 +115,34 @@ def alive_elsewhere(status, now, me=None):
     return age < STALE_AFTER
 
 
+ACTIVE_RUN_STATES = ("in_progress", "queued", "waiting", "requested", "pending")
+
+
+def run_is_alive(run_id, repo=None, token=None, get=None):
+    """Is the GitHub workflow run that owns the engine still going?
+
+    Used before leaving quietly because "another run is healthy": a run that was cancelled or deleted leaves its last heartbeat behind, and for
+    five minutes that looks alive. Not knowing (no token, a run on your own PC, a network error) counts as alive, so a healthy session is never taken.
+    """
+    repo = repo or os.environ.get("GITHUB_REPOSITORY")
+    token = token or os.environ.get("GITHUB_TOKEN")
+    if not (repo and token) or not str(run_id).isdigit():
+        return True
+    try:
+        reply = (get or requests.get)(f"https://api.github.com/repos/{repo}/actions/runs/{run_id}", timeout=15,
+                                      headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
+    except requests.RequestException:
+        return True
+    if reply.status_code == 404:
+        return False                                   # the run no longer exists
+    if reply.status_code != 200:
+        return True
+    try:
+        return reply.json().get("status") in ACTIVE_RUN_STATES
+    except ValueError:
+        return True
+
+
 class Session:
     def __init__(self):
         self.cfg = load_config()
@@ -169,12 +197,14 @@ class Session:
         # then is the feed reset: an upgrade never throws the trade record away.
         self.feed = migrations.upgrade_feed(self.store.load_feed(), data_dir, self.cost_table)
         self.last_beat = 0
+        self.takeover_from = None                         # the run id of an engine run found dead, whose heartbeat we may override
 
     # ── heartbeat: proves this run is alive, and lets only one run work ──
     def beat(self, running=True, force=False):
         if not force and time.time() - self.last_beat < BEAT_EVERY and not (self.engine and self.engine.dirty):
             return
-        if alive_elsewhere(self.store.remote_status(), clock.now()):
+        remote = self.store.remote_status()
+        if alive_elsewhere(remote, clock.now()) and not (self.takeover_from and (remote or {}).get("run_id") == self.takeover_from):
             print("Another run has taken over. Leaving quietly.")
             sys.exit(0)
         st = self.feed["status"]
@@ -694,11 +724,14 @@ class Session:
         now = clock.now()
         before = dict(self.feed["status"])
         if alive_elsewhere(before, now):
-            print("The engine is already running in another run and is healthy. Nothing to do.")
-            if not BY_TIMER and self.tg.chat_id:
-                self.tg.send(f"✅ I am already awake and watching. My last check-in was at "
-                             f"{clock_text(datetime.fromisoformat(before['heartbeat']))}. No need to start me.")
-            return
+            if run_is_alive(before.get("run_id")):
+                print("The engine is already running in another run and is healthy. Nothing to do.")
+                if not BY_TIMER and self.tg.chat_id:
+                    self.tg.send(f"✅ I am already awake and watching. My last check-in was at "
+                                 f"{clock_text(datetime.fromisoformat(before['heartbeat']))}. No need to start me.")
+                return
+            print(f"The run that owned the engine ({before.get('run_id')}) has ended, so this run takes over instead of waiting five minutes.")
+            self.takeover_from = before.get("run_id")
         sess = current_session(self.cfg, now)
         if not sess and BY_TIMER:
             print("Outside market hours. Nothing to do.")
